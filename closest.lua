@@ -1,4 +1,4 @@
-local players = game.Players
+local Players = game.Players
 local LocalPlayer = game.Players.LocalPlayer
 function GetClosestPlayer()
     local Character = game.Players.LocalPlayer.Character
