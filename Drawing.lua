@@ -132,13 +132,49 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                 obj.Position = Vector2.new(pos.X + size.X / 2, pos.Y - obj.Size - 2)
                 
                 local textContent = properties.Text or "Name"
-                if string.lower(textContent) == "name" then
-                    obj.Text = player.Name
-                elseif string.lower(textContent) == "health" then
-                    obj.Text = "HP: " .. tostring(math.floor(humanoid.Health))
-                else
-                    obj.Text = tostring(textContent)
+                local finalStr = ""
+                local pathVal = nil
+                
+                -- Сначала пытаемся получить значение по Path (Attribute или ValueBase)
+                if properties.Path then
+                    pathVal = player:GetAttribute(properties.Path)
+                    if pathVal == nil and character then
+                        pathVal = character:GetAttribute(properties.Path)
+                    end
+                    if pathVal == nil then
+                        local child = player:FindFirstChild(properties.Path) or (character and character:FindFirstChild(properties.Path))
+                        if child and child:IsA("ValueBase") then
+                            pathVal = child.Value
+                        end
+                    end
                 end
+                
+                -- Форматируем итоговый текст
+                if type(textContent) == "function" then
+                    -- Передаем в функцию и игрока, и найденное по Path значение
+                    finalStr = textContent(player, pathVal) or ""
+                elseif type(textContent) == "string" then
+                    if string.lower(textContent) == "name" then
+                        finalStr = player.Name
+                    elseif string.lower(textContent) == "health" then
+                        finalStr = "HP: " .. tostring(math.floor(humanoid.Health))
+                    else
+                        finalStr = textContent
+                        -- Если указан Path, подставляем его значение в текст
+                        if pathVal ~= nil then
+                            -- Если в тексте есть {value}, заменяем его. Иначе просто прибавляем в конец.
+                            if string.find(finalStr, "{value}") then
+                                finalStr = string.gsub(finalStr, "{value}", tostring(pathVal))
+                            else
+                                finalStr = finalStr .. tostring(pathVal)
+                            end
+                        end
+                    end
+                else
+                    finalStr = tostring(textContent)
+                end
+                
+                obj.Text = finalStr
                 obj.Visible = true
             elseif drawingType == "Line" then
                 -- Трейсеры от центра-низа экрана до ног игрока
@@ -175,6 +211,10 @@ local function CreateDynamicESP(library, target, drawingType, properties)
         end,
         UpdateText = function(self, newText)
             properties.Text = newText
+        end,
+        UpdateSize = function(self, newSize)
+            properties.Size = newSize
+            for _, obj in pairs(self.Objects) do if obj.Size then obj.Size = newSize end end
         end,
         Remove = function(self)
             for _, conn in pairs(connections) do if conn.Disconnect then conn:Disconnect() end end
@@ -220,6 +260,7 @@ function DrawingLibrary:MakeText(targetOrProperties, properties)
         return AddDrawing({
             Object = textObj,
             UpdateText = function(self, newText) self.Object.Text = tostring(newText) end,
+            UpdateSize = function(self, newSize) self.Object.Size = newSize end,
             UpdatePosition = function(self, newPos) self.Object.Position = newPos end,
             UpdateColor = function(self, newCol) self.Object.Color = newCol end,
             UpdateVisible = function(self, state) self.Object.Visible = state end,
