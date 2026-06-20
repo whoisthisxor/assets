@@ -95,33 +95,54 @@ local function CreateDynamicESP(library, target, drawingType, properties)
     
     local function SetupPlayer(player)
         if player == LocalPlayer and not properties.ShowLocal then return end
-        
-        local obj = CreateDrawing()
-        espObjects[player] = obj
-        
-        local conn
-        conn = RunService.RenderStepped:Connect(function()
+        if not espObjects[player] then
+            espObjects[player] = CreateDrawing()
+        end
+    end
+    
+    local function RemovePlayer(player)
+        if espObjects[player] then
+            espObjects[player]:Remove()
+            espObjects[player] = nil
+        end
+    end
+    
+    if isAll then
+        for _, p in ipairs(Players:GetPlayers()) do SetupPlayer(p) end
+        local joinConn = Players.PlayerAdded:Connect(SetupPlayer)
+        local leaveConn = Players.PlayerRemoving:Connect(RemovePlayer)
+        table.insert(connections, joinConn)
+        table.insert(connections, leaveConn)
+        table.insert(library.ESPConnections, joinConn)
+        table.insert(library.ESPConnections, leaveConn)
+    elseif specificPlayer then
+        SetupPlayer(specificPlayer)
+    end
+    
+    -- ОДИН цикл RenderStepped для оптимизации производительности
+    local renderConn = RunService.RenderStepped:Connect(function()
+        for player, obj in pairs(espObjects) do
             if not properties.Visible then
                 obj.Visible = false
-                return
+                continue
             end
             
             if not player or not player.Parent or not player.Character then
                 obj.Visible = false
-                return
+                continue
             end
             
             local character = player.Character
             local humanoid = character:FindFirstChild("Humanoid")
             if not humanoid or humanoid.Health <= 0 then
                 obj.Visible = false
-                return
+                continue
             end
 
             local pos, size, onScreen = GetCharacterBox(character)
             if not onScreen then
                 obj.Visible = false
-                return
+                continue
             end
             
             if drawingType == "Box" then
@@ -135,23 +156,30 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                 local finalStr = ""
                 local pathVal = nil
                 
-                -- Сначала пытаемся получить значение по Path (Attribute или ValueBase)
+                -- Поддержка Path: Если это прямой Instance (workspace.MyBoolean) или строка (Attribute)
                 if properties.Path then
-                    pathVal = player:GetAttribute(properties.Path)
-                    if pathVal == nil and character then
-                        pathVal = character:GetAttribute(properties.Path)
-                    end
-                    if pathVal == nil then
-                        local child = player:FindFirstChild(properties.Path) or (character and character:FindFirstChild(properties.Path))
-                        if child and child:IsA("ValueBase") then
-                            pathVal = child.Value
+                    if typeof(properties.Path) == "Instance" then
+                        if properties.Path:IsA("ValueBase") then
+                            pathVal = properties.Path.Value
+                        else
+                            pathVal = properties.Path.Name -- Безопасный возврат
+                        end
+                    elseif type(properties.Path) == "string" then
+                        pathVal = player:GetAttribute(properties.Path)
+                        if pathVal == nil and character then
+                            pathVal = character:GetAttribute(properties.Path)
+                        end
+                        if pathVal == nil then
+                            local child = player:FindFirstChild(properties.Path) or (character and character:FindFirstChild(properties.Path))
+                            if child and child:IsA("ValueBase") then
+                                pathVal = child.Value
+                            end
                         end
                     end
                 end
                 
                 -- Форматируем итоговый текст
                 if type(textContent) == "function" then
-                    -- Передаем в функцию и игрока, и найденное по Path значение
                     finalStr = textContent(player, pathVal) or ""
                 elseif type(textContent) == "string" then
                     if string.lower(textContent) == "name" then
@@ -160,9 +188,7 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                         finalStr = "HP: " .. tostring(math.floor(humanoid.Health))
                     else
                         finalStr = textContent
-                        -- Если указан Path, подставляем его значение в текст
                         if pathVal ~= nil then
-                            -- Если в тексте есть {value}, заменяем его. Иначе просто прибавляем в конец.
                             if string.find(finalStr, "{value}") then
                                 finalStr = string.gsub(finalStr, "{value}", tostring(pathVal))
                             else
@@ -177,25 +203,15 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                 obj.Text = finalStr
                 obj.Visible = true
             elseif drawingType == "Line" then
-                -- Трейсеры от центра-низа экрана до ног игрока
                 local viewport = Camera.ViewportSize
                 obj.From = properties.From or Vector2.new(viewport.X / 2, viewport.Y)
                 obj.To = Vector2.new(pos.X + size.X / 2, pos.Y + size.Y)
                 obj.Visible = true
             end
-        end)
-        table.insert(connections, conn)
-        table.insert(library.ESPConnections, conn)
-    end
-    
-    if isAll then
-        for _, p in ipairs(Players:GetPlayers()) do SetupPlayer(p) end
-        local joinConn = Players.PlayerAdded:Connect(SetupPlayer)
-        table.insert(connections, joinConn)
-        table.insert(library.ESPConnections, joinConn)
-    elseif specificPlayer then
-        SetupPlayer(specificPlayer)
-    end
+        end
+    end)
+    table.insert(connections, renderConn)
+    table.insert(library.ESPConnections, renderConn)
     
     local wrapper = {
         Objects = espObjects,
