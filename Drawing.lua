@@ -435,6 +435,13 @@ function DrawingLibrary:MakeFov(properties)
             local closestPlayer = nil
             local shortestDistance = self.Circle.Radius
             
+            local raycastParams
+            if properties.CheckWalls and LocalPlayer.Character then
+                raycastParams = RaycastParams.new()
+                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+                raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+            end
+            
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                     if properties.IgnoreTeammates and player.Team == LocalPlayer.Team and player.Team ~= nil then
@@ -443,11 +450,24 @@ function DrawingLibrary:MakeFov(properties)
                     
                     local humanoid = player.Character:FindFirstChild("Humanoid")
                     if humanoid and humanoid.Health > 0 then
-                        local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+                        local targetPart = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
+                        local pos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                        
                         if onScreen then
                             local screenPos = Vector2.new(pos.X, pos.Y)
                             local dist = (screenPos - self.Circle.Position).Magnitude
+                            
                             if dist < shortestDistance then
+                                if properties.CheckWalls and raycastParams and LocalPlayer.Character:FindFirstChild("Head") then
+                                    local headPos = LocalPlayer.Character.Head.Position
+                                    local dir = targetPart.Position - headPos
+                                    local result = workspace:Raycast(headPos, dir, raycastParams)
+                                    
+                                    if result and not result.Instance:IsDescendantOf(player.Character) then
+                                        continue
+                                    end
+                                end
+                                
                                 shortestDistance = dist
                                 closestPlayer = player
                             end
