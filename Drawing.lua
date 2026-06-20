@@ -37,7 +37,6 @@ function DrawingLibrary:ClearAll()
     self.Instances = {}
 end
 
--- Расчет точного 2D бокса для персонажа на основе 3D пространства
 local function GetCharacterBox(character)
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     local head = character:FindFirstChild("Head")
@@ -50,7 +49,7 @@ local function GetCharacterBox(character)
     local legPos = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
     
     local height = math.abs(headPos.Y - legPos.Y)
-    local width = height / 2 -- Типичная пропорция тела Roblox
+    local width = height / 2
     
     local size = Vector2.new(width, height)
     local position = Vector2.new(rootPos.X - width / 2, headPos.Y)
@@ -58,7 +57,6 @@ local function GetCharacterBox(character)
     return position, size, true
 end
 
--- Внутренняя функция создания динамического ESP для всех или одного игрока
 local function CreateDynamicESP(library, target, drawingType, properties)
     local isAll = (string.lower(target) == "all")
     local specificPlayer = nil
@@ -119,7 +117,6 @@ local function CreateDynamicESP(library, target, drawingType, properties)
         SetupPlayer(specificPlayer)
     end
     
-    -- ОДИН цикл RenderStepped для оптимизации производительности
     local renderConn = RunService.RenderStepped:Connect(function()
         for player, obj in pairs(espObjects) do
             if not properties.Visible then
@@ -156,13 +153,12 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                 local finalStr = ""
                 local pathVal = nil
                 
-                -- Поддержка Path: Если это прямой Instance (workspace.MyBoolean) или строка (Attribute)
                 if properties.Path then
                     if typeof(properties.Path) == "Instance" then
                         if properties.Path:IsA("ValueBase") then
                             pathVal = properties.Path.Value
                         else
-                            pathVal = properties.Path.Name -- Безопасный возврат
+                            pathVal = properties.Path.Name
                         end
                     elseif type(properties.Path) == "string" then
                         pathVal = player:GetAttribute(properties.Path)
@@ -178,7 +174,7 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                     end
                 end
                 
-                -- Форматируем итоговый текст
+                
                 if type(textContent) == "function" then
                     finalStr = textContent(player, pathVal) or ""
                 elseif type(textContent) == "string" then
@@ -308,7 +304,6 @@ function DrawingLibrary:MakeLine(targetOrProperties, properties)
     end
 end
 
--- Highlight работает через Instance, поэтому здесь нужен отдельный контроллер
 function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
     if type(targetOrProperties) == "table" then
         properties = targetOrProperties
