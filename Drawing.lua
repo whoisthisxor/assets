@@ -124,6 +124,11 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                 continue
             end
             
+            if properties.IgnoreTeammates and player.Team == LocalPlayer.Team and player.Team ~= nil then
+                obj.Visible = false
+                continue
+            end
+            
             if not player or not player.Parent or not player.Character then
                 obj.Visible = false
                 continue
@@ -357,6 +362,20 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
             if specificPlayer then SetupHighlight(specificPlayer) end
         end
         
+        local renderConn = RunService.RenderStepped:Connect(function()
+            for player, hl in pairs(highlights) do
+                if hl and hl.Parent then
+                    local isEnabled = properties.Enabled == nil and true or properties.Enabled
+                    if properties.IgnoreTeammates and player.Team == LocalPlayer.Team and player.Team ~= nil then
+                        isEnabled = false
+                    end
+                    hl.Enabled = isEnabled
+                end
+            end
+        end)
+        table.insert(connections, renderConn)
+        table.insert(self.ESPConnections, renderConn)
+        
         local wrapper = {
             UpdateVisible = function(self, state)
                 properties.Enabled = state
@@ -418,6 +437,10 @@ function DrawingLibrary:MakeFov(properties)
             
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    if properties.IgnoreTeammates and player.Team == LocalPlayer.Team and player.Team ~= nil then
+                        continue
+                    end
+                    
                     local humanoid = player.Character:FindFirstChild("Humanoid")
                     if humanoid and humanoid.Health > 0 then
                         local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
