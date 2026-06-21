@@ -8911,7 +8911,7 @@ function GroupboxClass:AddButton(options)
         btnOptions = { Text = options }
     end
 	local el = self.section:create_element({ name = btnOptions.Text }, {
-		button = { callback = btnOptions.Func or select(2, ...) }
+		button = { callback = btnOptions.Func or select(2) }
 	})
 	local wrapper = { element = el, parent = self }
 	function wrapper:AddButton(subOptions)
