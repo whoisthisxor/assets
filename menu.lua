@@ -355,7 +355,7 @@ do
 				["jaydes.png"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/jaydes.png"),
 				["1.png"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/1.png"),
 				["2.png"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/2.png"),
-				["logo.png"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/logo.png"),
+				["logo.png"] = safeHttp("https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/logo.png"),
 				["saturation.png"] = safeHttp(
 					"https://raw.githubusercontent.com/panduh16/juju/main/assets/saturation.png"
 				),
