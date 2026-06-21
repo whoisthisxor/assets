@@ -339,7 +339,7 @@ do
 
 		local files = {
 			["assets"] = {
-				["api.lua"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/api.lua"),
+				-- api.lua download removed
 				["sparkle.ogg"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/sparkle.ogg"),
 				["skeet.ogg"] = safeHttp("https://raw.githubusercontent.com/panduh16/juju/main/assets/skeet.ogg"),
 				["neverlose.ogg"] = safeHttp(
@@ -423,10 +423,6 @@ do
 	-- > ( custom drawing )
 
 	drawing = Drawing
-	LPH_NO_VIRTUALIZE(function()
-		local loaded_func = not _G.FORCE_REAL_DRAWING and type(loadstring) == "function" and loadstring(readfile(file_path .. "/assets/api.lua"))
-		drawing = (loaded_func and type(loaded_func) == "function") and loaded_func() or Drawing
-	end)()
 
 	getgenv()["fake_drawing"] = drawing
 
