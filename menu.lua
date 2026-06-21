@@ -8969,7 +8969,12 @@ end
 
 function GroupboxClass:AddColorPicker(idx, options)
 	local el = self.section:create_element({ name = options.Title or "Color" }, {
-		colorpicker = { flag = idx, default = options.Default }
+		colorpicker = { 
+			color_flag = idx, 
+			default_color = options.Default or Color3.new(1, 1, 1),
+			transparency_flag = options.Transparency and (idx .. "_transparency") or nil,
+			default_transparency = options.Transparency or 0
+		}
 	})
 	local wrapper = CreateChainingWrapper(self, el, idx, "colorpicker")
     if options.Callback then wrapper:OnChanged(options.Callback) end
