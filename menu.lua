@@ -424,7 +424,8 @@ do
 
 	drawing = Drawing
 	LPH_NO_VIRTUALIZE(function()
-		drawing = _G.FORCE_REAL_DRAWING and Drawing or loadstring(readfile(file_path .. "/assets/api.lua"))()
+		local loaded_func = not _G.FORCE_REAL_DRAWING and type(loadstring) == "function" and loadstring(readfile(file_path .. "/assets/api.lua"))
+		drawing = (loaded_func and type(loaded_func) == "function") and loaded_func() or Drawing
 	end)()
 
 	getgenv()["fake_drawing"] = drawing
@@ -8911,7 +8912,7 @@ function GroupboxClass:AddButton(options)
         btnOptions = { Text = options }
     end
 	local el = self.section:create_element({ name = btnOptions.Text }, {
-		button = { callback = btnOptions.Func or select(2) }
+		button = { callback = btnOptions.Func or function() end }
 	})
 	local wrapper = { element = el, parent = self }
 	function wrapper:AddButton(subOptions)
