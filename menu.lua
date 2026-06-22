@@ -2122,6 +2122,7 @@ do
 	local active_binds = {}
 
 	menu["show_bind"] = function(keybind, just_visual)
+		if keybind["no_ui"] then return end
 		local found = nil
 
 		for i = 1, #active_binds do
@@ -2159,6 +2160,7 @@ do
 	local create_hover_connection = nil
 
 	menu["hide_bind"] = function(keybind, just_visual)
+		if keybind["no_ui"] then return end
 		if not just_visual then
 			for i = 1, #active_binds do
 				if active_binds[i] == keybind then
@@ -2311,6 +2313,7 @@ do
 	local offset = identifyexecutor() == "AWP" and 1 or 2
 
 	create_connection(on_keybind_created, function(keybind, element)
+		if keybind["no_ui"] then return end
 		local type = keybind["type"]
 
 		if type == 1 then
