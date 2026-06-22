@@ -1802,7 +1802,7 @@ do
 	})
 
 	local logo = drawing_proxy["new"]("Image", {
-		["Color"] = menu["colors"]["accent"],
+		["Color"] = color3_fromrgb(255, 255, 255),
 		["Data"] = readfile(file_path .. "/assets/logo.png"),
 		["Position"] = udim2_new(0, 15, 0, 15),
 		["Parent"] = inside,
@@ -1997,7 +1997,7 @@ do
 	})
 
 	local drag_logo = drawing_proxy["new"]("Image", {
-		["Color"] = menu["colors"]["accent"],
+		["Color"] = color3_fromrgb(255, 255, 255),
 		["Data"] = readfile(file_path .. "/assets/logo.png"),
 		["Position"] = udim2_new(0.5, -40, 0.5, -40),
 		["Parent"] = drag_inside,
@@ -9984,21 +9984,21 @@ function Library:CreateWindow(options)
 	return win
 end
 
-function WindowClass:AddTab(name)
+function WindowClass:AddTab(name, inner_name)
 	local group = menu.create_group(name)
-	local tab = setmetatable({ group = group, name = name, sections = {} }, TabClass)
+	local tab = setmetatable({ group = group, name = name, inner_name = inner_name or name, sections = {} }, TabClass)
 	self.Tabs[name] = tab
-	tab.internal_tab = group:create_tab(name)
+	tab.internal_tab = group:create_tab(tab.inner_name)
 	return tab
 end
 
 function TabClass:AddLeftGroupbox(name)
-	local section = self.group:create_section(self.name, name, 1, 1, 0)
+	local section = self.group:create_section(self.inner_name, name, 1, 1, 0)
 	return setmetatable({ section = section, parent_tab = self }, GroupboxClass)
 end
 
 function TabClass:AddRightGroupbox(name)
-	local section = self.group:create_section(self.name, name, 2, 1, 0)
+	local section = self.group:create_section(self.inner_name, name, 2, 1, 0)
 	return setmetatable({ section = section, parent_tab = self }, GroupboxClass)
 end
 
