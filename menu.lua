@@ -2581,9 +2581,10 @@ do
 				["ZIndex"] = 3,
 			})
 
+			local key_name = keybind["key"] and (shortened_characters[keybind["key"]] and string.upper(shortened_characters[keybind["key"]]) or string.upper(typeof(keybind["key"]) == "EnumItem" and keybind["key"]["Name"] or tostring(keybind["key"]))) or "NONE"
 			local value_text = drawing_proxy["new"]("Text", {
-				["Color"] = Color3.fromRGB(150, 150, 150),
-				["Text"] = "[Disabled]",
+				["Color"] = keybind["activated"] and menu["colors"]["accent"] or Color3.fromRGB(150, 150, 150),
+				["Text"] = "[" .. key_name .. "]",
 				["Size"] = 12,
 				["Font"] = 1,
 				["Transparency"] = 0,
@@ -2671,7 +2672,8 @@ do
 			if keybind["type"] == 3 then
 				tween(drawings["value"], { Transparency = activated and 0 or 1 }, circular, out, 0.15)
 			elseif keybind["type"] == 4 then
-				drawings["value"]["Text"] = activated and "[Enabled]" or "[Disabled]"
+				local key_name = keybind["key"] and (shortened_characters[keybind["key"]] and string.upper(shortened_characters[keybind["key"]]) or string.upper(typeof(keybind["key"]) == "EnumItem" and keybind["key"]["Name"] or tostring(keybind["key"]))) or "NONE"
+				drawings["value"]["Text"] = "[" .. key_name .. "]"
 				drawings["value"]["Color"] = activated and menu["colors"]["accent"] or Color3.fromRGB(150, 150, 150)
 			end
 		end
@@ -6857,6 +6859,11 @@ do
 					create_connection(new_element["on_key_change"], function(key)
 						keybind_data[data]["key"] = key
 						flags[properties["flag"]] = key
+						local drawings = list_drawings[kb_data]
+						if drawings and drawings["value"] then
+							local key_name = key and (shortened_characters[key] and string.upper(shortened_characters[key]) or string.upper(typeof(key) == "EnumItem" and key["Name"] or tostring(key))) or "NONE"
+							drawings["value"]["Text"] = "[" .. key_name .. "]"
+						end
 					end)
 					on_keybind_created:Fire(kb_data, new_element)
 				end
@@ -8540,6 +8547,7 @@ do
 			}, {
 				["keybind"] = {
 					["flag"] = "menu_key",
+					["no_ui"] = true,
 				},
 			})
 
