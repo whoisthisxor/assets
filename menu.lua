@@ -8706,7 +8706,7 @@ do
 
 			create_connection(
 				theme_section:create_element({
-					["name"] = "juju color",
+					["name"] = "name color",
 				}, {
 					["colorpicker"] = {
 						["default_color"] = menu["colors"]["juju"],
@@ -10227,6 +10227,10 @@ function Library:SetWatermarkVisibility(visible)
 end
 
 function Library:SetWatermark(text)
+end
+
+function Library:Notify(text, time, type)
+    menu["new_notification"](text, type or 1, time or 3)
 end
 
 function Library:Unload()
