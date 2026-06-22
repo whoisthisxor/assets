@@ -2540,6 +2540,86 @@ do
 			if keybind["value"] then
 				menu["show_bind"](keybind)
 			end
+		elseif type == 4 then
+			local keybind_frame = drawing_proxy["new"]("Image", {
+				["Position"] = UDim2.new(0, 0, 0, 25),
+				["Size"] = UDim2.new(0, 74, 0, 18),
+				["Color"] = menu["colors"]["border"],
+				["Transparency"] = 0,
+				["Rounding"] = 4,
+				["Parent"] = list_frame,
+				["Data"] = pixel_image_data,
+				["Visible"] = false,
+			})
+
+			local keybind_inside = drawing_proxy["new"]("Image", {
+				["Position"] = UDim2.new(0, 1, 0, 1),
+				["Size"] = UDim2.new(0, 72, 0, 18),
+				["Color"] = menu["colors"]["background"],
+				["Transparency"] = 0,
+				["Rounding"] = 4,
+				["Data"] = pixel_image_data,
+				["Parent"] = keybind_frame,
+				["Visible"] = true,
+			})
+
+			local keybind_shadow = drawing_proxy["new"]("Image", {
+				["Parent"] = keybind_frame,
+				["Data"] = shadow_image_data,
+				["Rounding"] = 7,
+				["Color"] = menu["colors"]["shadow"],
+				["Transparency"] = 0,
+				["Visible"] = true,
+				["Position"] = UDim2.new(0, 0, 0, 0),
+				["ZIndex"] = 3,
+			})
+
+			local value_text = drawing_proxy["new"]("Text", {
+				["Color"] = menu["colors"]["accent"],
+				["Text"] = "[Keybind]",
+				["Size"] = 12,
+				["Font"] = 1,
+				["Transparency"] = 0,
+				["Visible"] = true,
+				["Parent"] = keybind_inside,
+				["Position"] = UDim2.new(0, 3, 0, offset),
+				["ZIndex"] = 2,
+			})
+
+			local keybind_text = drawing_proxy["new"]("Text", {
+				["Color"] = menu["colors"]["keybind_text"],
+				["Text"] = element["name"],
+				["Size"] = 12,
+				["Font"] = 1,
+				["Transparency"] = 0,
+				["Visible"] = true,
+				["Parent"] = keybind_inside,
+				["Position"] = UDim2.new(0, 23, 0, offset),
+				["ZIndex"] = 2,
+			})
+
+			local text_bounds = value_text["TextBounds"]["X"]
+			local x_size = text_bounds + keybind_text["TextBounds"]["X"] + 18
+
+			keybind_text["Position"] = UDim2.new(0, text_bounds + 13, 0, 2)
+			keybind_frame["Size"] = UDim2.new(0, x_size, 0, 18)
+			keybind_inside["Size"] = UDim2.new(0, x_size - 2, 0, 16)
+
+			local shadow_size = floor(x_size / 11)
+			keybind_shadow["Size"] = UDim2.new(1, shadow_size - 1, 1, 4)
+			keybind_shadow["Position"] = UDim2.new(0, -shadow_size / 2, 0, -2)
+
+			list_drawings[keybind] = {
+				["frame"] = keybind_frame,
+				["inside"] = keybind_inside,
+				["text"] = keybind_text,
+				["value"] = value_text,
+				["shadow"] = keybind_shadow,
+			}
+
+			if keybind["value"] then
+				menu["show_bind"](keybind)
+			end
 		end
 	end)
 
@@ -6734,18 +6814,27 @@ do
 					new_element["keybind_flag"] = properties["flag"]
 
 					local data = math_random(9000000, 90000000)
-					keybind_data[data] = {
+					local kb_data = {
+						["name"] = properties["name"] or new_element["name"] or "Keybind",
+						["type"] = 4,
 						["key"] = properties["default"],
 						["value"] = true,
 						["original_value"] = false,
-						["set_activated"] = function()
+						["element"] = new_element,
+						["activated"] = false,
+						["method"] = 1,
+						["set_activated"] = function(self, act)
+							self["activated"] = act
 							new_element["on_key_press"]:Fire()
+							on_keybind_change:Fire(self, new_element, act)
 						end,
 					}
+					keybind_data[data] = kb_data
 					create_connection(new_element["on_key_change"], function(key)
 						keybind_data[data]["key"] = key
 						flags[properties["flag"]] = key
 					end)
+					on_keybind_created:Fire(kb_data, new_element)
 				end
 			elseif element == "colorpicker" then
 				local transparency = properties["default_transparency"] or 0
@@ -9883,11 +9972,9 @@ local function CreateChainingWrapper(parent, element, idx, type)
         return parent:AddColorPicker(c_idx, c_options)
     end
     function wrapper:AddKeyPicker(k_idx, k_options)
-        print("[DEBUG] CreateChainingWrapper:AddKeyPicker called. SyncToggleState = ", tostring(k_options.SyncToggleState))
         local kb = parent:AddKeyPicker(k_idx, k_options)
         if type == "toggle" and k_options.SyncToggleState then
             kb:OnClick(function()
-                print("[DEBUG] Synced toggle keybind clicked! Flipping wrapper value...")
                 wrapper:SetValue(not wrapper.Value)
             end)
         end
@@ -9949,9 +10036,7 @@ local function CreateChainingWrapper(parent, element, idx, type)
             return element.active
         end
         function wrapper:OnClick(callback)
-            print("[DEBUG] kb:OnClick connected!")
             create_connection(element.on_key_press, function(...)
-                print("[DEBUG] element.on_key_press fired!")
                 callback(...)
             end)
         end
