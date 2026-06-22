@@ -2230,7 +2230,7 @@ do
 
 		local is_all = flags["keybind_list_mode"] and flags["keybind_list_mode"][1] == "All"
 		for _, keybind in keybind_data do
-			if keybind["type"] then
+			if keybind["type"] and not keybind["no_ui"] then
 				if is_all or keybind["activated"] then
 					menu["show_bind"](keybind)
 				else
@@ -2656,7 +2656,7 @@ do
 	end)
 
 	create_connection(on_keybind_change, function(keybind, element, activated)
-		if keybind["type"] == nil then return end
+		if keybind["type"] == nil or keybind["no_ui"] then return end
 
 		if menu["keybinds_visible"] then
 			if (flags["keybind_list_mode"] and flags["keybind_list_mode"][1] == "All") or activated then
@@ -6842,6 +6842,7 @@ do
 						["element"] = new_element,
 						["activated"] = false,
 						["method"] = 1,
+						["no_ui"] = properties["no_ui"],
 						["set_activated"] = function(self, act)
 							self["activated"] = act
 							new_element["on_key_press"]:Fire()
@@ -10203,7 +10204,7 @@ end
 
 function GroupboxClass:AddKeyPicker(idx, options)
 	local el = self.section:create_element({ name = options.Text or "Keybind" }, {
-		keybind = { flag = idx, default = ParseKeybind(options.Default) }
+		keybind = { flag = idx, default = ParseKeybind(options.Default), no_ui = options.NoUI }
 	})
 	local wrapper = CreateChainingWrapper(self, el, idx, "keybind")
     if options.Callback then wrapper:OnChanged(options.Callback) end
