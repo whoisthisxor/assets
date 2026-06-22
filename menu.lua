@@ -2230,10 +2230,12 @@ do
 
 		local is_all = flags["keybind_list_mode"] and flags["keybind_list_mode"][1] == "All"
 		for _, keybind in keybind_data do
-			if is_all or keybind["activated"] then
-				menu["show_bind"](keybind)
-			else
-				menu["hide_bind"](keybind)
+			if keybind["type"] then
+				if is_all or keybind["activated"] then
+					menu["show_bind"](keybind)
+				else
+					menu["hide_bind"](keybind)
+				end
 			end
 		end
 
@@ -2654,6 +2656,8 @@ do
 	end)
 
 	create_connection(on_keybind_change, function(keybind, element, activated)
+		if keybind["type"] == nil then return end
+
 		if menu["keybinds_visible"] then
 			if (flags["keybind_list_mode"] and flags["keybind_list_mode"][1] == "All") or activated then
 				menu["show_bind"](keybind)
@@ -6845,6 +6849,10 @@ do
 						end,
 					}
 					keybind_data[data] = kb_data
+					new_element["set_keybind_state"] = function(state)
+						kb_data["activated"] = state
+						on_keybind_change:Fire(kb_data, new_element, state)
+					end
 					create_connection(new_element["on_key_change"], function(key)
 						keybind_data[data]["key"] = key
 						flags[properties["flag"]] = key
@@ -10010,6 +10018,14 @@ local function CreateChainingWrapper(parent, element, idx, type)
             kb:OnClick(function()
                 wrapper:SetValue(not wrapper.Value)
             end)
+            wrapper:OnChanged(function(val)
+                if kb.element and kb.element.set_keybind_state then
+                    kb.element.set_keybind_state(val)
+                end
+            end)
+            if kb.element and kb.element.set_keybind_state then
+                kb.element.set_keybind_state(wrapper.Value)
+            end
         end
         return kb
     end
