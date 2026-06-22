@@ -1832,6 +1832,9 @@ do
 		["Visible"] = true,
 		["Transparency"] = 1,
 	})
+	
+	menu["juju_text"] = juju_text
+	menu["build_text"] = build_text
 
 	local right_side = drawing_proxy["new"]("Square", {
 		["Parent"] = inside,
@@ -9828,6 +9831,14 @@ GroupboxClass.__index = GroupboxClass
 function Library:CreateWindow(options)
 	local win = setmetatable({}, WindowClass)
 	win.Tabs = {}
+	
+	if options.Title then
+		menu["juju_text"]["Text"] = options.Title
+	end
+	if options.Version then
+		menu["build_text"]["Text"] = options.Version
+	end
+	
 	return win
 end
 
@@ -9979,7 +9990,13 @@ function GroupboxClass:AddLabel(text)
         return self.parent:AddColorPicker(c_idx, c_options)
     end
     function wrapper:AddKeyPicker(k_idx, k_options)
-        return self.parent:AddKeyPicker(k_idx, k_options)
+        local kb = self.parent:AddKeyPicker(k_idx, k_options)
+        if type == "toggle" and k_options.SyncToggleState then
+            kb:OnChanged(function(state)
+                wrapper:SetValue(state)
+            end)
+        end
+        return kb
     end
 	return wrapper
 end
