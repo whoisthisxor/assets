@@ -10130,8 +10130,13 @@ function GroupboxClass:AddButton(options)
         btnOptions = { Text = options }
     end
 	local el = self.section:create_element({ name = btnOptions.Text }, {
-		button = { callback = btnOptions.Func or function() end }
+		button = {
+            confirmation = btnOptions.DoubleClick or false
+        }
 	})
+    if btnOptions.Func then
+        create_connection(el["on_clicked"], btnOptions.Func)
+    end
 	local wrapper = { element = el, parent = self }
 	function wrapper:AddButton(subOptions)
 	    return self.parent:AddButton(subOptions)
