@@ -1820,6 +1820,7 @@ do
 		["Size"] = 14,
 		["Visible"] = true,
 		["Transparency"] = 1,
+		["ZIndex"] = 1000,
 	})
 
 	local build_text = drawing_proxy["new"]("Text", {
@@ -1831,6 +1832,7 @@ do
 		["Size"] = 14,
 		["Visible"] = true,
 		["Transparency"] = 1,
+		["ZIndex"] = 1000,
 	})
 	
 	menu["juju_text"] = juju_text
