@@ -9883,7 +9883,15 @@ local function CreateChainingWrapper(parent, element, idx, type)
         return parent:AddColorPicker(c_idx, c_options)
     end
     function wrapper:AddKeyPicker(k_idx, k_options)
-        return parent:AddKeyPicker(k_idx, k_options)
+        print("[DEBUG] CreateChainingWrapper:AddKeyPicker called. SyncToggleState = ", tostring(k_options.SyncToggleState))
+        local kb = parent:AddKeyPicker(k_idx, k_options)
+        if type == "toggle" and k_options.SyncToggleState then
+            kb:OnClick(function()
+                print("[DEBUG] Synced toggle keybind clicked! Flipping wrapper value...")
+                wrapper:SetValue(not wrapper.Value)
+            end)
+        end
+        return kb
     end
     
     function wrapper:OnChanged(callback)
@@ -9994,15 +10002,7 @@ function GroupboxClass:AddLabel(text)
         return self.parent:AddColorPicker(c_idx, c_options)
     end
     function wrapper:AddKeyPicker(k_idx, k_options)
-        print("[DEBUG] wrapper:AddKeyPicker called. SyncToggleState = ", tostring(k_options.SyncToggleState))
-        local kb = self.parent:AddKeyPicker(k_idx, k_options)
-        if type == "toggle" and k_options.SyncToggleState then
-            kb:OnClick(function()
-                print("[DEBUG] Synced toggle keybind clicked! Flipping wrapper value...")
-                wrapper:SetValue(not wrapper.Value)
-            end)
-        end
-        return kb
+        return self.parent:AddKeyPicker(k_idx, k_options)
     end
 	return wrapper
 end
