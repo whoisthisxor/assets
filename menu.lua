@@ -9988,7 +9988,7 @@ function WindowClass:AddTab(name)
 	local group = menu.create_group(name)
 	local tab = setmetatable({ group = group, name = name, sections = {} }, TabClass)
 	self.Tabs[name] = tab
-	tab.internal_tab = group:create_tab("Main")
+	tab.internal_tab = group:create_tab(name)
 	return tab
 end
 
@@ -10159,7 +10159,7 @@ end
 
 function GroupboxClass:AddSlider(idx, options)
 	local el = self.section:create_element({ name = options.Text }, {
-		slider = { flag = idx, min = options.Min, max = options.Max, default = options.Default }
+		slider = { flag = idx, min = options.Min, max = options.Max, default = options.Default, decimals = options.Rounding, suffix = options.Suffix }
 	})
 	local wrapper = CreateChainingWrapper(self, el, idx, "slider")
     if options.Callback then wrapper:OnChanged(options.Callback) end
