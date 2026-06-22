@@ -2228,8 +2228,13 @@ do
 			end
 		end
 
-		for i = 1, #active_binds do
-			menu["show_bind"](active_binds[i], true)
+		local is_all = flags["keybind_list_mode"] and flags["keybind_list_mode"][1] == "All"
+		for _, keybind in keybind_data do
+			if is_all or keybind["activated"] then
+				menu["show_bind"](keybind)
+			else
+				menu["hide_bind"](keybind)
+			end
 		end
 
 		menu["keybinds_visible"] = true
@@ -2575,8 +2580,8 @@ do
 			})
 
 			local value_text = drawing_proxy["new"]("Text", {
-				["Color"] = menu["colors"]["accent"],
-				["Text"] = "[Keybind]",
+				["Color"] = Color3.fromRGB(150, 150, 150),
+				["Text"] = "[Disabled]",
 				["Size"] = 12,
 				["Font"] = 1,
 				["Transparency"] = 0,
@@ -2650,10 +2655,20 @@ do
 
 	create_connection(on_keybind_change, function(keybind, element, activated)
 		if menu["keybinds_visible"] then
-			if activated then
+			if (flags["keybind_list_mode"] and flags["keybind_list_mode"][1] == "All") or activated then
 				menu["show_bind"](keybind)
 			else
 				menu["hide_bind"](keybind)
+			end
+		end
+
+		local drawings = list_drawings[keybind]
+		if drawings then
+			if keybind["type"] == 3 then
+				tween(drawings["value"], { Transparency = activated and 0 or 1 }, circular, out, 0.15)
+			elseif keybind["type"] == 4 then
+				drawings["value"]["Text"] = activated and "[Enabled]" or "[Disabled]"
+				drawings["value"]["Color"] = activated and menu["colors"]["accent"] or Color3.fromRGB(150, 150, 150)
 			end
 		end
 	end)
@@ -8538,6 +8553,24 @@ do
 						menu:show_keybinds()
 					else
 						menu:hide_keybinds()
+					end
+				end
+			)
+
+			create_connection(
+				settings_section:create_element({
+					["name"] = "keybinds list mode",
+				}, {
+					["dropdown"] = {
+						["default"] = { "Enabled" },
+						["flag"] = "keybind_list_mode",
+						["options"] = { "Enabled", "All" },
+						["requires_one"] = true,
+					},
+				})["on_dropdown_change"],
+				function(val)
+					if menu["keybinds_visible"] then
+						menu:show_keybinds()
 					end
 				end
 			)
