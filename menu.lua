@@ -9992,10 +9992,8 @@ function GroupboxClass:AddLabel(text)
     function wrapper:AddKeyPicker(k_idx, k_options)
         local kb = self.parent:AddKeyPicker(k_idx, k_options)
         if type == "toggle" and k_options.SyncToggleState then
-            create_connection(on_keybind_change, function(keybind_data, trigger_element, state)
-                if keybind_data.flag == k_idx then
-                    wrapper:SetValue(state)
-                end
+            kb:OnClick(function()
+                wrapper:SetValue(not wrapper.Value)
             end)
         end
         return kb
