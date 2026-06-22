@@ -8550,7 +8550,7 @@ do
 			}, {
 				["keybind"] = {
 					["flag"] = "menu_key",
-					["no_ui"] = false,
+					["no_ui"] = true,
 				},
 			})
 
