@@ -10050,9 +10050,20 @@ function GroupboxClass:AddColorPicker(idx, options)
 	return wrapper
 end
 
+local function ParseKeybind(key)
+    if type(key) ~= "string" then return key end
+    if key == "MB1" then return Enum.UserInputType.MouseButton1 end
+    if key == "MB2" then return Enum.UserInputType.MouseButton2 end
+    local s, e = pcall(function() return Enum.KeyCode[key] end)
+    if s then return e end
+    s, e = pcall(function() return Enum.UserInputType[key] end)
+    if s then return e end
+    return key
+end
+
 function GroupboxClass:AddKeyPicker(idx, options)
 	local el = self.section:create_element({ name = options.Text or "Keybind" }, {
-		keybind = { flag = idx, default = options.Default }
+		keybind = { flag = idx, default = ParseKeybind(options.Default) }
 	})
 	local wrapper = CreateChainingWrapper(self, el, idx, "keybind")
     if options.Callback then wrapper:OnChanged(options.Callback) end
