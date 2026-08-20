@@ -70,6 +70,7 @@ G2L["6"]["Position"] = UDim2.new(-0.71065, 0, -0.71131, 0);
 G2L["6"]["BorderColor3"] = Color3.fromRGB(0, 0, 0);
 G2L["6"]["Name"] = "black"
 
-getgenv().queueonteleport = nil 
-getgenv().queue_on_teleport = nil
+getgenv().clearteleportqueue = nil 
+getgenv().clear_teleport_queue = nil
+getgenv().clearqueueonteleport = nil
 return G2L["1"], require;
