@@ -1,3 +1,7 @@
+
+
+
+
 local G2L = {};
 const function yeaa()
 queueonteleport=queueonteleport or queue_on_teleport
