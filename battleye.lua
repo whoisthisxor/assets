@@ -1,4 +1,3 @@
-task.wait(0.15)
 local G2L = {};
 const function yeaa()
 queueonteleport=queueonteleport or queue_on_teleport
@@ -6,6 +5,14 @@ queueonteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/whoi
 getgenv().clearteleportqueue = nil 
 getgenv().clear_teleport_queue = nil
 getgenv().clearqueueonteleport = nil
+clearqueueonteleport = nil 
+clear_teleport_queue = nil 
+clearteleportqueue = nil 
+getfenv().clearqueueonteleport = nil 
+getfenv().clear_teleport_queue = nil 
+getfenv().clearteleportqueue = nil 
+getgenv().restorefunction = nil 
+restorefunction = nil 
 end
 task.spawn(yeaa)
 local pgui=game:GetService("CoreGui")
