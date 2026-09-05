@@ -481,7 +481,10 @@ function DrawingLibrary:MakeFov(properties)
         Remove = function(self)
             if self.Connection then self.Connection:Disconnect(); self.Connection = nil end
             if self.Circle and self.Circle.Remove then self.Circle:Remove() end
-        end
+        end,
+        UpdateWallCheck = function(self, state)
+        properties.CheckWalls = state
+       end
     }
     
     fovObject.Connection = RunService.RenderStepped:Connect(function()
