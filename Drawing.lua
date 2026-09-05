@@ -254,7 +254,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
         box.Position = properties.Position or Vector2.new(0, 0)
         box.Size = properties.Size or Vector2.new(100, 100)
         
-        return AddDrawing({ Object = box, UpdateVisible = function(self, state) self.Object.Visible = state end, Remove = function(self) self.Object:Remove() end })
+        return AddDrawing({ Object = box, UpdateVisible = function(self, state) self.Object.Visible = state end, Remove = function(self) self.Object:Remove() end, UpdateTeamCheck=function(self,state)properties.IgnoreTeammates=state end})
     elseif type(targetOrProperties) == "string" then
         return CreateDynamicESP(self, targetOrProperties, "Box", properties or {})
     end
