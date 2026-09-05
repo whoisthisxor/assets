@@ -498,6 +498,9 @@ function DrawingLibrary:MakeFov(properties)
         end,
         UpdateWallCheck = function(self, state)
         properties.CheckWalls = state
+       end,
+        UpdateTeamCheck = function(self, state)
+        properties.IgnoreTeammates = state
        end
     }
     
