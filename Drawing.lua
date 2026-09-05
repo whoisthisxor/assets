@@ -224,7 +224,18 @@ local function CreateDynamicESP(library, target, drawingType, properties)
         end,
         UpdateTeamCheck = function(self, state)
         properties.IgnoreTeammates = state
-        end,
+
+        for player, obj in pairs(self.Objects) do
+        if state
+            and player.Team == LocalPlayer.Team
+            and player.Team ~= nil
+        then
+            obj.Visible = false
+        else
+            obj.Visible = properties.Visible
+        end
+    end
+end,
         UpdateColor = function(self, newColor)
             properties.Color = newColor
             for _, obj in pairs(self.Objects) do obj.Color = newColor end
@@ -257,7 +268,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
         box.Position = properties.Position or Vector2.new(0, 0)
         box.Size = properties.Size or Vector2.new(100, 100)
         
-        return AddDrawing({ Object = box, UpdateVisible = function(self, state) self.Object.Visible = state end, Remove = function(self) self.Object:Remove() end, UpdateTeamCheck=function(self,state)properties.IgnoreTeammates=state end})
+        return AddDrawing({ Object = box, UpdateVisible = function(self, state) self.Object.Visible = state end, Remove = function(self) self.Object:Remove() end})
     elseif type(targetOrProperties) == "string" then
         return CreateDynamicESP(self, targetOrProperties, "Box", properties or {})
     end
