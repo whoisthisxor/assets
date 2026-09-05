@@ -222,6 +222,9 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                 for _, obj in pairs(self.Objects) do obj.Visible = false end
             end
         end,
+        UpdateTeamCheck = function(self, state)
+        properties.IgnoreTeammates = state
+        end,
         UpdateColor = function(self, newColor)
             properties.Color = newColor
             for _, obj in pairs(self.Objects) do obj.Color = newColor end
