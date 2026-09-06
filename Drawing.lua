@@ -178,31 +178,38 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                         end
                     end
                 end
-                
-                
-                if type(textContent) == "function" then
-                    finalStr = textContent(player, pathVal) or ""
-                elseif type(textContent) == "string" then
-                    if string.lower(textContent) == "name" then
-                        finalStr = player.Name
-                    elseif string.lower(textContent) == "health" then
-                        finalStr = "HP: " .. tostring(math.floor(humanoid.Health))
-                    else
-                        finalStr = textContent
-                        if pathVal ~= nil then
-                            if string.find(finalStr, "{value}") then
-                                finalStr = string.gsub(finalStr, "{value}", tostring(pathVal))
-                            else
-                                finalStr = finalStr .. tostring(pathVal)
-                            end
-                        end
-                    end
-                else
-                    finalStr = tostring(textContent)
-                end
-                
-                obj.Text = finalStr
-                obj.Visible = true
+                    if type(textContent) == "function" then
+    finalStr = textContent(player, pathVal) or ""
+
+elseif type(textContent) == "string" then
+    if string.find(textContent, "{health}", 1, true) then
+        finalStr = string.gsub(
+            textContent,
+            "{health}",
+            tostring(math.floor(humanoid.Health))
+        )
+
+    elseif string.lower(textContent) == "health" then
+        finalStr = "HP: " .. tostring(math.floor(humanoid.Health))
+
+    else
+        finalStr = textContent
+    end
+
+    if pathVal ~= nil then
+        if string.find(finalStr, "{value}", 1, true) then
+            finalStr = string.gsub(finalStr, "{value}", tostring(pathVal))
+        else
+            finalStr = finalStr .. tostring(pathVal)
+        end
+    end
+
+else
+    finalStr = tostring(textContent)
+end
+
+obj.Text = finalStr
+obj.Visible = true
             elseif drawingType == "Line" then
                 local viewport = Camera.ViewportSize
                 obj.From = properties.From or Vector2.new(viewport.X / 2, viewport.Y)
