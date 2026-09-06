@@ -425,7 +425,14 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
             end,
             UpdateTeamCheck = function(self, state)
             properties.IgnoreTeammates = state
-            end
+            end,
+            UpdateOutlineColor = function(self, newColor)
+            properties.OutlineColor = newColor
+
+           for _, hl in pairs(highlights) do
+           hl.OutlineColor = newColor
+           end
+           end
         }
         return AddInstance(wrapper)
     end
