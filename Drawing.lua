@@ -295,7 +295,21 @@ function DrawingLibrary:MakeText(targetOrProperties, properties)
             UpdatePosition = function(self, newPos) self.Object.Position = newPos end,
             UpdateColor = function(self, newCol) self.Object.Color = newCol end,
             UpdateVisible = function(self, state) self.Object.Visible = state end,
-            Remove = function(self) self.Object:Remove() end
+            Remove = function(self) self.Object:Remove() end,
+            UpdateTeamCheck = function(self, state)
+            properties.IgnoreTeammates = state
+
+            for player, obj in pairs(self.Objects) do
+            if state
+            and player.Team == LocalPlayer.Team
+            and player.Team ~= nil
+            then
+            obj.Visible = false
+           else
+            obj.Visible = properties.Visible
+        end
+    end
+end
         })
     elseif type(targetOrProperties) == "string" then
         return CreateDynamicESP(self, targetOrProperties, "Text", properties or {})
