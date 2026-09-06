@@ -10026,6 +10026,34 @@ function GroupboxClass:AddTab(name)
     return self
 end
 
+function WindowClass:AddGroup(name)
+	local group = menu.create_group(name)
+	
+	local group_obj = setmetatable({
+		group = group,
+		name = name,
+		Tabs = {}
+	}, {
+		__index = function(self, key)
+			if key == "AddTab" then
+				return function(_, tab_name)
+					local tab = setmetatable({
+						group = group,
+						name = tab_name,
+						sections = {}
+					}, TabClass)
+					
+					tab.internal_tab = group:create_tab(tab_name)
+					self.Tabs[tab_name] = tab
+					return tab
+				end
+			end
+		end
+	})
+	
+	return group_obj
+end
+
 local function CreateChainingWrapper(parent, element, idx, type)
     local wrapper = {
         Value = nil,
