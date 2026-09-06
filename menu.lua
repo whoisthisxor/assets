@@ -10028,29 +10028,28 @@ end
 
 function WindowClass:AddGroup(name)
 	local group = menu.create_group(name)
-	
-	local group_obj = setmetatable({
+
+	local group_obj = {
 		group = group,
 		name = name,
 		Tabs = {}
-	}, {
-		__index = function(self, key)
-			if key == "AddTab" then
-				return function(_, tab_name)
-					local tab = setmetatable({
-						group = group,
-						name = tab_name,
-						sections = {}
-					}, TabClass)
-					
-					tab.internal_tab = group:create_tab(tab_name)
-					self.Tabs[tab_name] = tab
-					return tab
-				end
-			end
-		end
-	})
-	
+	}
+
+	function group_obj:AddTab(tab_name)
+		local tab = setmetatable({
+			group = group,
+			name = tab_name,
+			inner_name = tab_name,
+			sections = {},
+			left_count = 0,
+			right_count = 0
+		}, TabClass)
+
+		tab.internal_tab = group:create_tab(tab_name)
+		self.Tabs[tab_name] = tab
+		return tab
+	end
+
 	return group_obj
 end
 
