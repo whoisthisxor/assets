@@ -181,20 +181,17 @@ local function CreateDynamicESP(library, target, drawingType, properties)
                     if type(textContent) == "function" then
     finalStr = textContent(player, pathVal) or ""
 
-elseif type(textContent) == "string" then
-    if string.find(textContent, "{health}", 1, true) then
-        finalStr = string.gsub(
-            textContent,
-            "{health}",
-            tostring(math.floor(humanoid.Health))
-        )
-
-    elseif string.lower(textContent) == "health" then
-        finalStr = "HP: " .. tostring(math.floor(humanoid.Health))
-
-    else
-        finalStr = textContent
-    end
+if string.find(textContent, "%health", 1, true) then
+    finalStr = string.gsub(
+        textContent,
+        "%%health",
+        tostring(math.floor(humanoid.Health))
+    )
+elseif string.lower(textContent) == "health" then
+    finalStr = "HP: " .. tostring(math.floor(humanoid.Health))
+else
+    finalStr = textContent
+end
 
     if pathVal ~= nil then
         if string.find(finalStr, "{value}", 1, true) then
