@@ -403,6 +403,9 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
                 for _, conn in pairs(connections) do if conn.Disconnect then conn:Disconnect() end end
                 for _, hl in pairs(highlights) do if hl and hl.Parent then hl:Destroy() end end
                 highlights = {}
+            end,
+            UpdateTeamCheck = function(self, state)
+            properties.IgnoreTeammates = state
             end
         }
         return AddInstance(wrapper)
