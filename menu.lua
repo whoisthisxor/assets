@@ -9995,12 +9995,22 @@ function WindowClass:AddTab(name, inner_name)
 end
 
 function TabClass:AddLeftGroupbox(name)
-	local section = self.group:create_section(self.inner_name, name, 1, 1, 0)
+	self.left_count = (self.left_count or 0) + 1
+	local count = self.left_count
+	local size = 1 / count
+	local offset = (count - 1) * size
+
+	local section = self.group:create_section(self.inner_name, name, 1, size, offset)
 	return setmetatable({ section = section, parent_tab = self }, GroupboxClass)
 end
 
 function TabClass:AddRightGroupbox(name)
-	local section = self.group:create_section(self.inner_name, name, 2, 1, 0)
+	self.right_count = (self.right_count or 0) + 1
+	local count = self.right_count
+	local size = 1 / count
+	local offset = (count - 1) * size
+
+	local section = self.group:create_section(self.inner_name, name, 2, size, offset)
 	return setmetatable({ section = section, parent_tab = self }, GroupboxClass)
 end
 
