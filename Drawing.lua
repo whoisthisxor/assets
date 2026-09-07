@@ -409,12 +409,14 @@ local renderConn = RunService.RenderStepped:Connect(function()
 
             if properties.TeamColors then
                 local team = player.Team
+                local color = team and properties.TeamColors[team.Name]
 
-                if team and properties.TeamColors[team.Name] then
-                    hl.FillColor = properties.TeamColors[team.Name]
-                else
-                    hl.FillColor = properties.TeamColors.Default
-                end
+                color = color
+                    or properties.TeamColors.Default
+                    or Color3.new(1, 1, 1)
+
+                hl.FillColor = color
+                hl.OutlineColor = color
             end
 
             hl.Enabled = isEnabled
@@ -444,16 +446,16 @@ end)
             UpdateTeamColors = function(self, colors)
             properties.TeamColors = colors
 
-            for player, hl in pairs(highlights) do
-            local team = player.Team
+           for player, hl in pairs(highlights) do
+           local team = player.Team
+           local color = team and colors[team.Name]
 
-            if team and colors[team.Name] then
-            hl.FillColor = colors[team.Name]
-            else
-            hl.FillColor = colors.Default
-            end
-            end
-            end,
+           color = color or colors.Default or Color3.new(1, 1, 1)
+
+           hl.FillColor = color
+           hl.OutlineColor = color
+           end
+           end,
             UpdateOutlineColor = function(self, newColor)
             properties.OutlineColor = newColor
 
