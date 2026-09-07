@@ -395,17 +395,32 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
             if specificPlayer then SetupHighlight(specificPlayer) end
         end
         
-        local renderConn = RunService.RenderStepped:Connect(function()
-            for player, hl in pairs(highlights) do
-                if hl and hl.Parent then
-                    local isEnabled = properties.Enabled == nil and true or properties.Enabled
-                    if properties.IgnoreTeammates and player.Team == LocalPlayer.Team and player.Team ~= nil then
-                        isEnabled = false
-                    end
-                    hl.Enabled = isEnabled
+local renderConn = RunService.RenderStepped:Connect(function()
+    for player, hl in pairs(highlights) do
+        if hl and hl.Parent then
+            local isEnabled = properties.Enabled == nil and true or properties.Enabled
+
+            if properties.IgnoreTeammates
+                and player.Team == LocalPlayer.Team
+                and player.Team ~= nil
+            then
+                isEnabled = false
+            end
+
+            if properties.TeamColors then
+                local team = player.Team
+
+                if team and properties.TeamColors[team.Name] then
+                    hl.FillColor = properties.TeamColors[team.Name]
+                else
+                    hl.FillColor = properties.TeamColors.Default
                 end
             end
-        end)
+
+            hl.Enabled = isEnabled
+        end
+    end
+end)
         table.insert(connections, renderConn)
         table.insert(self.ESPConnections, renderConn)
         
@@ -425,6 +440,19 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
             end,
             UpdateTeamCheck = function(self, state)
             properties.IgnoreTeammates = state
+            end,
+            UpdateTeamColors = function(self, colors)
+            properties.TeamColors = colors
+
+            for player, hl in pairs(highlights) do
+            local team = player.Team
+
+            if team and colors[team.Name] then
+            hl.FillColor = colors[team.Name]
+            else
+            hl.FillColor = colors.Default
+            end
+            end
             end,
             UpdateOutlineColor = function(self, newColor)
             properties.OutlineColor = newColor
