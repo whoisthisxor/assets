@@ -10115,21 +10115,30 @@ local function CreateChainingWrapper(parent, element, idx, type)
         end
     end
     
-    function wrapper:SetValue(value)
-        if type == "toggle" then
-            element:set_toggle(value)
-        elseif type == "slider" then
-            element:set_slider(value)
-        elseif type == "dropdown" then
-            element:set_dropdown(type(value) == "table" and value or {value})
-        elseif type == "textbox" then
-            element:set_textbox(value)
-        elseif type == "colorpicker" then
-            element:set_colorpicker(value)
-        elseif type == "keybind" then
-            element:set_key(value)
+function wrapper:SetValue(value)
+    if type == "toggle" then
+        element:set_toggle(value)
+
+    elseif type == "slider" then
+        element:set_slider(value)
+
+    elseif type == "dropdown" then
+        if typeof(value) == "table" then
+            element:set_dropdown(value)
+        else
+            element:set_dropdown({value})
         end
+
+    elseif type == "textbox" then
+        element:set_textbox(value)
+
+    elseif type == "colorpicker" then
+        element:set_colorpicker(value)
+
+    elseif type == "keybind" then
+        element:set_key(value)
     end
+end
     
     if type == "keybind" then
         function wrapper:GetState()
