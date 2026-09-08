@@ -322,6 +322,14 @@ end
 end
 
 function DrawingLibrary:MakeName(targetOrProperties, properties)
+    properties = properties or {}
+
+    if type(targetOrProperties) == "string" then
+        properties.Text = function(player)
+            return player.Name
+        end
+    end
+
     return self:MakeText(targetOrProperties, properties)
 end
 
