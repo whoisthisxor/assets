@@ -152,6 +152,7 @@ local function GetWeaponName(player, character, customPath)
     return "None"
 end
 
+
 function DrawingLibrary:ClearAll()
     for _, conn in pairs(self.ESPConnections) do
         if conn.Disconnect then conn:Disconnect() end
@@ -168,6 +169,7 @@ function DrawingLibrary:ClearAll()
     end
     self.Instances = {}
 end
+
 
 local function CreateDynamicESP(library, target, drawingType, properties)
     local isAll = (string.lower(target) == "all")
@@ -345,6 +347,7 @@ local function CreateDynamicESP(library, target, drawingType, properties)
     return AddDrawing(wrapper)
 end
 
+
 local GRAD_LINE_COUNT = GRAD_STEPS * 4
 
 local function CreateBoxObjects(properties)
@@ -405,9 +408,9 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
     local isAll          = (string.lower(targetOrProperties) == "all")
     local specificPlayer = not isAll and Players:FindFirstChild(targetOrProperties) or nil
 
-    local espObjects  = {}   -- [player] = CreateBoxObjects()
+    local espObjects  = {}
     local connections = {}
-    local rotAngle    = 0    -- shared rotation phase for gradient outline
+    local rotAngle    = 0
 
     local function SetupPlayer(player)
         if player == LocalPlayer and not properties.ShowLocal then return end
@@ -469,7 +472,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             local x, y = pos.X, pos.Y
             local w, h = size.X, size.Y
 
-            local useGradientOutline = properties.Gradient     -- coloured outline via Line segments
+            local useGradientOutline = properties.Gradient
             local useFlatFill        = properties.Fill and not properties.FillGradient
             local useGradFill        = properties.Fill and properties.FillGradient
             local useFlatOutline     = not useGradientOutline
@@ -549,6 +552,38 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             for _, obj in pairs(self.Objects) do obj.fill.Transparency = alpha end
         end,
 
+        UpdateGradient = function(self, state)
+            properties.Gradient = state
+        end,
+
+        UpdateFill = function(self, state)
+            properties.Fill = state
+            if not state then
+                for _, obj in pairs(self.Objects) do
+                    obj.fill.Visible = false
+                    for _, l in ipairs(obj.fillLines) do l.Visible = false end
+                end
+            end
+        end,
+
+        UpdateFillGradient = function(self, state)
+            properties.FillGradient = state
+            if not state then
+                for _, obj in pairs(self.Objects) do
+                    for _, l in ipairs(obj.fillLines) do l.Visible = false end
+                end
+            end
+        end,
+
+        UpdateFillAngle = function(self, angle)
+            properties.FillAngle = angle
+        end,
+
+        UpdateFillGradientColors = function(self, colorA, colorB)
+            properties.FillColorA = colorA
+            properties.FillColorB = colorB
+        end,
+
         UpdateGradientColors = function(self, colorA, colorB)
             properties.GradientColorA = colorA
             properties.GradientColorB = colorB
@@ -556,6 +591,21 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
 
         UpdateGradientSpeed = function(self, speed)
             properties.GradientSpeed = speed
+        end,
+
+        UpdateThickness = function(self, thickness)
+            properties.Thickness = thickness
+            for _, obj in pairs(self.Objects) do
+                obj.outline.Thickness = thickness
+                for _, l in ipairs(obj.gradLines) do l.Thickness = thickness end
+            end
+        end,
+
+        UpdateTransparency = function(self, alpha)
+            properties.Transparency = alpha
+            for _, obj in pairs(self.Objects) do
+                obj.outline.Transparency = alpha
+            end
         end,
 
         UpdateTeamCheck = function(self, state)
@@ -572,6 +622,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
     }
     return AddDrawing(wrapper)
 end
+
 
 function DrawingLibrary:MakeText(targetOrProperties, properties)
     if type(targetOrProperties) == "table" then
@@ -608,6 +659,7 @@ function DrawingLibrary:MakeName(targetOrProperties, properties)
     end
     return self:MakeText(targetOrProperties, properties)
 end
+
 
 function DrawingLibrary:MakeLine(targetOrProperties, properties)
     if type(targetOrProperties) == "table" then
@@ -737,6 +789,7 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
         return AddInstance(wrapper)
     end
 end
+
 
 function DrawingLibrary:MakeCircle(properties)
     properties = properties or {}
