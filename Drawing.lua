@@ -83,11 +83,9 @@ local function drawBoxOutlineGradient(gradLines, x, y, w, h, colorA, colorB, rot
     local total = #gradLines
     if total == 0 then return end
 
-    local step_len = perim / total
-
     for i = 1, total do
-        local t_start = ((i - 1) / total + rotOff) % 1
-        local t_end   = (i / total + rotOff) % 1
+        local pos_start = (i - 1) / total
+        local pos_end   = i / total
 
         local function perim_pos(t)
             local d = t * perim
@@ -102,13 +100,15 @@ local function drawBoxOutlineGradient(gradLines, x, y, w, h, colorA, colorB, rot
             end
         end
 
-        local x1, y1 = perim_pos(t_start)
-        local x2, y2 = perim_pos(t_end)
+        local x1, y1 = perim_pos(pos_start)
+        local x2, y2 = perim_pos(pos_end)
+
+        local color_t = (pos_start + rotOff) % 1
 
         local line = gradLines[i]
         line.From    = Vector2.new(x1, y1)
         line.To      = Vector2.new(x2, y2)
-        line.Color   = lerpColor(colorA, colorB, t_start)
+        line.Color   = lerpColor(colorA, colorB, color_t)
         line.Visible = true
     end
 end
