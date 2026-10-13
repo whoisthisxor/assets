@@ -22,7 +22,7 @@ end
 
 
 local MAX_FILL_LINES = 64
-local GRAD_STEPS     = 4
+local GRAD_STEPS     = 12
 local MAX_HP_SEGMENTS = 12
 
 local function lerpColor(a, b, t)
@@ -77,31 +77,40 @@ local function drawFillGradient360(fillLines, x, y, w, h, colorA, colorB, angle)
 end
 
 local function drawBoxOutlineGradient(gradLines, x, y, w, h, colorA, colorB, rotOff)
-    local sides = {
-        {x,     y,     x + w, y    },
-        {x + w, y,     x + w, y + h},
-        {x + w, y + h, x,     y + h},
-        {x,     y + h, x,     y    },
-    }
-    local idx = 0
-    for si = 1, 4 do
-        local s             = sides[si]
-        local x1, y1, x2, y2 = s[1], s[2], s[3], s[4]
-        for step = 0, GRAD_STEPS - 1 do
-            idx          = idx + 1
-            local tA     = step       / GRAD_STEPS
-            local tB     = (step + 1) / GRAD_STEPS
-            local tMid   = (((si - 1) / 4) + (tA / 4) + rotOff) % 1
-            local line   = gradLines[idx]
-            if line then
-                line.From    = Vector2.new(x1 + (x2 - x1) * tA, y1 + (y2 - y1) * tA)
-                line.To      = Vector2.new(x1 + (x2 - x1) * tB, y1 + (y2 - y1) * tB)
-                line.Color   = lerpColor(colorA, colorB, tMid)
-                line.Visible = true
+    local perim = 2 * (w + h)
+    if perim <= 0 then return end
+
+    local total = #gradLines
+    if total == 0 then return end
+
+    local step_len = perim / total
+
+    for i = 1, total do
+        local t_start = ((i - 1) / total + rotOff) % 1
+        local t_end   = (i / total + rotOff) % 1
+
+        local function perim_pos(t)
+            local d = t * perim
+            if d < w then
+                return x + d, y
+            elseif d < w + h then
+                return x + w, y + (d - w)
+            elseif d < w + h + w then
+                return x + w - (d - w - h), y + h
+            else
+                return x, y + h - (d - w - h - w)
             end
         end
+
+        local x1, y1 = perim_pos(t_start)
+        local x2, y2 = perim_pos(t_end)
+
+        local line = gradLines[i]
+        line.From    = Vector2.new(x1, y1)
+        line.To      = Vector2.new(x2, y2)
+        line.Color   = lerpColor(colorA, colorB, t_start)
+        line.Visible = true
     end
-    for i = idx + 1, #gradLines do gradLines[i].Visible = false end
 end
 
 local function GetCharacterBox(character)
