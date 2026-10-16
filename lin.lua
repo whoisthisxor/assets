@@ -2985,7 +2985,7 @@ function Library:CreateWindow(...)
     Parent = Outer
 })
 
-function update_mascot(image_path, position)
+function Library.update_mascot(image_path, position)
     image_path = image_path or getgenv().mascot_selected
 
     if image_path ~= nil then
@@ -2997,7 +2997,6 @@ function update_mascot(image_path, position)
     end
 end
 
-update_mascot()
 
     Library:MakeDraggable(Outer, 25);
 
