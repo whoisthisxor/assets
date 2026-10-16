@@ -2979,7 +2979,7 @@ function Library:CreateWindow(...)
     Position = UDim2.new(1,-101, 0, -180),
     Size = UDim2.fromOffset(150, 180),
 
-    Image = getcustomasset(tostring(getgenv().mascot_selected)),
+    Image = "",
     ScaleType = Enum.ScaleType.Fit,
 
     ZIndex = 10,
@@ -2987,11 +2987,13 @@ function Library:CreateWindow(...)
 })
 
 function update_mascot(image_path, position)
-    if image_path then
+    image_path = image_path or getgenv().mascot_selected
+
+    if image_path ~= nil then
         mascot_img.Image = getcustomasset(tostring(image_path))
     end
 
-    if position then
+    if position ~= nil then
         mascot_img.Position = position
     end
 end
