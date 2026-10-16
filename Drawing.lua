@@ -4,11 +4,38 @@ DrawingLibrary.Drawings = {}
 DrawingLibrary.Instances = {}
 DrawingLibrary.ESPConnections = {}
 
-local Players        = game:GetService("Players")
-local RunService     = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local LocalPlayer    = Players.LocalPlayer
-local Camera         = workspace.CurrentCamera
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+local function getRoot()
+    local ok, hui = pcall(gethui)
+    if ok and hui then return hui end
+    return game:GetService("CoreGui")
+end
+
+local _gradGui do
+    local sg = Instance.new("ScreenGui")
+    sg.Name           = "\0\0GradESP"
+    sg.IgnoreGuiInset = true
+    sg.ResetOnSpawn   = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Parent         = getRoot()
+    _gradGui          = sg
+end
+
+local function buildSequence(colors)
+    local n = #colors
+    if n == 0 then return ColorSequence.new(Color3.new(1,1,1)) end
+    if n == 1 then return ColorSequence.new(colors[1]) end
+    local kps = {}
+    for i = 1, n do
+        kps[i] = ColorSequenceKeypoint.new((i-1)/(n-1), colors[i])
+    end
+    return ColorSequence.new(kps)
+end
 
 local function AddDrawing(drawing)
     table.insert(DrawingLibrary.Drawings, drawing)
@@ -21,97 +48,7 @@ local function AddInstance(instance)
 end
 
 
-local MAX_FILL_LINES = 64
-local GRAD_STEPS     = 12
 local MAX_HP_SEGMENTS = 12
-
-local function lerpColor(a, b, t)
-    t = math.clamp(t, 0, 1)
-    return Color3.new(
-        a.R + (b.R - a.R) * t,
-        a.G + (b.G - a.G) * t,
-        a.B + (b.B - a.B) * t
-    )
-end
-
-local function setupFillLines(count)
-    local lines = {}
-    local n = count or MAX_FILL_LINES
-    for i = 1, n do
-        local l = Drawing.new("Line")
-        l.Thickness    = 4
-        l.Transparency = 0.3
-        l.Visible      = false
-        lines[i] = l
-    end
-    return lines
-end
-
-local function drawFillGradient360(fillLines, x, y, w, h, colorA, colorB, angle)
-    local dx     = math.cos(angle)
-    local dy     = math.sin(angle)
-    local cx     = x + w * 0.5
-    local cy     = y + h * 0.5
-    local maxDot = math.max((math.abs(dx) * w + math.abs(dy) * h) * 0.5, 1)
-
-    local targetRows = math.clamp(math.floor(h * 0.8), 15, #fillLines)
-    local rowH       = h / targetRows
-
-    for i = 1, targetRows do
-        local py   = y + (i - 0.5) * rowH
-        local dotL = ((x     - cx) * dx + (py - cy) * dy) / maxDot
-        local dotR = ((x + w - cx) * dx + (py - cy) * dy) / maxDot
-        local tL   = math.clamp(dotL * 0.5 + 0.5, 0, 1)
-        local tR   = math.clamp(dotR * 0.5 + 0.5, 0, 1)
-
-        local line     = fillLines[i]
-        line.Color     = lerpColor(colorA, colorB, (tL + tR) * 0.5)
-        line.Thickness = math.clamp(rowH + 1.5, 2, 8)
-        line.From      = Vector2.new(x + 1,     py)
-        line.To        = Vector2.new(x + w - 1, py)
-        line.Visible   = true
-    end
-    for i = targetRows + 1, #fillLines do
-        fillLines[i].Visible = false
-    end
-end
-
-local function drawBoxOutlineGradient(gradLines, x, y, w, h, colorA, colorB, rotOff)
-    local perim = 2 * (w + h)
-    if perim <= 0 then return end
-
-    local total = #gradLines
-    if total == 0 then return end
-
-    for i = 1, total do
-        local pos_start = (i - 1) / total
-        local pos_end   = i / total
-
-        local function perim_pos(t)
-            local d = t * perim
-            if d < w then
-                return x + d, y
-            elseif d < w + h then
-                return x + w, y + (d - w)
-            elseif d < w + h + w then
-                return x + w - (d - w - h), y + h
-            else
-                return x, y + h - (d - w - h - w)
-            end
-        end
-
-        local x1, y1 = perim_pos(pos_start)
-        local x2, y2 = perim_pos(pos_end)
-
-        local color_t = (pos_start + rotOff) % 1
-
-        local line = gradLines[i]
-        line.From    = Vector2.new(x1, y1)
-        line.To      = Vector2.new(x2, y2)
-        line.Color   = lerpColor(colorA, colorB, color_t)
-        line.Visible = true
-    end
-end
 
 local function GetCharacterBox(character)
     local rootPart = character:FindFirstChild("HumanoidRootPart")
@@ -161,7 +98,6 @@ local function GetWeaponName(player, character, customPath)
     return "None"
 end
 
-
 function DrawingLibrary:ClearAll()
     for _, conn in pairs(self.ESPConnections) do
         if conn.Disconnect then conn:Disconnect() end
@@ -178,7 +114,6 @@ function DrawingLibrary:ClearAll()
     end
     self.Instances = {}
 end
-
 
 local function CreateDynamicESP(library, target, drawingType, properties)
     local isAll = (string.lower(target) == "all")
@@ -356,40 +291,47 @@ local function CreateDynamicESP(library, target, drawingType, properties)
     return AddDrawing(wrapper)
 end
 
-
-local GRAD_LINE_COUNT = GRAD_STEPS * 4
-
 local function CreateBoxObjects(properties)
     local outline = Drawing.new("Square")
-    outline.Color        = properties.Color        or Color3.new(1, 1, 1)
-    outline.Thickness    = properties.Thickness    or 1
-    outline.Transparency = properties.Transparency or 1
+    outline.Color        = properties.Color     or Color3.new(1, 1, 1)
+    outline.Thickness    = properties.Thickness or 1
+    outline.Transparency = properties.Transparency ~= nil and properties.Transparency or 1
     outline.Filled       = false
     outline.Visible      = false
 
-    local fill = Drawing.new("Square")
-    fill.Filled       = true
-    fill.Thickness    = 0
-    fill.Color        = properties.FillColor        or Color3.new(1, 1, 1)
-    fill.Transparency = properties.FillTransparency ~= nil and properties.FillTransparency or 0.7
-    fill.Visible      = false
+    local defaultColors = properties.GradientColors or {
+        Color3.fromRGB(255, 0, 0),
+        Color3.fromRGB(0, 255, 0),
+        Color3.fromRGB(0, 0, 255),
+    }
 
-    local gradLines = {}
-    for i = 1, GRAD_LINE_COUNT do
-        local l = Drawing.new("Line")
-        l.Thickness    = properties.Thickness or 1
-        l.Transparency = 1
-        l.Visible      = false
-        gradLines[i]   = l
-    end
+    local frame = Instance.new("Frame")
+    frame.BorderSizePixel        = 0
+    frame.BackgroundColor3       = Color3.new(1, 1, 1)
+    frame.BackgroundTransparency = properties.FillTransparency ~= nil
+        and properties.FillTransparency or 0.5
+    frame.Visible                = false
+    frame.ZIndex                 = 2
+    frame.Parent                 = _gradGui
 
-    local fillLines = setupFillLines(MAX_FILL_LINES)
+    local uig = Instance.new("UIGradient")
+    uig.Color    = buildSequence(defaultColors)
+    uig.Rotation = properties.GradientRotation or 0
+    uig.Parent   = frame
+
+    local borderDraw = Drawing.new("Square")
+    borderDraw.Filled    = false
+    borderDraw.Thickness = properties.BorderThickness or 1
+    borderDraw.Color     = properties.BorderColor     or Color3.new(0, 0, 0)
+    borderDraw.Visible   = false
 
     return {
-        outline   = outline,
-        fill      = fill,
-        gradLines = gradLines,
-        fillLines = fillLines,
+        outline    = outline,
+        borderDraw = borderDraw,
+        frame      = frame,
+        uig        = uig,
+        colors     = defaultColors,
+        spin       = 0,
     }
 end
 
@@ -432,9 +374,8 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
         local obj = espObjects[player]
         if not obj then return end
         obj.outline:Remove()
-        obj.fill:Remove()
-        for _, l in ipairs(obj.gradLines) do l:Remove() end
-        for _, l in ipairs(obj.fillLines) do l:Remove() end
+        obj.borderDraw:Remove()
+        obj.frame:Destroy()
         espObjects[player] = nil
     end
 
@@ -449,15 +390,13 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
     end
 
     local renderConn = RunService.RenderStepped:Connect(function(dt)
-        rotAngle = (rotAngle + dt * (properties.GradientSpeed or 2)) % (math.pi * 2)
-        local rotOff = rotAngle / (math.pi * 2)
+        rotAngle = (rotAngle + dt * (properties.GradientSpeed or 90)) % 360
 
         for player, obj in pairs(espObjects) do
             local function hideAll()
-                obj.outline.Visible = false
-                obj.fill.Visible    = false
-                for _, l in ipairs(obj.gradLines) do l.Visible = false end
-                for _, l in ipairs(obj.fillLines) do l.Visible = false end
+                obj.outline.Visible    = false
+                obj.borderDraw.Visible = false
+                obj.frame.Visible      = false
             end
 
             if not properties.Visible then hideAll() continue end
@@ -478,53 +417,36 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             local pos, size, onScreen = GetCharacterBox(character)
             if not onScreen then hideAll() continue end
 
-            local x, y = pos.X, pos.Y
-            local w, h = size.X, size.Y
+            obj.outline.Position    = pos
+            obj.outline.Size        = size
+            obj.outline.Color       = properties.Color       or Color3.new(1, 1, 1)
+            obj.outline.Thickness   = properties.Thickness   or 1
+            obj.outline.Transparency = properties.Transparency ~= nil
+                and properties.Transparency or 1
+            obj.outline.Visible     = true
 
-            local useGradientOutline = properties.Gradient
-            local useFlatFill        = properties.Fill and not properties.FillGradient
-            local useGradFill        = properties.Fill and properties.FillGradient
-            local useFlatOutline     = not useGradientOutline
+            obj.frame.Position = UDim2.fromOffset(pos.X, pos.Y)
+            obj.frame.Size     = UDim2.fromOffset(size.X, size.Y)
+            obj.frame.BackgroundTransparency = properties.FillTransparency ~= nil
+                and properties.FillTransparency or 0.5
+            obj.frame.Visible  = properties.Fill ~= false
 
-            if useGradFill then
-                local fA    = properties.FillColorA or properties.GradientColorA or Color3.new(1, 1, 1)
-                local fB    = properties.FillColorB or properties.GradientColorB or Color3.new(0, 1, 1)
-                local angle = properties.FillAngle  or rotAngle
-                drawFillGradient360(obj.fillLines, x, y, w, h, fA, fB, angle)
-            else
-                for _, l in ipairs(obj.fillLines) do l.Visible = false end
+            if properties.GradientSpin ~= false then
+                obj.uig.Rotation = rotAngle % 360
             end
 
-            if useFlatFill then
-                obj.fill.Position    = pos
-                obj.fill.Size        = size
-                obj.fill.Color       = properties.FillColor        or Color3.new(1, 1, 1)
-                obj.fill.Transparency = properties.FillTransparency ~= nil
-                    and properties.FillTransparency or 0.7
-                obj.fill.Visible     = true
-            else
-                obj.fill.Visible = false
+            if properties.GradientColors then
+                obj.uig.Color = buildSequence(properties.GradientColors)
             end
 
-            if useGradientOutline then
-                local cA = properties.GradientColorA or Color3.new(1, 1, 1)
-                local cB = properties.GradientColorB or Color3.new(0, 1, 1)
-                for _, l in ipairs(obj.gradLines) do
-                    l.Thickness = properties.Thickness or 1
-                end
-                drawBoxOutlineGradient(obj.gradLines, x, y, w, h, cA, cB, rotOff)
-                obj.outline.Visible = false
+            if properties.ShowBorder then
+                obj.borderDraw.Position    = pos
+                obj.borderDraw.Size        = size
+                obj.borderDraw.Color       = properties.BorderColor     or Color3.new(0, 0, 0)
+                obj.borderDraw.Thickness   = properties.BorderThickness or 1
+                obj.borderDraw.Visible     = true
             else
-                for _, l in ipairs(obj.gradLines) do l.Visible = false end
-            end
-
-            if useFlatOutline then
-                obj.outline.Position    = pos
-                obj.outline.Size        = size
-                obj.outline.Color       = properties.Color        or Color3.new(1, 1, 1)
-                obj.outline.Thickness   = properties.Thickness    or 1
-                obj.outline.Transparency = properties.Transparency or 1
-                obj.outline.Visible     = true
+                obj.borderDraw.Visible = false
             end
         end
     end)
@@ -538,10 +460,9 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             properties.Visible = state
             if not state then
                 for _, obj in pairs(self.Objects) do
-                    obj.outline.Visible = false
-                    obj.fill.Visible    = false
-                    for _, l in ipairs(obj.gradLines) do l.Visible = false end
-                    for _, l in ipairs(obj.fillLines) do l.Visible = false end
+                    obj.outline.Visible    = false
+                    obj.borderDraw.Visible = false
+                    obj.frame.Visible      = false
                 end
             end
         end,
@@ -551,69 +472,36 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             for _, obj in pairs(self.Objects) do obj.outline.Color = newColor end
         end,
 
-        UpdateFillColor = function(self, newColor)
-            properties.FillColor = newColor
-            for _, obj in pairs(self.Objects) do obj.fill.Color = newColor end
+        UpdateThickness = function(self, thickness)
+            properties.Thickness = thickness
+            for _, obj in pairs(self.Objects) do obj.outline.Thickness = thickness end
         end,
 
         UpdateFillTransparency = function(self, alpha)
             properties.FillTransparency = alpha
-            for _, obj in pairs(self.Objects) do obj.fill.Transparency = alpha end
-        end,
-
-        UpdateGradient = function(self, state)
-            properties.Gradient = state
-        end,
-
-        UpdateFill = function(self, state)
-            properties.Fill = state
-            if not state then
-                for _, obj in pairs(self.Objects) do
-                    obj.fill.Visible = false
-                    for _, l in ipairs(obj.fillLines) do l.Visible = false end
-                end
+            for _, obj in pairs(self.Objects) do
+                obj.frame.BackgroundTransparency = alpha
             end
         end,
 
-        UpdateFillGradient = function(self, state)
-            properties.FillGradient = state
-            if not state then
-                for _, obj in pairs(self.Objects) do
-                    for _, l in ipairs(obj.fillLines) do l.Visible = false end
-                end
-            end
-        end,
-
-        UpdateFillAngle = function(self, angle)
-            properties.FillAngle = angle
-        end,
-
-        UpdateFillGradientColors = function(self, colorA, colorB)
-            properties.FillColorA = colorA
-            properties.FillColorB = colorB
-        end,
-
-        UpdateGradientColors = function(self, colorA, colorB)
-            properties.GradientColorA = colorA
-            properties.GradientColorB = colorB
+        UpdateGradientColors = function(self, colors)
+            properties.GradientColors = colors
+            local seq = buildSequence(colors)
+            for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
         end,
 
         UpdateGradientSpeed = function(self, speed)
             properties.GradientSpeed = speed
         end,
 
-        UpdateThickness = function(self, thickness)
-            properties.Thickness = thickness
-            for _, obj in pairs(self.Objects) do
-                obj.outline.Thickness = thickness
-                for _, l in ipairs(obj.gradLines) do l.Thickness = thickness end
-            end
+        UpdateGradientSpin = function(self, state)
+            properties.GradientSpin = state
         end,
 
-        UpdateTransparency = function(self, alpha)
-            properties.Transparency = alpha
-            for _, obj in pairs(self.Objects) do
-                obj.outline.Transparency = alpha
+        UpdateFill = function(self, state)
+            properties.Fill = state
+            if not state then
+                for _, obj in pairs(self.Objects) do obj.frame.Visible = false end
             end
         end,
 
@@ -631,7 +519,6 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
     }
     return AddDrawing(wrapper)
 end
-
 
 function DrawingLibrary:MakeText(targetOrProperties, properties)
     if type(targetOrProperties) == "table" then
@@ -668,7 +555,6 @@ function DrawingLibrary:MakeName(targetOrProperties, properties)
     end
     return self:MakeText(targetOrProperties, properties)
 end
-
 
 function DrawingLibrary:MakeLine(targetOrProperties, properties)
     if type(targetOrProperties) == "table" then
@@ -799,7 +685,6 @@ function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
     end
 end
 
-
 function DrawingLibrary:MakeCircle(properties)
     properties = properties or {}
     local circle = Drawing.new("Circle")
@@ -817,29 +702,93 @@ end
 
 function DrawingLibrary:MakeFov(properties)
     properties = properties or {}
+
+    local radius   = properties.Radius or 100
+    local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
     local fovCircle = Drawing.new("Circle")
     fovCircle.Visible      = properties.Visible      or false
     fovCircle.Color        = properties.Color        or Color3.new(1, 1, 1)
     fovCircle.Thickness    = properties.Thickness    or 1
-    fovCircle.Transparency = properties.Transparency or 1
-    fovCircle.Filled       = properties.Filled       or false
-    fovCircle.Radius       = properties.Radius       or 100
-    fovCircle.NumSides     = properties.NumSides     or 64
+    fovCircle.Transparency = properties.Transparency ~= nil and properties.Transparency or 1
+    fovCircle.Filled       = false
+    fovCircle.Radius       = radius
+    fovCircle.NumSides     = properties.NumSides or 64
 
-    local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+    local defaultColors = properties.GradientColors or {
+        Color3.fromRGB(255, 0, 0),
+        Color3.fromRGB(0, 255, 0),
+        Color3.fromRGB(0, 0, 255),
+    }
+
+    local fovFrame = Instance.new("Frame")
+    fovFrame.BorderSizePixel        = 0
+    fovFrame.BackgroundColor3       = Color3.new(1, 1, 1)
+    fovFrame.BackgroundTransparency = properties.FillTransparency ~= nil
+        and properties.FillTransparency or 0.7
+    fovFrame.Size    = UDim2.fromOffset(radius * 2, radius * 2)
+    fovFrame.Visible = properties.Visible or false
+    fovFrame.ZIndex  = 2
+    fovFrame.Parent  = _gradGui
+
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(1, 0)
+    uiCorner.Parent       = fovFrame
+
+    local fovUIG = Instance.new("UIGradient")
+    fovUIG.Color    = buildSequence(defaultColors)
+    fovUIG.Rotation = 0
+    fovUIG.Parent   = fovFrame
+
+    local gradSpin = 0
 
     local fovObject = {
-        Circle     = fovCircle,
+        Circle    = fovCircle,
+        Frame     = fovFrame,
+        Gradient  = fovUIG,
         Connection = nil,
 
-        UpdateRadius  = function(self, r)     self.Circle.Radius  = r end,
-        UpdateVisible = function(self, state) self.Circle.Visible = state end,
-        UpdateColor   = function(self, color) self.Circle.Color   = color end,
-        UpdateWallCheck  = function(self, state) properties.CheckWalls       = state end,
-        UpdateTeamCheck  = function(self, state) properties.IgnoreTeammates  = state end,
+        UpdateRadius = function(self, r)
+            properties.Radius   = r
+            self.Circle.Radius  = r
+            self.Frame.Size     = UDim2.fromOffset(r * 2, r * 2)
+        end,
+
+        UpdateVisible = function(self, state)
+            properties.Visible  = state
+            self.Circle.Visible = state
+            self.Frame.Visible  = state and (properties.Fill ~= false)
+        end,
+
+        UpdateColor = function(self, color)
+            properties.Color    = color
+            self.Circle.Color   = color
+        end,
+
+        UpdateFillTransparency = function(self, alpha)
+            properties.FillTransparency = alpha
+            self.Frame.BackgroundTransparency = alpha
+        end,
+
+        UpdateGradientColors = function(self, colors)
+            properties.GradientColors = colors
+            self.Gradient.Color = buildSequence(colors)
+        end,
+
+        UpdateGradientSpeed = function(self, speed)
+            properties.GradientSpeed = speed
+        end,
+
+        UpdateFill = function(self, state)
+            properties.Fill    = state
+            self.Frame.Visible = state and (properties.Visible or false)
+        end,
+
+        UpdateWallCheck = function(self, state) properties.CheckWalls      = state end,
+        UpdateTeamCheck = function(self, state) properties.IgnoreTeammates = state end,
 
         GetClosestPlayer = function(self)
-            local closestPlayer   = nil
+            local closestPlayer    = nil
             local shortestDistance = self.Circle.Radius
             local raycastParams
             if properties.CheckWalls and LocalPlayer.Character then
@@ -855,7 +804,6 @@ function DrawingLibrary:MakeFov(properties)
                         and player.Team == LocalPlayer.Team
                         and player.Team ~= nil
                     then continue end
-
                     local humanoid = player.Character:FindFirstChild("Humanoid")
                     if humanoid and humanoid.Health > 0 then
                         local targetPart = player.Character:FindFirstChild("Head")
@@ -886,17 +834,30 @@ function DrawingLibrary:MakeFov(properties)
 
         Remove = function(self)
             if self.Connection then self.Connection:Disconnect(); self.Connection = nil end
-            if self.Circle and self.Circle.Remove then self.Circle:Remove() end
+            if self.Circle     then self.Circle:Remove() end
+            if self.Frame      then self.Frame:Destroy() end
         end,
     }
 
-    fovObject.Connection = RunService.RenderStepped:Connect(function()
+    fovObject.Connection = RunService.RenderStepped:Connect(function(dt)
         if not fovObject.Circle then fovObject.Connection:Disconnect() return end
+
+        local center
         if isMobile then
             local vp = Camera.ViewportSize
-            fovObject.Circle.Position = Vector2.new(vp.X / 2, vp.Y / 2)
+            center   = Vector2.new(vp.X / 2, vp.Y / 2)
         else
-            fovObject.Circle.Position = UserInputService:GetMouseLocation()
+            center = UserInputService:GetMouseLocation()
+        end
+
+        local r = fovObject.Circle.Radius
+        fovObject.Circle.Position = center
+        fovObject.Frame.Position  = UDim2.fromOffset(center.X - r, center.Y - r)
+        fovObject.Frame.Size      = UDim2.fromOffset(r * 2, r * 2)
+
+        if properties.GradientSpin ~= false then
+            gradSpin = (gradSpin + dt * (properties.GradientSpeed or 90)) % 360
+            fovObject.Gradient.Rotation = gradSpin
         end
     end)
 
@@ -913,6 +874,14 @@ function DrawingLibrary:MakeHealthBar(target, properties)
     local isAll          = (string.lower(target) == "all")
     local specificPlayer = not isAll and Players:FindFirstChild(target) or nil
 
+    local function getColors()
+        return properties.GradientColors or {
+            Color3.fromRGB(255, 0,   0),
+            Color3.fromRGB(255, 200, 0),
+            Color3.fromRGB(0,   255, 0),
+        }
+    end
+
     local barObjects  = {}
     local connections = {}
 
@@ -920,21 +889,28 @@ function DrawingLibrary:MakeHealthBar(target, properties)
         if player == LocalPlayer and not properties.ShowLocal then return end
         if barObjects[player] then return end
 
-        local bg = Drawing.new("Square")
-        bg.Filled       = true
-        bg.Color        = properties.BackgroundColor or Color3.new(0, 0, 0)
-        bg.Transparency = properties.BackgroundAlpha ~= nil and properties.BackgroundAlpha or 0.5
-        bg.Thickness    = 1
-        bg.Visible      = false
+        local bgFrame = Instance.new("Frame")
+        bgFrame.BorderSizePixel        = 0
+        bgFrame.BackgroundColor3       = properties.BackgroundColor or Color3.fromRGB(0, 0, 0)
+        bgFrame.BackgroundTransparency = properties.BackgroundAlpha ~= nil
+            and properties.BackgroundAlpha or 0.5
+        bgFrame.Visible                = false
+        bgFrame.ZIndex                 = 2
+        bgFrame.Parent                 = _gradGui
 
-        local segs = {}
-        for i = 1, MAX_HP_SEGMENTS do
-            local l = Drawing.new("Line")
-            l.Thickness    = properties.BarWidth or 4
-            l.Transparency = 1
-            l.Visible      = false
-            segs[i]        = l
-        end
+        local fillFrame = Instance.new("Frame")
+        fillFrame.BorderSizePixel        = 0
+        fillFrame.BackgroundColor3       = Color3.new(1, 1, 1)
+        fillFrame.BackgroundTransparency = properties.BarTransparency ~= nil
+            and properties.BarTransparency or 0
+        fillFrame.Visible                = false
+        fillFrame.ZIndex                 = 3
+        fillFrame.Parent                 = _gradGui
+
+        local uig = Instance.new("UIGradient")
+        uig.Color    = buildSequence(getColors())
+        uig.Rotation = 270
+        uig.Parent   = fillFrame
 
         local distText = Drawing.new("Text")
         distText.Center       = true
@@ -955,8 +931,9 @@ function DrawingLibrary:MakeHealthBar(target, properties)
         weapText.Visible      = false
 
         barObjects[player] = {
-            background = bg,
-            segments   = segs,
+            bgFrame    = bgFrame,
+            fillFrame  = fillFrame,
+            uig        = uig,
             distText   = distText,
             weapText   = weapText,
         }
@@ -965,8 +942,8 @@ function DrawingLibrary:MakeHealthBar(target, properties)
     local function RemoveBarForPlayer(player)
         local obj = barObjects[player]
         if not obj then return end
-        obj.background:Remove()
-        for _, s in ipairs(obj.segments) do s:Remove() end
+        obj.bgFrame:Destroy()
+        obj.fillFrame:Destroy()
         obj.distText:Remove()
         obj.weapText:Remove()
         barObjects[player] = nil
@@ -987,10 +964,10 @@ function DrawingLibrary:MakeHealthBar(target, properties)
 
         for player, obj in pairs(barObjects) do
             local function hideAll()
-                obj.background.Visible = false
-                for _, s in ipairs(obj.segments) do s.Visible = false end
-                obj.distText.Visible = false
-                obj.weapText.Visible = false
+                obj.bgFrame.Visible   = false
+                obj.fillFrame.Visible = false
+                obj.distText.Visible  = false
+                obj.weapText.Visible  = false
             end
 
             if not properties.Visible then hideAll() continue end
@@ -1020,33 +997,22 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             local maxHp  = humanoid.MaxHealth > 0 and humanoid.MaxHealth or 100
             local frac   = math.clamp(humanoid.Health / maxHp, 0, 1)
             local barH   = bh * frac
-            local startY = by + (bh - barH)
 
-            obj.background.Position = Vector2.new(bx - 1, by - 1)
-            obj.background.Size     = Vector2.new(barW + 2, bh + 2)
-            obj.background.Visible  = true
+            obj.bgFrame.Position             = UDim2.fromOffset(bx - 1, by - 1)
+            obj.bgFrame.Size                 = UDim2.fromOffset(barW + 2, bh + 2)
+            obj.bgFrame.BackgroundColor3     = properties.BackgroundColor or Color3.fromRGB(0,0,0)
+            obj.bgFrame.BackgroundTransparency = properties.BackgroundAlpha ~= nil
+                and properties.BackgroundAlpha or 0.5
+            obj.bgFrame.Visible              = true
 
-            local topColor    = properties.TopColor    or Color3.new(0, 1, 0)
-            local bottomColor = properties.BottomColor or Color3.new(1, 0, 0)
-            local activeSeg   = math.clamp(math.floor(MAX_HP_SEGMENTS * frac), 1, MAX_HP_SEGMENTS)
-            local segH        = barH / activeSeg
-            local cx          = bx + barW * 0.5
+            local fillY = by + (bh - barH)
+            obj.fillFrame.Position             = UDim2.fromOffset(bx, fillY)
+            obj.fillFrame.Size                 = UDim2.fromOffset(barW, barH)
+            obj.fillFrame.BackgroundTransparency = properties.BarTransparency ~= nil
+                and properties.BarTransparency or 0
+            obj.fillFrame.Visible              = true
 
-            for i = 1, MAX_HP_SEGMENTS do
-                local seg = obj.segments[i]
-                if i <= activeSeg then
-                    local t   = (i - 0.5) / MAX_HP_SEGMENTS
-                    local py1 = startY + (i - 1) * segH
-                    local py2 = startY + i        * segH
-                    seg.Color     = lerpColor(bottomColor, topColor, t)
-                    seg.Thickness = barW
-                    seg.From      = Vector2.new(cx, py1)
-                    seg.To        = Vector2.new(cx, py2)
-                    seg.Visible   = true
-                else
-                    seg.Visible = false
-                end
-            end
+            obj.uig.Color = buildSequence(getColors())
 
             if properties.ShowDistance then
                 local root = character.PrimaryPart
@@ -1085,17 +1051,43 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             properties.Visible = state
             if not state then
                 for _, obj in pairs(self.Objects) do
-                    obj.background.Visible = false
-                    for _, s in ipairs(obj.segments) do s.Visible = false end
-                    obj.distText.Visible = false
-                    obj.weapText.Visible = false
+                    obj.bgFrame.Visible   = false
+                    obj.fillFrame.Visible = false
+                    obj.distText.Visible  = false
+                    obj.weapText.Visible  = false
                 end
             end
         end,
+        
+        UpdateGradientColors = function(self, colors)
+            properties.GradientColors = colors
+            local seq = buildSequence(colors)
+            for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
+        end,
 
-        UpdateColors = function(self, topColor, bottomColor)
-            properties.TopColor    = topColor
-            properties.BottomColor = bottomColor
+        UpdateBarTransparency = function(self, alpha)
+            properties.BarTransparency = alpha
+            for _, obj in pairs(self.Objects) do
+                obj.fillFrame.BackgroundTransparency = alpha
+            end
+        end,
+
+        UpdateBackgroundAlpha = function(self, alpha)
+            properties.BackgroundAlpha = alpha
+            for _, obj in pairs(self.Objects) do
+                obj.bgFrame.BackgroundTransparency = alpha
+            end
+        end,
+
+        UpdateBackgroundColor = function(self, color)
+            properties.BackgroundColor = color
+            for _, obj in pairs(self.Objects) do
+                obj.bgFrame.BackgroundColor3 = color
+            end
+        end,
+
+        UpdateBarWidth = function(self, w)
+            properties.BarWidth = w
         end,
 
         UpdateTeamCheck = function(self, state)
