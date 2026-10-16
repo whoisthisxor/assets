@@ -10,7 +10,6 @@ local LocalPlayer = Players.LocalPlayer;
 local Mouse = LocalPlayer:GetMouse();
 
 local ProtectGui = protectgui or (syn and syn.protect_gui) or (function() end);
-getgenv().mascot_selected = nil 
 
 local ScreenGui = Instance.new('ScreenGui');
 ProtectGui(ScreenGui);
@@ -2997,6 +2996,8 @@ function update_mascot(image_path, position)
         mascot_img.Position = position
     end
 end
+
+update_mascot()
 
     Library:MakeDraggable(Outer, 25);
 
