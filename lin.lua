@@ -2985,14 +2985,12 @@ function Library:CreateWindow(...)
     Parent = Outer
 })
 
-function Library.update_mascot(image_path, position)
-    image_path = image_path or getgenv().mascot_selected
-
-    if image_path ~= nil then
-        mascot_img.Image = getcustomasset(tostring(image_path))
+Library.update_mascot = function(image_path, position)
+    if image_path then
+        mascot_img.Image = getcustomasset(image_path)
     end
 
-    if position ~= nil then
+    if position then
         mascot_img.Position = position
     end
 end
