@@ -37,6 +37,14 @@ local function buildSequence(colors)
     return ColorSequence.new(kps)
 end
 
+local function patchColor(colors, index, newColor)
+    local copy = {}
+    for i, c in ipairs(colors) do copy[i] = c end
+    local idx = math.clamp(index, 1, #copy)
+    copy[idx] = newColor
+    return copy, buildSequence(copy)
+end
+
 local function AddDrawing(drawing)
     table.insert(DrawingLibrary.Drawings, drawing)
     return drawing
@@ -490,6 +498,17 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
         end,
 
+        UpdateGradientColor = function(self, index, newColor)
+            local base = properties.GradientColors or {
+                Color3.fromRGB(255, 0, 0),
+                Color3.fromRGB(0, 255, 0),
+                Color3.fromRGB(0, 0, 255),
+            }
+            local newColors, seq = patchColor(base, index, newColor)
+            properties.GradientColors = newColors
+            for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
+        end,
+
         UpdateGradientSpeed = function(self, speed)
             properties.GradientSpeed = speed
         end,
@@ -775,6 +794,17 @@ function DrawingLibrary:MakeFov(properties)
             self.Gradient.Color = buildSequence(colors)
         end,
 
+        UpdateGradientColor = function(self, index, newColor)
+            local base = properties.GradientColors or {
+                Color3.fromRGB(255, 0,   0),
+                Color3.fromRGB(0,   255, 0),
+                Color3.fromRGB(0,   0, 255),
+            }
+            local newColors, seq = patchColor(base, index, newColor)
+            properties.GradientColors = newColors
+            self.Gradient.Color = seq
+        end,
+
         UpdateGradientSpeed = function(self, speed)
             properties.GradientSpeed = speed
         end,
@@ -1058,10 +1088,21 @@ function DrawingLibrary:MakeHealthBar(target, properties)
                 end
             end
         end,
-        
+
         UpdateGradientColors = function(self, colors)
             properties.GradientColors = colors
             local seq = buildSequence(colors)
+            for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
+        end,
+
+        UpdateGradientColor = function(self, index, newColor)
+            local base = properties.GradientColors or {
+                Color3.fromRGB(255, 0,   0),
+                Color3.fromRGB(255, 200, 0),
+                Color3.fromRGB(0,   255, 0),
+            }
+            local newColors, seq = patchColor(base, index, newColor)
+            properties.GradientColors = newColors
             for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
         end,
 
