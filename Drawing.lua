@@ -433,13 +433,16 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
                 and properties.Transparency or 1
             obj.outline.Visible     = true
 
+            local gradEnabled = properties.Gradient ~= false
             obj.frame.Position = UDim2.fromOffset(pos.X, pos.Y)
             obj.frame.Size     = UDim2.fromOffset(size.X, size.Y)
             obj.frame.BackgroundTransparency = properties.FillTransparency ~= nil
                 and properties.FillTransparency or 0.5
-            obj.frame.Visible  = properties.Fill ~= false
+            obj.frame.Visible  = gradEnabled and (properties.Fill ~= false)
 
-            if properties.GradientSpin ~= false then
+            obj.uig.Enabled = gradEnabled
+
+            if gradEnabled and properties.GradientSpin ~= false then
                 obj.uig.Rotation = rotAngle % 360
             end
 
@@ -515,6 +518,14 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
 
         UpdateGradientSpin = function(self, state)
             properties.GradientSpin = state
+        end,
+
+        UpdateGradient = function(self, state)
+            properties.Gradient = state
+            for _, obj in pairs(self.Objects) do
+                obj.uig.Enabled   = state
+                obj.frame.Visible = state and (properties.Fill ~= false)
+            end
         end,
 
         UpdateFill = function(self, state)
@@ -750,6 +761,7 @@ function DrawingLibrary:MakeFov(properties)
     fovFrame.ZIndex  = 2
     fovFrame.Parent  = _gradGui
 
+    -- Make it round
     local uiCorner = Instance.new("UICorner")
     uiCorner.CornerRadius = UDim.new(1, 0)
     uiCorner.Parent       = fovFrame
@@ -772,7 +784,7 @@ function DrawingLibrary:MakeFov(properties)
             self.Circle.Radius  = r
             self.Frame.Size     = UDim2.fromOffset(r * 2, r * 2)
         end,
-
+        
         UpdateVisible = function(self, state)
             properties.Visible  = state
             self.Circle.Visible = state
@@ -809,9 +821,15 @@ function DrawingLibrary:MakeFov(properties)
             properties.GradientSpeed = speed
         end,
 
+        UpdateGradient = function(self, state)
+            properties.Gradient        = state
+            self.Gradient.Enabled      = state
+            self.Frame.Visible         = state and (properties.Fill ~= false) and (properties.Visible or false)
+        end,
+
         UpdateFill = function(self, state)
             properties.Fill    = state
-            self.Frame.Visible = state and (properties.Visible or false)
+            self.Frame.Visible = state and (properties.Gradient ~= false) and (properties.Visible or false)
         end,
 
         UpdateWallCheck = function(self, state) properties.CheckWalls      = state end,
@@ -885,7 +903,11 @@ function DrawingLibrary:MakeFov(properties)
         fovObject.Frame.Position  = UDim2.fromOffset(center.X - r, center.Y - r)
         fovObject.Frame.Size      = UDim2.fromOffset(r * 2, r * 2)
 
-        if properties.GradientSpin ~= false then
+        local gradEnabled = properties.Gradient ~= false
+        fovObject.Frame.Visible    = gradEnabled and (properties.Fill ~= false) and (properties.Visible or false)
+        fovObject.Gradient.Enabled = gradEnabled
+
+        if gradEnabled and properties.GradientSpin ~= false then
             gradSpin = (gradSpin + dt * (properties.GradientSpeed or 90)) % 360
             fovObject.Gradient.Rotation = gradSpin
         end
@@ -1035,6 +1057,7 @@ function DrawingLibrary:MakeHealthBar(target, properties)
                 and properties.BackgroundAlpha or 0.5
             obj.bgFrame.Visible              = true
 
+            local gradEnabled = properties.Gradient ~= false
             local fillY = by + (bh - barH)
             obj.fillFrame.Position             = UDim2.fromOffset(bx, fillY)
             obj.fillFrame.Size                 = UDim2.fromOffset(barW, barH)
@@ -1042,7 +1065,8 @@ function DrawingLibrary:MakeHealthBar(target, properties)
                 and properties.BarTransparency or 0
             obj.fillFrame.Visible              = true
 
-            obj.uig.Color = buildSequence(getColors())
+            obj.uig.Enabled = gradEnabled
+            obj.uig.Color   = buildSequence(getColors())
 
             if properties.ShowDistance then
                 local root = character.PrimaryPart
@@ -1095,6 +1119,11 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
         end,
 
+        UpdateGradient = function(self, state)
+            properties.Gradient = state
+            for _, obj in pairs(self.Objects) do obj.uig.Enabled = state end
+        end,
+
         UpdateGradientColor = function(self, index, newColor)
             local base = properties.GradientColors or {
                 Color3.fromRGB(255, 0,   0),
@@ -1105,14 +1134,14 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             properties.GradientColors = newColors
             for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
         end,
-
+        
         UpdateBarTransparency = function(self, alpha)
             properties.BarTransparency = alpha
             for _, obj in pairs(self.Objects) do
                 obj.fillFrame.BackgroundTransparency = alpha
             end
         end,
-
+        
         UpdateBackgroundAlpha = function(self, alpha)
             properties.BackgroundAlpha = alpha
             for _, obj in pairs(self.Objects) do
