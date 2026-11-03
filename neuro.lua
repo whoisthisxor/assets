@@ -16,10 +16,8 @@ local Config = {
 	WATERMARK = "Neurothycal.wtf",
 	VERSION = "1.3.9.2",
 	SUBSCRIPTION_TEXT = "29d 3h left",
-
 	ICON_IMAGES = { rage = "", legit = "", visuals = "", inventory = "", misc = "", hotkeys = "" },
 	LUCIDE_URL = "https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/lucide.lua",
-
 	LUCIDE_ICONS = {
 		rage = "crosshair",
 		legit = "mouse",
@@ -44,11 +42,9 @@ local Config = {
 
 local Layout = {
 	TITLE_SIZE = 17,
-
 	MIN_EFFECTIVE_SCALE = 1.05,
 	MAX_DENSITY = 1.4,
 	WINDOW = Vector2.new(440, 410),
-
 	MIN_SIZE = Vector2.new(410, 350),
 	MAX_SIZE = Vector2.new(820, 640),
 	PREVIEW = Vector2.new(236, 392),
@@ -78,34 +74,57 @@ local Runtime = {
 	tooltipToken = 0,
 	tooltipShown = false,
 	notifyOrder = 0,
-
 	density = 1,
 	rows = {},
 	panelSections = {},
 	navScales = {},
 	hotkeyListEnabled = true,
 	notificationsEnabled = true,
+	themeName = "light",
 	searchText = "",
 }
 
 local UI = {}
 
+local Themes = {
+	dark = {
+		Window = Color3.fromRGB(23, 23, 25),
+		WindowStroke = Color3.fromRGB(52, 52, 56),
+		Card = Color3.fromRGB(28, 28, 30),
+		CardStroke = Color3.fromRGB(50, 50, 54),
+		RowHover = Color3.fromRGB(46, 46, 50),
+		Text = Color3.fromRGB(228, 228, 231),
+		TextOff = Color3.fromRGB(142, 142, 148),
+		TextMuted = Color3.fromRGB(108, 108, 114),
+		Field = Color3.fromRGB(47, 47, 51),
+		FieldHover = Color3.fromRGB(58, 58, 63),
+		CheckOff = Color3.fromRGB(44, 44, 47),
+		Popup = Color3.fromRGB(32, 32, 35),
+		PopupStroke = Color3.fromRGB(58, 58, 62),
+		SwatchStroke = Color3.fromRGB(78, 78, 84),
+		PreviewBg = Color3.fromRGB(14, 14, 16),
+	},
+	light = {
+		Window = Color3.fromRGB(246, 246, 248),
+		WindowStroke = Color3.fromRGB(212, 212, 219),
+		Card = Color3.fromRGB(251, 251, 252),
+		CardStroke = Color3.fromRGB(221, 221, 227),
+		RowHover = Color3.fromRGB(236, 236, 241),
+		Text = Color3.fromRGB(34, 34, 40),
+		TextOff = Color3.fromRGB(108, 108, 118),
+		TextMuted = Color3.fromRGB(150, 150, 158),
+		Field = Color3.fromRGB(233, 233, 238),
+		FieldHover = Color3.fromRGB(223, 223, 229),
+		CheckOff = Color3.fromRGB(217, 217, 223),
+		Popup = Color3.fromRGB(253, 253, 254),
+		PopupStroke = Color3.fromRGB(206, 206, 213),
+		SwatchStroke = Color3.fromRGB(184, 184, 192),
+		PreviewBg = Color3.fromRGB(241, 241, 244),
+	},
+}
+
 local Theme = {
 	Accent = Color3.fromRGB(255, 45, 140),
-	Window = Color3.fromRGB(23, 23, 25),
-	WindowStroke = Color3.fromRGB(52, 52, 56),
-	Card = Color3.fromRGB(28, 28, 30),
-	CardStroke = Color3.fromRGB(50, 50, 54),
-	RowHover = Color3.fromRGB(46, 46, 50),
-	Text = Color3.fromRGB(228, 228, 231),
-	TextOff = Color3.fromRGB(142, 142, 148),
-	TextMuted = Color3.fromRGB(108, 108, 114),
-	Field = Color3.fromRGB(47, 47, 51),
-	FieldHover = Color3.fromRGB(58, 58, 63),
-	CheckOff = Color3.fromRGB(44, 44, 47),
-	Popup = Color3.fromRGB(32, 32, 35),
-	PopupStroke = Color3.fromRGB(58, 58, 62),
-	SwatchStroke = Color3.fromRGB(78, 78, 84),
 	Black = Color3.new(0, 0, 0),
 	White = Color3.new(1, 1, 1),
 }
@@ -292,6 +311,11 @@ local function formatColor(color, alpha)
 	return string.upper(color:ToHex()) .. string.format("%02X", math.floor(alpha * 255 + 0.5))
 end
 
+local function noFade(instance)
+	instance:SetAttribute("NoFade", true)
+	return instance
+end
+
 local function collectFadeTargets(parent, targets)
 	local function add(instance, property)
 		if instance[property] < 1 then
@@ -299,6 +323,9 @@ local function collectFadeTargets(parent, targets)
 		end
 	end
 	for _, child in ipairs(parent:GetChildren()) do
+		if child:GetAttribute("NoFade") then
+			continue
+		end
 		if child:IsA("UIStroke") then
 			add(child, "Transparency")
 		elseif child:IsA("CanvasGroup") then
@@ -321,8 +348,10 @@ local function collectFadeTargets(parent, targets)
 	end
 end
 
+local activeFaders = {}
+
 local function createFader(props, pop)
-	local fader = { token = 0 }
+	local fader = { token = 0, tweens = {} }
 
 	local hostProps = { BackgroundTransparency = 1, Visible = false }
 	for key, value in pairs(props) do
@@ -347,17 +376,47 @@ local function createFader(props, pop)
 		return host.Position
 	end
 
-	local function restore()
-		for _, target in ipairs(fader.targets or {}) do
+	local function cancelTweens()
+		for _, animation in ipairs(fader.tweens) do
+			animation:Cancel()
+		end
+		table.clear(fader.tweens)
+	end
+
+	function fader.finish()
+		if not fader.targets then
+			return
+		end
+		fader.token += 1
+		cancelTweens()
+		activeFaders[fader] = nil
+		for _, target in ipairs(fader.targets) do
 			target[1][target[2]] = target[3]
 		end
 		fader.targets = nil
+		if fader.popScale then
+			fader.popScale.Scale = 1
+		end
+		if fader.goal then
+			host.Position = fader.goal
+		end
+		host.Visible = fader.showing
 	end
 
 	function fader.snap(shown)
-		fader.token += 1
-		restore()
+		fader.showing = shown
+		fader.goal = nil
+		fader.finish()
 		host.Visible = shown
+	end
+
+	local function finishRelated()
+		for other in pairs(activeFaders) do
+			if other ~= fader and other.plain.Parent
+				and (other.plain:IsDescendantOf(host) or host:IsDescendantOf(other.plain)) then
+				other.finish()
+			end
+		end
 	end
 
 	function fader.fade(show, duration, style, from, to)
@@ -365,8 +424,12 @@ local function createFader(props, pop)
 		if host.Visible == show and not fader.targets then
 			return
 		end
+		finishRelated()
 		fader.token += 1
 		local token = fader.token
+		cancelTweens()
+		fader.showing = show
+		fader.goal = to
 
 		if not fader.targets then
 			fader.targets = {}
@@ -384,26 +447,21 @@ local function createFader(props, pop)
 			end
 		end
 		host.Visible = true
+		activeFaders[fader] = true
 
 		for _, target in ipairs(fader.targets) do
-			tween(target[1], { [target[2]] = show and target[3] or 1 }, duration, style)
+			table.insert(fader.tweens, tween(target[1], { [target[2]] = show and target[3] or 1 }, duration, style))
 		end
 		if to then
-			tween(host, { Position = to }, duration, style)
+			table.insert(fader.tweens, tween(host, { Position = to }, duration, style))
 		end
 		if fader.popScale then
-			tween(fader.popScale, { Scale = show and 1 or 0.95 }, duration, style)
+			table.insert(fader.tweens, tween(fader.popScale, { Scale = show and 1 or 0.95 }, duration, style))
 		end
 
 		task.delay(duration, function()
-			if token ~= fader.token then
-				return
-			end
-			if show then
-				fader.targets = nil
-			else
-				host.Visible = false
-				restore()
+			if token == fader.token then
+				fader.finish()
 			end
 		end)
 	end
@@ -882,6 +940,11 @@ local function loadConfig(name)
 	return true
 end
 loadGlobal()
+
+Runtime.themeName = Themes[Store.Global.theme] and Store.Global.theme or "light"
+for key, color in pairs(Themes[Runtime.themeName]) do
+	Theme[key] = color
+end
 
 function Runtime.saveMenuValue(key)
 	if string.sub(key, 1, 5) == "menu_" then
@@ -1603,13 +1666,13 @@ local function createRow(section, item, order, onHover)
 	table.insert(section.rows, rowEntry)
 	table.insert(Runtime.rows, rowEntry)
 
-	local highlight = create("Frame", {
+	local highlight = noFade(create("Frame", {
 		Position = UDim2.fromOffset(3, 0),
 		Size = UDim2.new(1, -6, 1, 0),
 		BackgroundColor3 = Theme.RowHover,
 		BackgroundTransparency = 1,
 		Parent = row,
-	}, { corner(3) })
+	}, { corner(3) }))
 
 	local inside = {}
 	local hovered = false
@@ -1707,6 +1770,7 @@ local function CreateSwatch(row, section, colorItem, inset)
 		BackgroundTransparency = 0,
 		Parent = row,
 	}, { corner(2) })
+	swatch:SetAttribute("NoTheme", true)
 	local swatchStroke = stroke(Theme.SwatchStroke, 1, swatch)
 	local opened = false
 
@@ -1883,6 +1947,7 @@ local function CreateBindIcon(row, section, item, inset, setter)
 	function entry.open()
 		openBindPopup(section, entry, commitKey, commitMode)
 	end
+	entry.setKey = commitKey
 	return entry
 end
 
@@ -1900,7 +1965,7 @@ local function CreateCheck(section, item, order)
 		BackgroundColor3 = Theme.CheckOff,
 		Parent = row,
 	}, { corner(2) })
-	boxStroke = accented(stroke(Theme.Accent, 1, box), "Color")
+	boxStroke = noFade(accented(stroke(Theme.Accent, 1, box), "Color"))
 	boxStroke.Transparency = 1
 	local text = label({
 		Text = item.name,
@@ -1995,7 +2060,7 @@ local function CreateInput(section, item, order)
 		Parent = row,
 	}, { corner(3), padding(0, 6, 0, 6) })
 	track(box)
-	local boxStroke = accented(stroke(Theme.Accent, 1, box), "Color")
+	local boxStroke = noFade(accented(stroke(Theme.Accent, 1, box), "Color"))
 	boxStroke.Transparency = 1
 
 	local function clean(value)
@@ -2124,7 +2189,7 @@ local function CreateDropdown(section, item, order)
 		Parent = row,
 	}, { corner(3) })
 	track(box)
-	local boxStroke = accented(stroke(Theme.Accent, 1, box), "Color")
+	local boxStroke = noFade(accented(stroke(Theme.Accent, 1, box), "Color"))
 	boxStroke.Transparency = 1
 	local text = label({
 		TextSize = 9,
@@ -2136,11 +2201,7 @@ local function CreateDropdown(section, item, order)
 	local arrow = triangle(box, Theme.TextOff, 7)
 
 	local value
-	local commit = bind(item, function(newValue, instant)
-		if not instant then
-			text.TextTransparency = 1
-			tween(text, { TextTransparency = 0 }, 0.22)
-		end
+	local commit = bind(item, function(newValue)
 		if item.multi then
 			local selected = {}
 			if type(newValue) == "table" then
@@ -2391,6 +2452,7 @@ function UI.buildTitle(title)
 		local halo, haloText = titleLayer(character, UI.titleHolder)
 		local letter = titleLayer(character, UI.titleHolder)
 		halo.GroupTransparency = 1
+		noFade(halo)
 		accented(haloText, "TextColor3")
 		accented(create("UIStroke", { Thickness = 2.5, Transparency = 0.25, Parent = haloText }), "Color")
 		table.insert(UI.titleLetters, {
@@ -2535,7 +2597,7 @@ UI.userSettings = button({
 	LayoutOrder = 5,
 	Parent = UI.userBlock,
 })
-createIcon(UI.userSettings, "star", 9, Theme.TextOff, UDim2.fromScale(0.5, 0.5))
+UI.themeIcon = createIcon(UI.userSettings, "sun", 10, Theme.TextOff, UDim2.fromScale(0.5, 0.5))
 
 task.spawn(function()
 	local ok, image = pcall(Players.GetUserThumbnailAsync, Players, player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
@@ -2715,12 +2777,6 @@ table.insert(accentRefreshers, function()
 		for _, sub in ipairs(tab.subs) do
 			paintNavButton(sub.nav, sub == tab.currentSub, 0)
 		end
-	end
-end)
-
-connect(UI.userSettings.MouseButton1Click, function()
-	if Runtime.settingsTab then
-		selectTab(Runtime.settingsTab)
 	end
 end)
 
@@ -2904,15 +2960,21 @@ do
 		LayoutOrder = 3,
 		Parent = content,
 	}, { list(0), padding(3, 8, 0, 8) })
-	UI.hotkeyEmpty = label({
+
+	UI.hotkeyEmpty = create("Frame", {
+		Size = UDim2.new(1, 0, 0, 15),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		LayoutOrder = 0,
+		Parent = UI.hotkeyRows,
+	})
+	label({
 		Text = "no keybinds",
 		TextSize = 9,
 		TextColor3 = Theme.TextMuted,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		ClipsDescendants = true,
 		Size = UDim2.new(1, 0, 0, 15),
-		LayoutOrder = 0,
-		Parent = UI.hotkeyRows,
+		Parent = UI.hotkeyEmpty,
 	})
 
 	connect(header.InputBegan, function(input)
@@ -2940,10 +3002,9 @@ function Hotkeys.createRow(order)
 		LayoutOrder = order,
 		Parent = UI.hotkeyRows,
 	})
-	local keyText = label({ TextSize = 9, TextTransparency = 1, Size = UDim2.new(0, 22, 0, 15), Parent = frame })
+	local keyText = label({ TextSize = 9, Size = UDim2.new(0, 22, 0, 15), Parent = frame })
 	local nameText = label({
 		TextSize = 9,
-		TextTransparency = 1,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Position = UDim2.fromOffset(24, 0),
 		Size = UDim2.new(1, -60, 0, 15),
@@ -2951,7 +3012,6 @@ function Hotkeys.createRow(order)
 	})
 	local modeText = label({
 		TextSize = 9,
-		TextTransparency = 1,
 		TextColor3 = Theme.TextMuted,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Size = UDim2.new(1, 0, 0, 15),
@@ -2979,17 +3039,11 @@ Hotkeys.refresh = function()
 			if row.shown ~= shown then
 				row.shown = shown
 				tween(row.frame, { Size = UDim2.new(1, 0, 0, shown and 15 or 0) }, 0.26, Enum.EasingStyle.Quint)
-				for _, text in ipairs({ row.key, row.name, row.mode }) do
-					tween(text, { TextTransparency = shown and 0 or 1 }, 0.22)
-				end
 			end
 		end
 	end
 
-	tween(UI.hotkeyEmpty, {
-		Size = UDim2.new(1, 0, 0, count == 0 and 15 or 0),
-		TextTransparency = count == 0 and 0 or 1,
-	}, 0.22, Enum.EasingStyle.Quint)
+	tween(UI.hotkeyEmpty, { Size = UDim2.new(1, 0, 0, count == 0 and 15 or 0) }, 0.22, Enum.EasingStyle.Quint)
 
 	local size = UDim2.fromOffset(150, Hotkeys.height(count))
 	tween(UI.hotkeyFader.plain, { Size = size }, 0.26, Enum.EasingStyle.Quint)
@@ -3006,18 +3060,40 @@ Hotkeys.refresh = function()
 	end
 end
 
-function Hotkeys.handle(input, began)
+function Hotkeys.handle(input)
+	if UserInputService:GetFocusedTextBox() then
+		return
+	end
 	local name = input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode.Name or input.UserInputType.Name
 	for _, entry in ipairs(Hotkeys.entries) do
-		if entry.key == name then
-			if entry.mode == "toggle" and began then
-				entry.setter(not entry.active)
-				UI.notify(entry.label .. (entry.active and " enabled" or " disabled"), 2)
-			elseif entry.mode == "hold" then
-				entry.setter(began)
-			elseif entry.mode == "always" then
-				entry.setter(true)
-			end
+		if entry.key == name and entry.mode == "toggle" then
+			entry.setter(not entry.active)
+			UI.notify(entry.label .. (entry.active and " enabled" or " disabled"), 2)
+		end
+	end
+end
+
+function Hotkeys.isDown(key)
+	if string.sub(key, 1, 11) == "MouseButton" then
+		return UserInputService:IsMouseButtonPressed(Enum.UserInputType[key])
+	end
+	local ok, keyCode = pcall(function()
+		return Enum.KeyCode[key]
+	end)
+	return ok and UserInputService:IsKeyDown(keyCode)
+end
+
+function Hotkeys.update()
+	local blocked = UserInputService:GetFocusedTextBox() ~= nil or Runtime.listeningBind ~= nil
+	for _, entry in ipairs(Hotkeys.entries) do
+		local wanted
+		if entry.mode == "hold" and entry.key ~= "None" then
+			wanted = not blocked and Hotkeys.isDown(entry.key)
+		elseif entry.mode == "always" then
+			wanted = true
+		end
+		if wanted ~= nil and wanted ~= entry.active then
+			entry.setter(wanted)
 		end
 	end
 end
@@ -3037,7 +3113,7 @@ do
 	local root = create("Frame", {
 		Position = UDim2.fromOffset(1, 1),
 		Size = UDim2.new(1, -2, 1, -2),
-		BackgroundColor3 = Color3.fromRGB(14, 14, 16),
+		BackgroundColor3 = Theme.PreviewBg,
 		BackgroundTransparency = 0.04,
 		Active = true,
 	}, { corner(7), stroke(Theme.WindowStroke) })
@@ -3072,6 +3148,8 @@ do
 		Parent = root,
 	})
 	Preview.boxStroke = stroke(Theme.Accent, 1, Preview.box)
+	Preview.boxStroke:SetAttribute("NoTheme", true)
+	Preview.name:SetAttribute("NoTheme", true)
 
 	Preview.health = create("Frame", {
 		AnchorPoint = Vector2.new(1, 1),
@@ -3402,6 +3480,12 @@ setMenuOpen = function(open)
 	Runtime.menuOpen = open
 	closePopups(1)
 	cancelListening()
+
+	if not open then
+		for _, letter in ipairs(UI.titleLetters) do
+			letter.halo.Visible = false
+		end
+	end
 	for _, scale in ipairs(UI.windowScales) do
 		tween(scale, { Scale = Runtime.baseScale * (open and 1 or 0.95) }, 0.3, Enum.EasingStyle.Quint)
 	end
@@ -3417,10 +3501,7 @@ connect(UserInputService.InputChanged, function(input)
 	end
 end)
 
-connect(UserInputService.InputEnded, function(input, gameProcessed)
-	if not gameProcessed then
-		Hotkeys.handle(input, false)
-	end
+connect(UserInputService.InputEnded, function(input)
 	if Runtime.activeDrag and isDragInput(input) then
 		local onEnd = Runtime.activeDragEnd
 		Runtime.activeDrag, Runtime.activeDragEnd = nil, nil
@@ -3435,13 +3516,10 @@ connect(UserInputService.InputBegan, function(input, gameProcessed)
 		Runtime.listeningBind(input)
 		return
 	end
-	if gameProcessed then
-		return
-	end
-	if input.KeyCode == Runtime.menuKey then
+	if input.KeyCode == Runtime.menuKey and not gameProcessed then
 		setMenuOpen(not Runtime.menuOpen)
 	end
-	Hotkeys.handle(input, true)
+	Hotkeys.handle(input)
 end)
 
 do
@@ -3569,6 +3647,7 @@ end
 connect(RunService.RenderStepped, function(deltaTime)
 
 	Runtime.frameTime = (Runtime.frameTime or deltaTime) * 0.9 + deltaTime * 0.1
+	Hotkeys.update()
 	if not Runtime.menuOpen then
 		return
 	end
@@ -3602,6 +3681,69 @@ connect(RunService.RenderStepped, function(deltaTime)
 		local eye = CFrame.Angles(0, angle, 0) * CFrame.new(0, 0.6, 15)
 		Preview.camera.CFrame = CFrame.new(eye.Position, Vector3.new(0, 0.6, 0))
 	end
+end)
+
+local THEMED_PROPERTIES = {
+	{ "GuiObject", "BackgroundColor3" },
+	{ "TextLabel", "TextColor3" },
+	{ "TextButton", "TextColor3" },
+	{ "TextBox", "TextColor3" },
+	{ "TextBox", "PlaceholderColor3" },
+	{ "UIStroke", "Color" },
+	{ "ImageLabel", "ImageColor3" },
+	{ "ScrollingFrame", "ScrollBarImageColor3" },
+}
+
+local function setTheme(name)
+	if not Themes[name] or name == Runtime.themeName then
+		return
+	end
+	local from, to = Themes[Runtime.themeName], Themes[name]
+	local lookup = {}
+	for key, color in pairs(from) do
+		lookup[color:ToHex()] = to[key]
+	end
+
+	local function recolor(instance)
+		if instance:GetAttribute("NoTheme") then
+			return
+		end
+		for _, entry in ipairs(THEMED_PROPERTIES) do
+			if instance:IsA(entry[1]) then
+				local replacement = lookup[instance[entry[2]]:ToHex()]
+				if replacement then
+					instance[entry[2]] = replacement
+				end
+			end
+		end
+	end
+	for _, instance in ipairs(UI.screenGui:GetDescendants()) do
+		recolor(instance)
+	end
+
+	Runtime.themeName = name
+	for key, color in pairs(to) do
+		Theme[key] = color
+	end
+
+	for _, refresh in ipairs(accentRefreshers) do
+		refresh()
+	end
+	Preview.refresh()
+
+	Store.Global.theme = name
+	saveGlobal()
+end
+
+connect(UI.userSettings.MouseEnter, function()
+	tintIcon(UI.themeIcon, Theme.Accent)
+end)
+connect(UI.userSettings.MouseLeave, function()
+	tintIcon(UI.themeIcon, Theme.TextOff)
+end)
+connect(UI.userSettings.MouseButton1Click, function()
+	setTheme(Runtime.themeName == "light" and "dark" or "light")
+	tintIcon(UI.themeIcon, Theme.Accent, 0)
 end)
 
 local function applyDensity()
@@ -3752,7 +3894,13 @@ function Element:AddKeyPicker(idx, info)
 	}, reserveInset(self, 15), self.commit)
 	self.bindEntry.active = self.Value == true
 	Hotkeys.refresh()
+	register({ entry = self.bindEntry, commit = self.bindEntry.setKey }, idx)
 	return self
+end
+
+function Element:GetState()
+	local entry = rawget(self, "entry")
+	return entry ~= nil and entry.active
 end
 
 function Element:AddColorPicker(idx, info)
@@ -4115,6 +4263,10 @@ end
 
 function Library:Notify(text, duration)
 	UI.notify(text, duration)
+end
+
+function Library:SetTheme(name)
+	setTheme(name)
 end
 
 function Library:SetAccent(color)
