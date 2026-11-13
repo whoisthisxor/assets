@@ -3,8 +3,8 @@
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/j.lua"))()
 
 local Window = Library:CreateWindow({
-	Title = "afflcition",
-	Version = "hook",
+	Title = "my script",
+	Version = "1.0",
 	Folder = "my script", -- папка для конфигов/тем/ассетов
 })
 
@@ -274,6 +274,32 @@ Menu:AddLabel("accent"):AddColorPicker("Accent", {
 		Library:SetAccent(Value)
 	end,
 })
+
+-- Change Dpi: масштаб всего меню (на телефоне стартовое значение подбирается под экран)
+Menu:AddSlider("MenuDpi", {
+	Text = "change dpi",
+	Default = Library:GetDpi(),
+	Min = 0.5,
+	Max = 2,
+	Rounding = 2,
+	Suffix = "x",
+	Callback = function(Value)
+		Library:SetDpi(Value)
+	end,
+})
+
+Menu:AddDropdown("DpiPreset", {
+	Text = "dpi preset",
+	Values = { "50%", "75%", "100%", "125%", "150%", "200%" },
+	Callback = function(Value)
+		if Value then
+			Options.MenuDpi:SetValue(tonumber((Value:gsub("%%", ""))) / 100)
+		end
+	end,
+	AllowNull = true,
+})
+
+Menu:AddLabel("device:"):SetValue(Library.IsMobile and "mobile" or "pc")
 
 Menu:AddToggle("KeybindList", {
 	Text = "keybind list",
