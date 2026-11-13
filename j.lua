@@ -28,55 +28,60 @@ end
 
 local file_path = window_config["Folder"] or getgenv().custom_folder or "juju recode"
 local user_input_service = cloneref(game:GetService("UserInputService"))
-local gui_service = cloneref(game:GetService("GuiService"))
 local players_service = cloneref(game:GetService("Players"))
 local local_player = players_service["LocalPlayer"]
 
--- >> ( устройство / указатель: мышь или палец )
+-- >> ( устройство / указатель / dpi: всё в одной таблице — у ядра лимит 200 локальных )
 
-local is_mobile = window_config["Mobile"]
-if is_mobile == nil then
-	is_mobile = user_input_service["TouchEnabled"] and not user_input_service["KeyboardEnabled"]
-end
+local mobile = { dpi = 1, proxies = setmetatable({}, { __mode = "k" }) }
+local get_mouse_location, mouse
 
-local pointer_position = nil -- последняя точка касания (в координатах Drawing), nil = мышь
+do
+	local gui_service = cloneref(game:GetService("GuiService"))
+	local pointer_position = nil -- последняя точка касания (в координатах Drawing), nil = мышь
+	local pointer_listeners = {}
 
-local get_mouse_location = function(uis)
-	return pointer_position or uis:GetMouseLocation()
-end
-
-local update_pointer = function(input)
-	local input_type = input["UserInputType"]
-	if input_type == Enum["UserInputType"]["Touch"] then
-		local inset = gui_service:GetGuiInset()
-		pointer_position = Vector2.new(input["Position"]["X"] + inset["X"], input["Position"]["Y"] + inset["Y"])
-	elseif input_type == Enum["UserInputType"]["MouseMovement"] then
-		pointer_position = nil
+	mobile.is_mobile = window_config["Mobile"]
+	if mobile.is_mobile == nil then
+		mobile.is_mobile = user_input_service["TouchEnabled"] and not user_input_service["KeyboardEnabled"]
 	end
-end
 
--- замена mouse.Move: срабатывает и от мыши, и от движения пальца
-local pointer_listeners = {}
-local mouse = {
-	["Move"] = {
-		["Connect"] = function(_, callback)
-			local connection = {}
-			function connection:Disconnect()
-				pointer_listeners[connection] = nil
-			end
-			pointer_listeners[connection] = callback
-			return connection
-		end,
-	},
-}
-
-local fire_pointer_moved = function()
-	local list = {}
-	for _, callback in pointer_listeners do
-		list[#list + 1] = callback
+	get_mouse_location = function(uis)
+		return pointer_position or uis:GetMouseLocation()
 	end
-	for i = 1, #list do
-		list[i]()
+
+	mobile.update_pointer = function(input)
+		local input_type = input["UserInputType"]
+		if input_type == Enum["UserInputType"]["Touch"] then
+			local inset = gui_service:GetGuiInset()
+			pointer_position = Vector2.new(input["Position"]["X"] + inset["X"], input["Position"]["Y"] + inset["Y"])
+		elseif input_type == Enum["UserInputType"]["MouseMovement"] then
+			pointer_position = nil
+		end
+	end
+
+	-- замена mouse.Move: срабатывает и от мыши, и от движения пальца
+	mouse = {
+		["Move"] = {
+			["Connect"] = function(_, callback)
+				local connection = {}
+				function connection:Disconnect()
+					pointer_listeners[connection] = nil
+				end
+				pointer_listeners[connection] = callback
+				return connection
+			end,
+		},
+	}
+
+	mobile.fire_pointer_moved = function()
+		local list = {}
+		for _, callback in pointer_listeners do
+			list[#list + 1] = callback
+		end
+		for i = 1, #list do
+			list[i]()
+		end
 	end
 end
 local tween_service = cloneref(game:GetService("TweenService"))
@@ -138,13 +143,13 @@ end)
 
 -- движение мыши / пальца -> обновить указатель и разослать mouse.Move
 create_connection(user_input_service["InputBegan"], function(input)
-	update_pointer(input)
+	mobile.update_pointer(input)
 end)
 create_connection(user_input_service["InputChanged"], function(input)
 	local input_type = input["UserInputType"]
 	if input_type == Enum["UserInputType"]["MouseMovement"] or input_type == Enum["UserInputType"]["Touch"] then
-		update_pointer(input)
-		fire_pointer_moved()
+		mobile.update_pointer(input)
+		mobile.fire_pointer_moved()
 	end
 end)
 
@@ -590,9 +595,7 @@ do
 
 	drawing_proxy = {}
 
-	-- масштаб всего меню (Library:SetDpi). Все offset'ы и размеры текста умножаются на него
-	local menu_dpi = 1
-	local all_proxies = setmetatable({}, { __mode = "k" })
+	-- масштаб всего меню (Library:SetDpi): mobile.dpi, все offset'ы и размеры текста умножаются на него
 
 	local create1 =identifyexecutor() == "AWP" and Drawing["new"] or drawing["new"]
 
@@ -663,7 +666,7 @@ do
 		local raw_new = drawing_proxy["new"]
 		drawing_proxy["new"] = function(class, properties)
 			local proxy = raw_new(class, properties)
-			all_proxies[proxy] = true
+			mobile.proxies[proxy] = true
 			return proxy
 		end
 	end
@@ -688,9 +691,9 @@ do
 				-- offset внутри родителя масштабируется по dpi (позиция корня на экране — нет)
 				real_position = vector2_new(
 					(parent_position["X"] + real_parent_size["X"] * position["X"]["Scale"])
-						+ position["X"]["Offset"] * menu_dpi,
+						+ position["X"]["Offset"] * mobile.dpi,
 					(parent_position["Y"] + real_parent_size["Y"] * position["Y"]["Scale"])
-						+ position["Y"]["Offset"] * menu_dpi
+						+ position["Y"]["Offset"] * mobile.dpi
 				)
 			end
 
@@ -732,14 +735,14 @@ do
 
 			local parent = rawget(proxy, "parent")
 			local real_size = parent and parent["real_size"]
-				or vector2_new(size["X"]["Offset"] * menu_dpi, size["Y"]["Offset"] * menu_dpi)
+				or vector2_new(size["X"]["Offset"] * mobile.dpi, size["Y"]["Offset"] * mobile.dpi)
 
 			if parent then
 				local parent_size = parent["real_size"]
 
 				real_size = vector2_new(
-					(parent_size["X"] * size["X"]["Scale"]) + size["X"]["Offset"] * menu_dpi,
-					(parent_size["Y"] * size["Y"]["Scale"]) + size["Y"]["Offset"] * menu_dpi
+					(parent_size["X"] * size["X"]["Scale"]) + size["X"]["Offset"] * mobile.dpi,
+					(parent_size["Y"] * size["Y"]["Scale"]) + size["Y"]["Offset"] * mobile.dpi
 				)
 			end
 
@@ -786,7 +789,7 @@ do
 			elseif property == "Size" and type(value) == "number" then
 				-- размер шрифта: храним логический, рисуем с учётом dpi
 				rawset(self, "text_size", value)
-				self["object"]["Size"] = value * menu_dpi
+				self["object"]["Size"] = value * mobile.dpi
 			else
 				self["object"][property] = value
 			end
@@ -795,7 +798,7 @@ do
 		function drawing_proxy:__index(property)
 			if property == "TextBounds" then
 				-- логические размеры текста (код считает от них offset'ы, которые потом умножаются на dpi)
-				return self["object"]["TextBounds"] / menu_dpi
+				return self["object"]["TextBounds"] / mobile.dpi
 			elseif property == "Size" and rawget(self, "text_size") then
 				return rawget(self, "text_size")
 			end
@@ -806,23 +809,23 @@ do
 		end
 
 		menu["get_dpi"] = function()
-			return menu_dpi
+			return mobile.dpi
 		end
 
 		menu["set_dpi"] = function(value)
-			menu_dpi = clamp(tonumber(value) or 1, 0.3, 3)
+			mobile.dpi = clamp(tonumber(value) or 1, 0.3, 3)
 
-			for proxy in all_proxies do
+			for proxy in mobile.proxies do
 				pcall(function()
 					local text_size = rawget(proxy, "text_size")
 					if text_size then
-						proxy["object"]["Size"] = text_size * menu_dpi
+						proxy["object"]["Size"] = text_size * mobile.dpi
 					end
 				end)
 			end
 
 			-- корни (без родителя) пересчитывают всё дерево
-			for proxy in all_proxies do
+			for proxy in mobile.proxies do
 				if not rawget(proxy, "parent") then
 					pcall(function()
 						if type(proxy["size"]) ~= "number" and not proxy["skip"] then
@@ -847,7 +850,7 @@ do
 		),
 		["Transparency"] = 0,
 		["ZIndex"] = 100000, -- курсор всегда поверх всех окон (бинд, контекст, колорпикер...)
-		["Visible"] = not is_mobile, -- на телефоне курсора нет
+		["Visible"] = not mobile.is_mobile, -- на телефоне курсора нет
 	})
 
 	local frame = drawing_proxy["new"]("Image", {
@@ -3470,7 +3473,7 @@ do
 	end
 
 	local handle_click = LPH_JIT_MAX(function(_, state, input)
-		update_pointer(input)
+		mobile.update_pointer(input)
 
 		-- палец двигается: это не отпускание, перетаскивание (слайдер/меню) продолжается
 		if state == Enum["UserInputState"]["Change"] then
@@ -8817,10 +8820,10 @@ do
 
 		-- >> ( телефон: кнопка открытия меню + стартовый dpi под экран )
 
-		menu["is_mobile"] = is_mobile
+		menu["is_mobile"] = mobile.is_mobile
 
 		-- отдельная функция: у ядра закончились локальные регистры (лимит 200)
-		local mobile_gui = is_mobile and (function()
+		mobile.gui = mobile.is_mobile and (function()
 			local mobile_gui
 			local viewport = camera["ViewportSize"]
 			menu["set_dpi"](math.min(1, viewport["X"] * 0.92 / 575, viewport["Y"] * 0.85 / 450))
@@ -8888,8 +8891,8 @@ do
 		env["_JUJU"] = function()
 			env["_JUJU"] = nil
 
-			if mobile_gui then
-				mobile_gui:Destroy()
+			if mobile.gui then
+				mobile.gui:Destroy()
 			end
 
 			-- вернуть системный курсор (ядро скрывает его каждый кадр, пока меню открыто)
