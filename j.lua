@@ -8818,9 +8818,10 @@ do
 		-- >> ( телефон: кнопка открытия меню + стартовый dpi под экран )
 
 		menu["is_mobile"] = is_mobile
-		local mobile_gui = nil
 
-		if is_mobile then
+		-- отдельная функция: у ядра закончились локальные регистры (лимит 200)
+		local mobile_gui = is_mobile and (function()
+			local mobile_gui
 			local viewport = camera["ViewportSize"]
 			menu["set_dpi"](math.min(1, viewport["X"] * 0.92 / 575, viewport["Y"] * 0.85 / 450))
 
@@ -8880,7 +8881,9 @@ do
 					end
 				end
 			end)
-		end
+
+			return mobile_gui
+		end)() or nil
 
 		env["_JUJU"] = function()
 			env["_JUJU"] = nil
