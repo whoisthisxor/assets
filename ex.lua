@@ -1,4 +1,4 @@
-local Library = loadstring(game:HttpGet("ССЫЛКА_НА/NeurothycalLibrary.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/neuro.lua"))()
 -- Или как ModuleScript:
 -- local Library = require(game:GetService("ReplicatedStorage"):WaitForChild("NeurothycalLibrary"))
 
