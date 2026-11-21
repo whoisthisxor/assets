@@ -3225,16 +3225,31 @@ function Library:CreateWindow(...)
 
 	-- Resize handle (accent coloured circle on the bottom-right corner)
 	if Config.Resizable then
+		-- Clip container: only the part of the circle that is inside this box is visible
+		local ResizeClip = Library:Create('Frame', {
+			Name = 'ResizeClip';
+			AnchorPoint = Vector2.new(1, 1);
+			BackgroundTransparency = 1;
+			BorderSizePixel = 0;
+			ClipsDescendants = true;
+			Position = UDim2.new(1, 0, 1, 0);
+			Size = UDim2.fromOffset(28, 28);
+			ZIndex = 50;
+			Parent = Outer;
+		});
+
+		-- Circle: twice the size of the clip box, centred on its bottom-right corner
+		-- => a quarter circle is left visible
 		local ResizeHandle = Library:Create('Frame', {
 			Name = 'ResizeHandle';
 			AnchorPoint = Vector2.new(0.5, 0.5);
 			BackgroundColor3 = Library.AccentColor;
 			BorderSizePixel = 0;
 			Position = UDim2.new(1, 0, 1, 0);
-			Size = UDim2.fromOffset(28, 28);
-			Active = true;
+			Size = UDim2.fromOffset(56, 56);
+			Active = true; -- clipped (invisible) parts don't receive input
 			ZIndex = 50;
-			Parent = Outer;
+			Parent = ResizeClip;
 		});
 
 		Library:Create('UICorner', {
