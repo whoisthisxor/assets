@@ -3076,7 +3076,112 @@ function Library:CreateWindow(...)
 		Parent = ScreenGui;
 	});
 
-	Library:MakeDraggable(Outer, 25);
+	-- Drag preview: the real window only moves after the mouse is released.
+	local DragArea = Library:Create('TextButton', {
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Text = '';
+		AutoButtonColor = false;
+		Position = UDim2.fromOffset(1, 1);
+		Size = UDim2.new(1, -2, 0, 24);
+		ZIndex = 20;
+		Parent = Outer;
+	});
+
+	local DragOutline = Library:Create('Frame', {
+		Name = 'DragOutline';
+		BackgroundTransparency = 1;
+		BorderSizePixel = 2;
+		BorderColor3 = Library.AccentColor;
+		Visible = false;
+		ZIndex = 100;
+		Parent = ScreenGui;
+	});
+
+	local Dragging = false;
+	local DragStart;
+	local StartPosition;
+	local PendingPosition;
+	local DragInput;
+
+	DragArea.InputBegan:Connect(function(Input)
+		if Input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		Dragging = true;
+		DragStart = Input.Position;
+		StartPosition = Outer.AbsolutePosition;
+		PendingPosition = StartPosition;
+		DragOutline.Position = UDim2.fromOffset(StartPosition.X, StartPosition.Y);
+		DragOutline.Size = Outer.AbsoluteSize;
+		DragOutline.BorderColor3 = Library.AccentColor;
+		DragOutline.Visible = true;
+	end);
+
+	DragArea.InputChanged:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseMovement then
+			DragInput = Input;
+		end
+	end);
+
+	InputService.InputChanged:Connect(function(Input)
+		if Dragging and (Input == DragInput or Input.UserInputType == Enum.UserInputType.MouseMovement) then
+			local Delta = Input.Position - DragStart;
+			PendingPosition = StartPosition + Delta;
+			DragOutline.Position = UDim2.fromOffset(PendingPosition.X, PendingPosition.Y);
+		end
+	end);
+
+	InputService.InputEnded:Connect(function(Input)
+		if Dragging and Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Dragging = false;
+			DragOutline.Visible = false;
+			if PendingPosition then
+				Outer.Position = UDim2.fromOffset(
+					PendingPosition.X + Outer.AbsoluteSize.X * Outer.AnchorPoint.X,
+					PendingPosition.Y + Outer.AbsoluteSize.Y * Outer.AnchorPoint.Y
+				);
+			end
+		end
+	end);
+
+	-- Bottom-right resize grip. Resizing is applied while dragging.
+	local ResizeGrip = Library:Create('TextButton', {
+		Name = 'ResizeGrip';
+		BackgroundColor3 = Library.AccentColor;
+		BorderSizePixel = 0;
+		AutoButtonColor = false;
+		Text = '';
+		AnchorPoint = Vector2.new(1, 1);
+		Position = UDim2.new(1, -2, 1, -2);
+		Size = UDim2.fromOffset(12, 12);
+		ZIndex = 30;
+		Parent = Outer;
+	});
+
+	local Resizing = false;
+	local ResizeStart;
+	local ResizeStartSize;
+	ResizeGrip.InputBegan:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Resizing = true;
+			ResizeStart = Input.Position;
+			ResizeStartSize = Outer.AbsoluteSize;
+		end
+	end);
+
+	InputService.InputChanged:Connect(function(Input)
+		if Resizing and Input.UserInputType == Enum.UserInputType.MouseMovement then
+			local Delta = Input.Position - ResizeStart;
+			local Width = math.max(300, ResizeStartSize.X + Delta.X);
+			local Height = math.max(200, ResizeStartSize.Y + Delta.Y);
+			Outer.Size = UDim2.fromOffset(Width, Height);
+		end
+	end);
+
+	InputService.InputEnded:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Resizing = false;
+		end
+	end);
 
 	local Inner = Library:Create('Frame', {
 		BackgroundColor3 = Library.MainColor;
