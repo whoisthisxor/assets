@@ -171,6 +171,43 @@ function Library:CreateLabel(Properties, IsHud)
 	return Library:Create(_Instance, Properties);
 end;
 
+Library.GhostThickness = 0.75;
+
+-- Empty rectangle (no background, accent coloured outline) with the size/position of Instance
+function Library:CreateGhost(Instance)
+	local Ghost = Library:Create('Frame', {
+		Name = 'Ghost';
+		AnchorPoint = Instance.AnchorPoint;
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Position = Instance.Position;
+		Size = Instance.Size;
+		ZIndex = 200;
+		Parent = Library.ScreenGui;
+	});
+
+	local Stroke = Library:Create('UIStroke', {
+		Color = Library.AccentColor;
+		Thickness = Library.GhostThickness;
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
+		Parent = Ghost;
+	});
+
+	Library:AddToRegistry(Stroke, { Color = 'AccentColor' });
+
+	return Ghost;
+end;
+
+function Library:DestroyGhost(Ghost)
+	local Stroke = Ghost:FindFirstChildOfClass('UIStroke');
+
+	if Stroke then
+		Library:RemoveFromRegistry(Stroke);
+	end;
+
+	Ghost:Destroy();
+end;
+
 function Library:MakeDraggable(Instance, Cutoff, UseGhost)
 	Instance.Active = true;
 
@@ -186,29 +223,7 @@ function Library:MakeDraggable(Instance, Cutoff, UseGhost)
 			end;
 
 			-- Ghost mode: the real frame stays in place, only an empty outline moves.
-			local Ghost;
-
-			if UseGhost then
-				Ghost = Library:Create('Frame', {
-					Name = 'DragGhost';
-					AnchorPoint = Instance.AnchorPoint;
-					BackgroundTransparency = 1;
-					BorderSizePixel = 0;
-					Position = Instance.Position;
-					Size = Instance.Size;
-					ZIndex = 200;
-					Parent = Library.ScreenGui;
-				});
-
-				local Stroke = Library:Create('UIStroke', {
-					Color = Library.AccentColor;
-					Thickness = 1;
-					ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-					Parent = Ghost;
-				});
-
-				Library:AddToRegistry(Stroke, { Color = 'AccentColor' });
-			end;
+			local Ghost = UseGhost and Library:CreateGhost(Instance) or nil;
 
 			local Target = Ghost or Instance;
 
@@ -227,8 +242,7 @@ function Library:MakeDraggable(Instance, Cutoff, UseGhost)
 
 			if Ghost then
 				Instance.Position = Ghost.Position;
-				Library:RemoveFromRegistry(Ghost:FindFirstChildOfClass('UIStroke'));
-				Ghost:Destroy();
+				Library:DestroyGhost(Ghost);
 			end;
 		end;
 	end)
@@ -3259,9 +3273,35 @@ function Library:CreateWindow(...)
 			Parent = ResizeHandle;
 		});
 
+		-- slightly darker while hovered / being dragged
+		local Hovering, Resizing = false, false;
+
+		local function HandleColor()
+			if Hovering or Resizing then
+				return Library.AccentColor:Lerp(Color3.new(0, 0, 0), 0.25);
+			end;
+
+			return Library.AccentColor;
+		end;
+
+		local function UpdateHandleColor()
+			TweenService:Create(ResizeHandle, TweenInfo.new(0.1), { BackgroundColor3 = HandleColor() }):Play();
+		end;
+
+		-- function entries are re-evaluated by UpdateColorsUsingRegistry, so theme changes keep working
 		Library:AddToRegistry(ResizeHandle, {
-			BackgroundColor3 = 'AccentColor';
+			BackgroundColor3 = HandleColor;
 		});
+
+		ResizeHandle.MouseEnter:Connect(function()
+			Hovering = true;
+			UpdateHandleColor();
+		end);
+
+		ResizeHandle.MouseLeave:Connect(function()
+			Hovering = false;
+			UpdateHandleColor();
+		end);
 
 		ResizeHandle.InputBegan:Connect(function(Input)
 			if Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
@@ -3277,11 +3317,18 @@ function Library:CreateWindow(...)
 			local TopLeft = Outer.AbsolutePosition;
 			local Anchor = Outer.AnchorPoint;
 
+			-- the window itself keeps its size until the button is released, only the ghost resizes
+			local Ghost = Library:CreateGhost(Outer);
+			local NewW, NewH = StartSize.X, StartSize.Y;
+
+			Resizing = true;
+			UpdateHandleColor();
+
 			while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
 				local Delta = Vector2.new(Mouse.X, Mouse.Y) - StartMouse;
 
-				local NewW = math.max(Config.MinSize.X, StartSize.X + Delta.X);
-				local NewH = math.max(Config.MinSize.Y, StartSize.Y + Delta.Y);
+				NewW = math.max(Config.MinSize.X, StartSize.X + Delta.X);
+				NewH = math.max(Config.MinSize.Y, StartSize.Y + Delta.Y);
 
 				if Config.MaxSize then
 					NewW = math.min(NewW, Config.MaxSize.X);
@@ -3290,12 +3337,19 @@ function Library:CreateWindow(...)
 
 				NewW, NewH = math.floor(NewW), math.floor(NewH);
 
-				Outer.Size = UDim2.fromOffset(NewW, NewH);
+				Ghost.Size = UDim2.fromOffset(NewW, NewH);
 				-- keep the top-left corner fixed even if the window uses an AnchorPoint
-				Outer.Position = UDim2.fromOffset(TopLeft.X + Anchor.X * NewW, TopLeft.Y + Anchor.Y * NewH);
+				Ghost.Position = UDim2.fromOffset(TopLeft.X + Anchor.X * NewW, TopLeft.Y + Anchor.Y * NewH);
 
 				RenderStepped:Wait();
 			end;
+
+			Outer.Size = Ghost.Size;
+			Outer.Position = Ghost.Position;
+			Library:DestroyGhost(Ghost);
+
+			Resizing = false;
+			UpdateHandleColor();
 		end);
 	end;
 
