@@ -171,7 +171,7 @@ function Library:CreateLabel(Properties, IsHud)
 	return Library:Create(_Instance, Properties);
 end;
 
-function Library:MakeDraggable(Instance, Cutoff)
+function Library:MakeDraggable(Instance, Cutoff, UseGhost)
 	Instance.Active = true;
 
 	Instance.InputBegan:Connect(function(Input)
@@ -185,15 +185,50 @@ function Library:MakeDraggable(Instance, Cutoff)
 				return;
 			end;
 
+			-- Ghost mode: the real frame stays in place, only an empty outline moves.
+			local Ghost;
+
+			if UseGhost then
+				Ghost = Library:Create('Frame', {
+					Name = 'DragGhost';
+					AnchorPoint = Instance.AnchorPoint;
+					BackgroundTransparency = 1;
+					BorderSizePixel = 0;
+					Position = Instance.Position;
+					Size = Instance.Size;
+					ZIndex = 200;
+					Parent = Library.ScreenGui;
+				});
+
+				local Stroke = Library:Create('UIStroke', {
+					Color = Library.AccentColor;
+					Thickness = 1;
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
+					Parent = Ghost;
+				});
+
+				Library:AddToRegistry(Stroke, { Color = 'AccentColor' });
+			end;
+
+			local Target = Ghost or Instance;
+
 			while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-				Instance.Position = UDim2.new(
+				-- size is re-read every frame so it also works with a resizable window
+				Target.Size = Instance.Size;
+				Target.Position = UDim2.new(
 					0,
-					Mouse.X - ObjPos.X + (Instance.Size.X.Offset * Instance.AnchorPoint.X),
+					Mouse.X - ObjPos.X + (Instance.AbsoluteSize.X * Instance.AnchorPoint.X),
 					0,
-					Mouse.Y - ObjPos.Y + (Instance.Size.Y.Offset * Instance.AnchorPoint.Y)
+					Mouse.Y - ObjPos.Y + (Instance.AbsoluteSize.Y * Instance.AnchorPoint.Y)
 				);
 
 				RenderStepped:Wait();
+			end;
+
+			if Ghost then
+				Instance.Position = Ghost.Position;
+				Library:RemoveFromRegistry(Ghost:FindFirstChildOfClass('UIStroke'));
+				Ghost:Destroy();
 			end;
 		end;
 	end)
@@ -1604,7 +1639,7 @@ do
 			SubButton.Outer, SubButton.Inner, SubButton.Label = CreateBaseButton(SubButton)
 
 			SubButton.Outer.Position = UDim2.new(1, 3, 0, 0)
-			SubButton.Outer.Size = UDim2.fromOffset(self.Outer.AbsoluteSize.X - 2, self.Outer.AbsoluteSize.Y)
+			SubButton.Outer.Size = UDim2.new(1, -2, 1, 0)
 			SubButton.Outer.Parent = self.Outer
 
 			function SubButton:AddTooltip(tooltip)
@@ -2212,37 +2247,52 @@ do
 
 		Slider:Display();
 
-		local size = get_count();
-		local get_slider = function(count)
-			local slider = Slider;
-			for i=1,count-1 do
-				slider = slider.Parent;
+		local function Relayout()
+			local size = get_count();
+			local get_slider = function(count)
+				local slider = Slider;
+				for i=1,count-1 do
+					slider = slider.Parent;
+				end;
+				return slider;
 			end;
-			return slider;
+
+			local wanted_size = (Groupbox.Container.AbsoluteSize.X) / size;
+			wanted_size += size - 2;
+
+			local n_size = math.round(wanted_size);
+
+			for i = size, 1, -1 do
+				local slider = get_slider(i);
+				slider.Outer.Size = UDim2.new(0, n_size - 3, 0, 13)
+				slider.Outer.Position = UDim2.new(1, 2, 0, 0);
+				slider.MaxSize = slider.Outer.AbsoluteSize.X - 2;
+
+				slider:Display();
+			end;
+
+			if (n_size ~= wanted_size) then -- jank fix..
+				local slider = get_slider(1);
+				slider.Outer.Size = UDim2.new(0, n_size - (size + 1), 0, 13)
+				slider.Outer.Position = UDim2.new(1, 2, 0, 0);
+				slider.MaxSize = slider.Outer.AbsoluteSize.X - 2;
+
+				slider:Display();
+			end;
 		end;
 
-		local wanted_size = (Groupbox.Container.AbsoluteSize.X) / size;
-		wanted_size += size - 2;
+		Relayout();
 
-		local n_size = math.round(wanted_size);
+		-- re-layout when the window gets resized
+		local LastWidth = Groupbox.Container.AbsoluteSize.X;
+		Groupbox.Container:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
+			local Width = Groupbox.Container.AbsoluteSize.X;
 
-		for i = size, 1, -1 do
-			local slider = get_slider(i);
-			slider.Outer.Size = UDim2.new(0, n_size - 3, 0, 13)
-			slider.Outer.Position = UDim2.new(1, 2, 0, 0);
-			slider.MaxSize = slider.Outer.AbsoluteSize.X - 2;
-
-			slider:Display();
-		end;
-
-		if (n_size ~= wanted_size) then -- jank fix..
-			local slider = get_slider(1);
-			slider.Outer.Size = UDim2.new(0, n_size - (size + 1), 0, 13)
-			slider.Outer.Position = UDim2.new(1, 2, 0, 0);
-			slider.MaxSize = slider.Outer.AbsoluteSize.X - 2;
-
-			slider:Display();
-		end;
+			if Width ~= LastWidth and Width > 0 then
+				LastWidth = Width;
+				Relayout();
+			end;
+		end);
 
 		if (not SliderParent) then
 			Groupbox:AddBlank(Info.BlankSize or 6);
@@ -3056,6 +3106,9 @@ function Library:CreateWindow(...)
 	if typeof(Config.Position) ~= 'UDim2' then Config.Position = UDim2.fromOffset(175, 50) end
 	if typeof(Config.Size) ~= 'UDim2' then Config.Size = UDim2.fromOffset(550, 600) end
 
+	if typeof(Config.MinSize) ~= 'Vector2' then Config.MinSize = Vector2.new(400, 300) end
+	if Config.Resizable == nil then Config.Resizable = true end
+
 	if Config.Center then
 		Config.AnchorPoint = Vector2.new(0.5, 0.5)
 		Config.Position = UDim2.fromScale(0.5, 0.5)
@@ -3076,112 +3129,7 @@ function Library:CreateWindow(...)
 		Parent = ScreenGui;
 	});
 
-	-- Drag preview: the real window only moves after the mouse is released.
-	local DragArea = Library:Create('TextButton', {
-		BackgroundTransparency = 1;
-		BorderSizePixel = 0;
-		Text = '';
-		AutoButtonColor = false;
-		Position = UDim2.fromOffset(1, 1);
-		Size = UDim2.new(1, -2, 0, 24);
-		ZIndex = 20;
-		Parent = Outer;
-	});
-
-	local DragOutline = Library:Create('Frame', {
-		Name = 'DragOutline';
-		BackgroundTransparency = 1;
-		BorderSizePixel = 2;
-		BorderColor3 = Library.AccentColor;
-		Visible = false;
-		ZIndex = 100;
-		Parent = ScreenGui;
-	});
-
-	local Dragging = false;
-	local DragStart;
-	local StartPosition;
-	local PendingPosition;
-	local DragInput;
-
-	DragArea.InputBegan:Connect(function(Input)
-		if Input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-		Dragging = true;
-		DragStart = Input.Position;
-		StartPosition = Outer.AbsolutePosition;
-		PendingPosition = StartPosition;
-		DragOutline.Position = UDim2.fromOffset(StartPosition.X, StartPosition.Y);
-		DragOutline.Size = Outer.AbsoluteSize;
-		DragOutline.BorderColor3 = Library.AccentColor;
-		DragOutline.Visible = true;
-	end);
-
-	DragArea.InputChanged:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseMovement then
-			DragInput = Input;
-		end
-	end);
-
-	InputService.InputChanged:Connect(function(Input)
-		if Dragging and (Input == DragInput or Input.UserInputType == Enum.UserInputType.MouseMovement) then
-			local Delta = Input.Position - DragStart;
-			PendingPosition = StartPosition + Delta;
-			DragOutline.Position = UDim2.fromOffset(PendingPosition.X, PendingPosition.Y);
-		end
-	end);
-
-	InputService.InputEnded:Connect(function(Input)
-		if Dragging and Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Dragging = false;
-			DragOutline.Visible = false;
-			if PendingPosition then
-				Outer.Position = UDim2.fromOffset(
-					PendingPosition.X + Outer.AbsoluteSize.X * Outer.AnchorPoint.X,
-					PendingPosition.Y + Outer.AbsoluteSize.Y * Outer.AnchorPoint.Y
-				);
-			end
-		end
-	end);
-
-	-- Bottom-right resize grip. Resizing is applied while dragging.
-	local ResizeGrip = Library:Create('TextButton', {
-		Name = 'ResizeGrip';
-		BackgroundColor3 = Library.AccentColor;
-		BorderSizePixel = 0;
-		AutoButtonColor = false;
-		Text = '';
-		AnchorPoint = Vector2.new(1, 1);
-		Position = UDim2.new(1, -2, 1, -2);
-		Size = UDim2.fromOffset(12, 12);
-		ZIndex = 30;
-		Parent = Outer;
-	});
-
-	local Resizing = false;
-	local ResizeStart;
-	local ResizeStartSize;
-	ResizeGrip.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Resizing = true;
-			ResizeStart = Input.Position;
-			ResizeStartSize = Outer.AbsoluteSize;
-		end
-	end);
-
-	InputService.InputChanged:Connect(function(Input)
-		if Resizing and Input.UserInputType == Enum.UserInputType.MouseMovement then
-			local Delta = Input.Position - ResizeStart;
-			local Width = math.max(300, ResizeStartSize.X + Delta.X);
-			local Height = math.max(200, ResizeStartSize.Y + Delta.Y);
-			Outer.Size = UDim2.fromOffset(Width, Height);
-		end
-	end);
-
-	InputService.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Resizing = false;
-		end
-	end);
+	Library:MakeDraggable(Outer, 25, true);
 
 	local Inner = Library:Create('Frame', {
 		BackgroundColor3 = Library.MainColor;
@@ -3275,6 +3223,65 @@ function Library:CreateWindow(...)
 		BorderColor3 = 'OutlineColor';
 	});
 
+	-- Resize handle (accent coloured circle on the bottom-right corner)
+	if Config.Resizable then
+		local ResizeHandle = Library:Create('Frame', {
+			Name = 'ResizeHandle';
+			AnchorPoint = Vector2.new(0.5, 0.5);
+			BackgroundColor3 = Library.AccentColor;
+			BorderSizePixel = 0;
+			Position = UDim2.new(1, 0, 1, 0);
+			Size = UDim2.fromOffset(28, 28);
+			Active = true;
+			ZIndex = 50;
+			Parent = Outer;
+		});
+
+		Library:Create('UICorner', {
+			CornerRadius = UDim.new(1, 0);
+			Parent = ResizeHandle;
+		});
+
+		Library:AddToRegistry(ResizeHandle, {
+			BackgroundColor3 = 'AccentColor';
+		});
+
+		ResizeHandle.InputBegan:Connect(function(Input)
+			if Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+				return;
+			end;
+
+			if Library:MouseIsOverOpenedFrame() then
+				return;
+			end;
+
+			local StartMouse = Vector2.new(Mouse.X, Mouse.Y);
+			local StartSize = Outer.AbsoluteSize;
+			local TopLeft = Outer.AbsolutePosition;
+			local Anchor = Outer.AnchorPoint;
+
+			while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+				local Delta = Vector2.new(Mouse.X, Mouse.Y) - StartMouse;
+
+				local NewW = math.max(Config.MinSize.X, StartSize.X + Delta.X);
+				local NewH = math.max(Config.MinSize.Y, StartSize.Y + Delta.Y);
+
+				if Config.MaxSize then
+					NewW = math.min(NewW, Config.MaxSize.X);
+					NewH = math.min(NewH, Config.MaxSize.Y);
+				end;
+
+				NewW, NewH = math.floor(NewW), math.floor(NewH);
+
+				Outer.Size = UDim2.fromOffset(NewW, NewH);
+				-- keep the top-left corner fixed even if the window uses an AnchorPoint
+				Outer.Position = UDim2.fromOffset(TopLeft.X + Anchor.X * NewW, TopLeft.Y + Anchor.Y * NewH);
+
+				RenderStepped:Wait();
+			end;
+		end);
+	end;
+
 	function Window:SetWindowTitle(Title)
 		WindowLabel.Text = Title;
 	end;
@@ -3336,7 +3343,7 @@ function Library:CreateWindow(...)
 			BackgroundTransparency = 1;
 			BorderSizePixel = 0;
 			Position = UDim2.new(0, 8 - 1, 0, 8 - 1);
-			Size = UDim2.new(0.5, -12 + 2, 0, 507 + 2);
+			Size = UDim2.new(0.5, -12 + 2, 1, -18);
 			CanvasSize = UDim2.new(0, 0, 0, 0);
 			BottomImage = '';
 			TopImage = '';
@@ -3349,7 +3356,7 @@ function Library:CreateWindow(...)
 			BackgroundTransparency = 1;
 			BorderSizePixel = 0;
 			Position = UDim2.new(0.5, 4 + 1, 0, 8 - 1);
-			Size = UDim2.new(0.5, -12 + 2, 0, 507 + 2);
+			Size = UDim2.new(0.5, -12 + 2, 1, -18);
 			CanvasSize = UDim2.new(0, 0, 0, 0);
 			BottomImage = '';
 			TopImage = '';
