@@ -3108,6 +3108,7 @@ function Library:CreateWindow(...)
 
 	if typeof(Config.MinSize) ~= 'Vector2' then Config.MinSize = Vector2.new(400, 300) end
 	if Config.Resizable == nil then Config.Resizable = true end
+	if type(Config.ResizeTransparency) ~= 'number' then Config.ResizeTransparency = 0.6 end
 
 	if Config.Center then
 		Config.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -3244,6 +3245,7 @@ function Library:CreateWindow(...)
 			Name = 'ResizeHandle';
 			AnchorPoint = Vector2.new(0.5, 0.5);
 			BackgroundColor3 = Library.AccentColor;
+			BackgroundTransparency = math.clamp(Config.ResizeTransparency, 0, 1);
 			BorderSizePixel = 0;
 			Position = UDim2.new(1, 0, 1, 0);
 			Size = UDim2.fromOffset(56, 56);
