@@ -5130,6 +5130,395 @@ function Win.mountGui(order)
 	return gui
 end
 
+local Backdrop = { TILE = 735, STEPS = 35, ANGLE = -27, LENGTH = 275, REFERENCE = "Neurothycal.wtf", SUPERSAMPLE = 4 }
+
+local function readU16(data, offset)
+	local a, b = string.byte(data, offset + 1, offset + 2)
+	return a * 256 + b
+end
+
+local function readI16(data, offset)
+	local value = readU16(data, offset)
+	return value >= 32768 and value - 65536 or value
+end
+
+local function readU32(data, offset)
+	local a, b, c, d = string.byte(data, offset + 1, offset + 4)
+	return ((a * 256 + b) * 256 + c) * 256 + d
+end
+
+function Backdrop.parseFont(data)
+	local font = { data = data, tables = {} }
+	for index = 0, readU16(data, 4) - 1 do
+		local record = 12 + 16 * index
+		font.tables[string.sub(data, record + 1, record + 4)] = readU32(data, record + 8)
+	end
+	local tables = font.tables
+	font.unitsPerEm = readU16(data, tables.head + 18)
+	font.longLoca = readI16(data, tables.head + 50) == 1
+	font.metrics = readU16(data, tables.hhea + 34)
+	for index = 0, readU16(data, tables.cmap + 2) - 1 do
+		local record = tables.cmap + 4 + 8 * index
+		local platform, encoding = readU16(data, record), readU16(data, record + 2)
+		local subtable = tables.cmap + readU32(data, record + 4)
+		if platform == 3 and (encoding == 1 or encoding == 0) and readU16(data, subtable) == 4 then
+			font.cmap = subtable
+		end
+	end
+	return font
+end
+
+function Backdrop.glyphIndex(font, code)
+	local data, base = font.data, font.cmap
+	if not base then
+		return 0
+	end
+	local segments2 = readU16(data, base + 6)
+	local ends = base + 14
+	local starts = ends + segments2 + 2
+	local deltas = starts + segments2
+	local ranges = deltas + segments2
+	for segment = 0, segments2 / 2 - 1 do
+		if code <= readU16(data, ends + 2 * segment) then
+			local first = readU16(data, starts + 2 * segment)
+			if code < first then
+				return 0
+			end
+			local delta = readU16(data, deltas + 2 * segment)
+			local rangeOffset = readU16(data, ranges + 2 * segment)
+			if rangeOffset == 0 then
+				return (code + delta) % 65536
+			end
+			local glyph = readU16(data, ranges + 2 * segment + rangeOffset + 2 * (code - first))
+			return glyph == 0 and 0 or (glyph + delta) % 65536
+		end
+	end
+	return 0
+end
+
+function Backdrop.advance(font, glyph)
+	local index = math.min(glyph, font.metrics - 1)
+	return readU16(font.data, font.tables.hmtx + 4 * index)
+end
+
+function Backdrop.contours(font, glyph, offsetX, offsetY, depth)
+	local data, tables = font.data, font.tables
+	local first, last
+	if font.longLoca then
+		first, last = readU32(data, tables.loca + 4 * glyph), readU32(data, tables.loca + 4 * glyph + 4)
+	else
+		first, last = readU16(data, tables.loca + 2 * glyph) * 2, readU16(data, tables.loca + 2 * glyph + 2) * 2
+	end
+	local result = {}
+	if last <= first then
+		return result
+	end
+	offsetX, offsetY = offsetX or 0, offsetY or 0
+	local position = tables.glyf + first
+	local count = readI16(data, position)
+	if count < 0 then
+
+		if (depth or 0) > 4 then
+			return result
+		end
+		local cursor = position + 10
+		repeat
+			local flags, part = readU16(data, cursor), readU16(data, cursor + 2)
+			cursor += 4
+			local dx, dy
+			if bit32.band(flags, 1) ~= 0 then
+				dx, dy = readI16(data, cursor), readI16(data, cursor + 2)
+				cursor += 4
+			else
+				dx, dy = string.byte(data, cursor + 1), string.byte(data, cursor + 2)
+				dx, dy = dx >= 128 and dx - 256 or dx, dy >= 128 and dy - 256 or dy
+				cursor += 2
+			end
+			if bit32.band(flags, 8) ~= 0 then
+				cursor += 2
+			elseif bit32.band(flags, 0x40) ~= 0 then
+				cursor += 4
+			elseif bit32.band(flags, 0x80) ~= 0 then
+				cursor += 8
+			end
+			for _, contour in ipairs(Backdrop.contours(font, part, offsetX + dx, offsetY + dy, (depth or 0) + 1)) do
+				table.insert(result, contour)
+			end
+		until bit32.band(flags, 0x20) == 0
+		return result
+	end
+	local ends = {}
+	for index = 1, count do
+		ends[index] = readU16(data, position + 10 + 2 * (index - 1))
+	end
+	local total = ends[count] + 1
+	local cursor = position + 12 + 2 * count + readU16(data, position + 10 + 2 * count)
+	local flags = {}
+	while #flags < total do
+		local flag = string.byte(data, cursor + 1)
+		cursor += 1
+		table.insert(flags, flag)
+		if bit32.band(flag, 8) ~= 0 then
+			local repeats = string.byte(data, cursor + 1)
+			cursor += 1
+			for _ = 1, repeats do
+				table.insert(flags, flag)
+			end
+		end
+	end
+	local xs, ys = {}, {}
+	local x, y = 0, 0
+	for index = 1, total do
+		local flag = flags[index]
+		if bit32.band(flag, 2) ~= 0 then
+			local delta = string.byte(data, cursor + 1)
+			cursor += 1
+			x += bit32.band(flag, 16) ~= 0 and delta or -delta
+		elseif bit32.band(flag, 16) == 0 then
+			x += readI16(data, cursor)
+			cursor += 2
+		end
+		xs[index] = x
+	end
+	for index = 1, total do
+		local flag = flags[index]
+		if bit32.band(flag, 4) ~= 0 then
+			local delta = string.byte(data, cursor + 1)
+			cursor += 1
+			y += bit32.band(flag, 32) ~= 0 and delta or -delta
+		elseif bit32.band(flag, 32) == 0 then
+			y += readI16(data, cursor)
+			cursor += 2
+		end
+		ys[index] = y
+	end
+	local start = 1
+	for _, finish in ipairs(ends) do
+		local contour = {}
+		for index = start, finish + 1 do
+			table.insert(contour, { x = xs[index] + offsetX, y = ys[index] + offsetY, on = bit32.band(flags[index], 1) ~= 0 })
+		end
+		table.insert(result, contour)
+		start = finish + 2
+	end
+	return result
+end
+
+local function flatten(contour, transform, out)
+	local points = {}
+	local count = #contour
+	for index = 1, count do
+		local current, following = contour[index], contour[index % count + 1]
+		table.insert(points, current)
+		if not current.on and not following.on then
+			table.insert(points, { x = (current.x + following.x) / 2, y = (current.y + following.y) / 2, on = true })
+		end
+	end
+	local first = 1
+	while first <= #points and not points[first].on do
+		first += 1
+	end
+	if first > #points then
+		return
+	end
+	local ordered = {}
+	for index = 0, #points - 1 do
+		table.insert(ordered, points[(first - 1 + index) % #points + 1])
+	end
+	table.insert(ordered, ordered[1])
+	local polygon = {}
+	local index = 1
+	local px, py = transform(ordered[1].x, ordered[1].y)
+	table.insert(polygon, { px, py })
+	while index < #ordered do
+		local nextPoint = ordered[index + 1]
+		if nextPoint.on then
+			table.insert(polygon, { transform(nextPoint.x, nextPoint.y) })
+			index += 1
+		else
+			local control, finish = nextPoint, ordered[index + 2]
+			local from = ordered[index]
+			for step = 1, 6 do
+				local t = step / 6
+				local inverse = 1 - t
+				local qx = inverse * inverse * from.x + 2 * inverse * t * control.x + t * t * finish.x
+				local qy = inverse * inverse * from.y + 2 * inverse * t * control.y + t * t * finish.y
+				table.insert(polygon, { transform(qx, qy) })
+			end
+			index += 2
+		end
+	end
+	table.insert(out, polygon)
+end
+
+function Backdrop.renderText(font, content)
+	local referenceAdvance = 0
+	for index = 1, #Backdrop.REFERENCE do
+		referenceAdvance += Backdrop.advance(font, Backdrop.glyphIndex(font, string.byte(Backdrop.REFERENCE, index)))
+	end
+
+	local scale = Backdrop.LENGTH / math.max(referenceAdvance, 1)
+	local radians = math.rad(Backdrop.ANGLE)
+	local cosine, sine = math.cos(radians), math.sin(radians)
+	local polygons = {}
+	local pen = 0
+	for _, code in utf8.codes(content) do
+		local glyph = Backdrop.glyphIndex(font, code)
+		local penX = pen
+		local function transform(x, y)
+			local sx, sy = (penX + x) * scale, -y * scale
+			return sx * cosine - sy * sine, sx * sine + sy * cosine
+		end
+		for _, contour in ipairs(Backdrop.contours(font, glyph)) do
+			flatten(contour, transform, polygons)
+		end
+		pen += Backdrop.advance(font, glyph)
+	end
+	local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+	for _, polygon in ipairs(polygons) do
+		for _, point in ipairs(polygon) do
+			minX, minY = math.min(minX, point[1]), math.min(minY, point[2])
+			maxX, maxY = math.max(maxX, point[1]), math.max(maxY, point[2])
+		end
+	end
+	if minX == math.huge then
+		return nil
+	end
+	local width, height = math.ceil(maxX - minX) + 4, math.ceil(maxY - minY) + 4
+	local edges = {}
+	for _, polygon in ipairs(polygons) do
+		for index = 1, #polygon - 1 do
+			local x0, y0 = polygon[index][1] - minX + 2, polygon[index][2] - minY + 2
+			local x1, y1 = polygon[index + 1][1] - minX + 2, polygon[index + 1][2] - minY + 2
+			if y0 ~= y1 then
+				table.insert(edges, { x0, y0, x1, y1, math.min(y0, y1), math.max(y0, y1) })
+			end
+		end
+	end
+
+	local coverage = table.create(width * height, 0)
+	local samples = Backdrop.SUPERSAMPLE
+	local weight = 1 / samples
+	for row = 0, height - 1 do
+		for sample = 0, samples - 1 do
+			local y = row + (sample + 0.5) / samples
+			local crossings = {}
+			for _, edge in ipairs(edges) do
+				if y >= edge[5] and y < edge[6] then
+					local x = edge[1] + (y - edge[2]) * (edge[3] - edge[1]) / (edge[4] - edge[2])
+					table.insert(crossings, { x, edge[4] > edge[2] and 1 or -1 })
+				end
+			end
+			table.sort(crossings, function(a, b)
+				return a[1] < b[1]
+			end)
+			local winding = 0
+			for index = 1, #crossings - 1 do
+				winding += crossings[index][2]
+				if winding ~= 0 then
+					local left, right = math.max(crossings[index][1], 0), math.min(crossings[index + 1][1], width)
+					if right > left then
+						local first, last = math.floor(left), math.floor(right)
+						local base = row * width
+						if first == last then
+							coverage[base + first + 1] += (right - left) * weight
+						else
+							coverage[base + first + 1] += (first + 1 - left) * weight
+							for column = first + 1, last - 1 do
+								coverage[base + column + 1] += weight
+							end
+							if last < width then
+								coverage[base + last + 1] += (right - last) * weight
+							end
+						end
+					end
+				end
+			end
+		end
+		if row % 24 == 0 then
+			task.wait()
+		end
+	end
+	local pixels = buffer.create(width * height * 4)
+	for index = 1, width * height do
+		local alpha = math.floor(math.min(coverage[index], 1) * 255 + 0.5)
+		if alpha > 0 then
+			buffer.writeu32(pixels, (index - 1) * 4, 0x00FFFFFF + alpha * 0x1000000)
+		end
+	end
+	return pixels, width, height
+end
+
+function Backdrop.blits(width, height)
+	local tile, list = Backdrop.TILE, {}
+	local originX, originY = -math.floor(width / 2), -math.floor(height / 2)
+
+	local stepX, stepY = tile / Backdrop.STEPS, tile * 2 / Backdrop.STEPS
+	for step = 0, Backdrop.STEPS - 1 do
+		local x = math.floor((originX + step * stepX) % tile)
+		local y = math.floor((originY + step * stepY) % tile)
+		for _, shiftX in ipairs({ 0, -tile }) do
+			for _, shiftY in ipairs({ 0, -tile }) do
+				local left, top = x + shiftX, y + shiftY
+				if left < tile and top < tile and left + width > 0 and top + height > 0 then
+					table.insert(list, { left, top })
+				end
+			end
+		end
+	end
+	return list
+end
+
+function Backdrop.content(title)
+	local font = Backdrop.parseFont(base64Decode(Art.font.bold))
+	local sprite, width, height = Backdrop.renderText(font, title)
+	if not sprite then
+		return nil
+	end
+	local tile = Backdrop.TILE
+	local blits = Backdrop.blits(width, height)
+	if Raster.editable() then
+		local ok, content = pcall(function()
+			local image = Services.AssetService:CreateEditableImage({ Size = Vector2.new(width, height) })
+			image:WritePixelsBuffer(Vector2.zero, Vector2.new(width, height), sprite)
+			local canvas = Services.AssetService:CreateEditableImage({ Size = Vector2.new(tile, tile) })
+			for _, blit in ipairs(blits) do
+				canvas:DrawImage(Vector2.new(blit[1], blit[2]), image, Enum.ImageCombineType.AlphaBlend)
+			end
+			image:Destroy()
+			table.insert(Raster.images, canvas)
+			return Content.fromObject(canvas)
+		end)
+		if ok then
+			return content
+		end
+	end
+
+	local canvas = buffer.create(tile * tile * 4)
+	for count, blit in ipairs(blits) do
+		for y = 0, height - 1 do
+			local row = blit[2] + y
+			if row >= 0 and row < tile then
+				for x = 0, width - 1 do
+					local column = blit[1] + x
+					if column >= 0 and column < tile then
+						local alpha = buffer.readu8(sprite, (y * width + x) * 4 + 3)
+						if alpha > 0 then
+							local offset = (row * tile + column) * 4
+							local blended = math.min(255, alpha + buffer.readu8(canvas, offset + 3) * (255 - alpha) // 255)
+							buffer.writeu32(canvas, offset, 0x00FFFFFF + blended * 0x1000000)
+						end
+					end
+				end
+			end
+		end
+		if count % 4 == 0 then
+			task.wait()
+		end
+	end
+	return Raster.image(canvas, tile, tile, "backdrop")
+end
+
 local Wordmark = { letters = {}, measured = false, laidOut = false, WAVE_HEIGHT = 2.6, WAVE_SPEED = 2.4, WAVE_SPREAD = 0.45, GLOW_WAVE = 0.6, CORE_PEAK = 0.3, HALO_PEAK = 0.78, SHEEN_PERIOD = 5, SHEEN_SWEEP = 1.1, SHEEN_WIDTH = 2.2 }
 
 local function wordLetter(parent, character, face, size, stroke, hidden)
@@ -6191,41 +6580,21 @@ function Win.build()
 	Popup.host = Win.main
 
 	if Win.features.backdrop then
-		local backdrop = create("CanvasGroup", {
-			Name = "Backdrop",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			ZIndex = Z.WINDOW,
-			Parent = Win.main,
-		})
-		corner(backdrop, Geometry.windowCorner)
-		local field = create("Frame", {
-			Name = "Field",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(2800, 2000),
-			BackgroundTransparency = 1,
-			Rotation = -18,
-			ZIndex = Z.WINDOW,
-			Parent = backdrop,
-		})
-		local face = Typeface.face(true)
-		for row = 0, 22 do
-			for column = 0, 11 do
-				Accent.follow(create("TextLabel", {
-					Text = Config.Title,
-					FontFace = face,
-					TextSize = 27,
-					TextTransparency = 0.86,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(column * 235 - (row % 2) * 110, row * 88),
-					Size = UDim2.fromOffset(230, 40),
-					ZIndex = Z.WINDOW,
-					Parent = field,
-				}), "TextColor3")
+		task.spawn(function()
+			local ok, content = pcall(Backdrop.content, Config.Title)
+			if not ok then
+				warn("[Neurothycal UI] backdrop: " .. tostring(content))
+				return
 			end
-		end
+			if content and Win.main and Win.main.Parent then
+				pcall(function()
+					Win.main.ImageContent = content
+					Win.main.TileSize = UDim2.fromOffset(Backdrop.TILE, Backdrop.TILE)
+					Win.main.ImageTransparency = Geometry.backdropFade
+				end)
+				Accent.follow(Win.main, "ImageColor3")
+			end
+		end)
 	end
 
 	local top = create("Frame", {
@@ -7910,6 +8279,16 @@ function Library:CreateWindow(options)
 	Config.Subscription = options.Subscription or Config.Subscription
 	Config.Version = options.Version or Config.Version
 	Config.Folder = options.ConfigFolder or Config.Folder
+
+	if tonumber(options.BackdropSize) then
+		Backdrop.LENGTH = tonumber(options.BackdropSize)
+	end
+	if tonumber(options.BackdropSpacing) then
+		Backdrop.TILE = math.floor(tonumber(options.BackdropSpacing))
+	end
+	if options.Backdrop == false then
+		Win.features.backdrop = false
+	end
 	if options.MenuKey then
 		R.menuKey = typeof(options.MenuKey) == "EnumItem" and options.MenuKey or Enum.KeyCode[options.MenuKey]
 	end
