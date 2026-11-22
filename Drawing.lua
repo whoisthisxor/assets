@@ -4,6 +4,9 @@ DrawingLibrary.Drawings = {}
 DrawingLibrary.Instances = {}
 DrawingLibrary.ESPConnections = {}
 
+DrawingLibrary.Subjects = {}
+DrawingLibrary.SubjectListeners = {}
+
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -22,6 +25,8 @@ local _gradGui do
     sg.IgnoreGuiInset = true
     sg.ResetOnSpawn   = false
     sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    sg.DisplayOrder   = 10
     sg.Parent         = getRoot()
     _gradGui          = sg
 end
@@ -55,19 +60,51 @@ local function AddInstance(instance)
     return instance
 end
 
-
 local MAX_HP_SEGMENTS = 12
 
-local function GetCharacterBox(character)
+local function isSubject(player)
+    return type(player) == "table" and player.IsPreview == true
+end
+
+function DrawingLibrary:AddSubject(subject)
+    if not subject or table.find(self.Subjects, subject) then return subject end
+    table.insert(self.Subjects, subject)
+    for _, listener in ipairs(self.SubjectListeners) do
+        task.spawn(listener, subject)
+    end
+    return subject
+end
+DrawingLibrary.AttachPreview = DrawingLibrary.AddSubject
+
+local function TrackSubjects(library, target, properties, setup)
+    local lower = string.lower(target)
+    if lower ~= "preview" and (lower ~= "all" or properties.Preview == false) then return end
+    for _, subject in ipairs(library.Subjects) do setup(subject) end
+    table.insert(library.SubjectListeners, setup)
+end
+
+local function Project(player, position)
+    if isSubject(player) then
+        local point, onScreen = player:Project(position)
+        return Vector3.new(point.X, point.Y, 0), onScreen
+    end
+    return Camera:WorldToViewportPoint(position)
+end
+
+local function SubjectHidden(player)
+    return isSubject(player) and not player:IsVisible()
+end
+
+local function GetCharacterBox(character, player)
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     local head     = character:FindFirstChild("Head")
     if not rootPart or not head then return nil, nil, false end
 
-    local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+    local rootPos, onScreen = Project(player, rootPart.Position)
     if not onScreen then return nil, nil, false end
 
-    local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-    local legPos  = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
+    local headPos = Project(player, head.Position + Vector3.new(0, 0.5, 0))
+    local legPos  = Project(player, rootPart.Position - Vector3.new(0, 3, 0))
 
     local height   = math.abs(headPos.Y - legPos.Y)
     local width    = height / 2
@@ -179,10 +216,12 @@ local function CreateDynamicESP(library, target, drawingType, properties)
     elseif specificPlayer then
         SetupPlayer(specificPlayer)
     end
+    TrackSubjects(library, target, properties, SetupPlayer)
 
     local renderConn = RunService.RenderStepped:Connect(function()
         for player, obj in pairs(espObjects) do
             if not properties.Visible then obj.Visible = false continue end
+            if SubjectHidden(player) then obj.Visible = false continue end
 
             if properties.IgnoreTeammates
                 and player.Team == LocalPlayer.Team
@@ -197,7 +236,7 @@ local function CreateDynamicESP(library, target, drawingType, properties)
             local humanoid  = character:FindFirstChild("Humanoid")
             if not humanoid or humanoid.Health <= 0 then obj.Visible = false continue end
 
-            local pos, size, onScreen = GetCharacterBox(character)
+            local pos, size, onScreen = GetCharacterBox(character, player)
             if not onScreen then obj.Visible = false continue end
 
             if drawingType == "Box" then
@@ -252,7 +291,8 @@ local function CreateDynamicESP(library, target, drawingType, properties)
 
             elseif drawingType == "Line" then
                 local viewport = Camera.ViewportSize
-                obj.From    = properties.From or Vector2.new(viewport.X / 2, viewport.Y)
+                obj.From    = isSubject(player) and player:Origin()
+                    or properties.From or Vector2.new(viewport.X / 2, viewport.Y)
                 obj.To      = Vector2.new(pos.X + size.X / 2, pos.Y + size.Y)
                 obj.Visible = true
             end
@@ -396,6 +436,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
     elseif specificPlayer then
         SetupPlayer(specificPlayer)
     end
+    TrackSubjects(self, targetOrProperties, properties, SetupPlayer)
 
     local renderConn = RunService.RenderStepped:Connect(function(dt)
         rotAngle = (rotAngle + dt * (properties.GradientSpeed or 90)) % 360
@@ -408,6 +449,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             end
 
             if not properties.Visible then hideAll() continue end
+            if SubjectHidden(player) then hideAll() continue end
 
             if properties.IgnoreTeammates
                 and player.Team == LocalPlayer.Team
@@ -422,7 +464,7 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             local humanoid  = character:FindFirstChild("Humanoid")
             if not humanoid or humanoid.Health <= 0 then hideAll() continue end
 
-            local pos, size, onScreen = GetCharacterBox(character)
+            local pos, size, onScreen = GetCharacterBox(character, player)
             if not onScreen then hideAll() continue end
 
             obj.outline.Position    = pos
@@ -577,7 +619,6 @@ function DrawingLibrary:MakeText(targetOrProperties, properties)
     end
 end
 
-
 function DrawingLibrary:MakeName(targetOrProperties, properties)
     properties = properties or {}
     if type(targetOrProperties) == "string" then
@@ -605,7 +646,6 @@ function DrawingLibrary:MakeLine(targetOrProperties, properties)
         return CreateDynamicESP(self, targetOrProperties, "Line", properties or {})
     end
 end
-
 
 function DrawingLibrary:MakeHighlight(targetOrProperties, properties)
     if type(targetOrProperties) == "table" then
@@ -729,7 +769,6 @@ function DrawingLibrary:MakeCircle(properties)
     return AddDrawing({ Object = circle, Remove = function(self) self.Object:Remove() end })
 end
 
-
 function DrawingLibrary:MakeFov(properties)
     properties = properties or {}
 
@@ -761,7 +800,6 @@ function DrawingLibrary:MakeFov(properties)
     fovFrame.ZIndex  = 2
     fovFrame.Parent  = _gradGui
 
-    -- Make it round
     local uiCorner = Instance.new("UICorner")
     uiCorner.CornerRadius = UDim.new(1, 0)
     uiCorner.Parent       = fovFrame
@@ -784,7 +822,7 @@ function DrawingLibrary:MakeFov(properties)
             self.Circle.Radius  = r
             self.Frame.Size     = UDim2.fromOffset(r * 2, r * 2)
         end,
-        
+
         UpdateVisible = function(self, state)
             properties.Visible  = state
             self.Circle.Visible = state
@@ -1010,11 +1048,13 @@ function DrawingLibrary:MakeHealthBar(target, properties)
     elseif specificPlayer then
         CreateBarForPlayer(specificPlayer)
     end
+    TrackSubjects(self, target, properties, CreateBarForPlayer)
 
     local renderConn = RunService.RenderStepped:Connect(function()
-        local camPos = Camera.CFrame.Position
+        local worldCamPos = Camera.CFrame.Position
 
         for player, obj in pairs(barObjects) do
+            local camPos = isSubject(player) and player:CameraPosition() or worldCamPos
             local function hideAll()
                 obj.bgFrame.Visible   = false
                 obj.fillFrame.Visible = false
@@ -1023,6 +1063,7 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             end
 
             if not properties.Visible then hideAll() continue end
+            if SubjectHidden(player) then hideAll() continue end
 
             if properties.IgnoreTeammates
                 and player.Team == LocalPlayer.Team
@@ -1037,7 +1078,7 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             local humanoid  = character:FindFirstChild("Humanoid")
             if not humanoid or humanoid.Health <= 0 then hideAll() continue end
 
-            local pos, size, onScreen = GetCharacterBox(character)
+            local pos, size, onScreen = GetCharacterBox(character, player)
             if not onScreen then hideAll() continue end
 
             local barW   = properties.BarWidth or 4
@@ -1134,14 +1175,14 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             properties.GradientColors = newColors
             for _, obj in pairs(self.Objects) do obj.uig.Color = seq end
         end,
-        
+
         UpdateBarTransparency = function(self, alpha)
             properties.BarTransparency = alpha
             for _, obj in pairs(self.Objects) do
                 obj.fillFrame.BackgroundTransparency = alpha
             end
         end,
-        
+
         UpdateBackgroundAlpha = function(self, alpha)
             properties.BackgroundAlpha = alpha
             for _, obj in pairs(self.Objects) do
