@@ -1,297 +1,163 @@
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
-local TextService = game:GetService("TextService")
-local RunService = game:GetService("RunService")
-
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
-
-local Config = {
-	GUI_NAME = "NeurothycalUI",
-	CONFIG_FOLDER = "neurothycal",
-	CONFIG_ATTRIBUTE = "NeurothycalUIConfig",
-	TITLE = "Neurothycal.wtf",
-	WATERMARK = "Neurothycal.wtf",
-	VERSION = "1.3.9.2",
-	SUBSCRIPTION_TEXT = "29d 3h left",
-	ICON_IMAGES = { rage = "", legit = "", visuals = "", inventory = "", misc = "", hotkeys = "" },
-	LUCIDE_URL = "https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/lucide.lua",
-	LUCIDE_ICONS = {
-		rage = "crosshair",
-		legit = "mouse",
-		visuals = "image",
-		inventory = "layers",
-		misc = "settings-2",
-		hotkeys = "keyboard",
-		user = "user",
-		users = "users",
-		globe = "globe",
-		movement = "footprints",
-		gear = "settings",
-		search = "search",
-		flame = "flame",
-		volume = "volume-2",
-		cart = "shopping-cart",
-		box = "package",
-		sun = "sun",
-		star = "sparkles",
-	},
-}
-
-local Layout = {
-	TITLE_SIZE = 17,
-	MIN_EFFECTIVE_SCALE = 1.05,
-	MAX_DENSITY = 1.4,
-	WINDOW = Vector2.new(440, 410),
-	MIN_SIZE = Vector2.new(410, 350),
-	MAX_SIZE = Vector2.new(820, 640),
-	PREVIEW = Vector2.new(236, 392),
-	PREVIEW_GAP = 8,
-	HEADER = 36,
-	TABS_HEIGHT = 22,
-	BOTTOM = 22,
-	COLUMN_GAP = 8,
-	PANEL_WIDTH = 170,
-	TOOLTIP_WIDTH = 170,
-	HEIGHTS = { check = 18, color = 18, keybind = 18, button = 22, slider = 31, dropdown = 34, input = 34 },
-}
-
-local Runtime = {
-	menuKey = Enum.KeyCode.RightShift,
-	menuOpen = false,
-	baseScale = 1,
-	windowTarget = UDim2.fromScale(0.5, 0.5),
-	activeDrag = nil,
-	activeDragEnd = nil,
-	listeningBind = nil,
-	current = {},
-	watchers = {},
-	bindings = {},
-	currentTab = nil,
-	currentPage = nil,
-	tooltipToken = 0,
-	tooltipShown = false,
-	notifyOrder = 0,
-	density = 1,
-	rows = {},
-	panelSections = {},
-	navScales = {},
-	hotkeyListEnabled = true,
-	notificationsEnabled = true,
-	themeName = "light",
-	searchText = "",
-}
-
-local UI = {}
-
-local Themes = {
-	dark = {
-		Window = Color3.fromRGB(23, 23, 25),
-		WindowStroke = Color3.fromRGB(52, 52, 56),
-		Card = Color3.fromRGB(28, 28, 30),
-		CardStroke = Color3.fromRGB(50, 50, 54),
-		RowHover = Color3.fromRGB(46, 46, 50),
-		Text = Color3.fromRGB(228, 228, 231),
-		TextOff = Color3.fromRGB(142, 142, 148),
-		TextMuted = Color3.fromRGB(108, 108, 114),
-		Field = Color3.fromRGB(47, 47, 51),
-		FieldHover = Color3.fromRGB(58, 58, 63),
-		CheckOff = Color3.fromRGB(44, 44, 47),
-		Popup = Color3.fromRGB(32, 32, 35),
-		PopupStroke = Color3.fromRGB(58, 58, 62),
-		SwatchStroke = Color3.fromRGB(78, 78, 84),
-		PreviewBg = Color3.fromRGB(14, 14, 16),
-	},
-	light = {
-		Window = Color3.fromRGB(246, 246, 248),
-		WindowStroke = Color3.fromRGB(212, 212, 219),
-		Card = Color3.fromRGB(251, 251, 252),
-		CardStroke = Color3.fromRGB(221, 221, 227),
-		RowHover = Color3.fromRGB(236, 236, 241),
-		Text = Color3.fromRGB(34, 34, 40),
-		TextOff = Color3.fromRGB(108, 108, 118),
-		TextMuted = Color3.fromRGB(150, 150, 158),
-		Field = Color3.fromRGB(233, 233, 238),
-		FieldHover = Color3.fromRGB(223, 223, 229),
-		CheckOff = Color3.fromRGB(217, 217, 223),
-		Popup = Color3.fromRGB(253, 253, 254),
-		PopupStroke = Color3.fromRGB(206, 206, 213),
-		SwatchStroke = Color3.fromRGB(184, 184, 192),
-		PreviewBg = Color3.fromRGB(241, 241, 244),
-	},
-}
-
-local Theme = {
-	Accent = Color3.fromRGB(255, 45, 140),
-	Black = Color3.new(0, 0, 0),
-	White = Color3.new(1, 1, 1),
-}
-
-local function familyOf(enumName, fallback)
-	local ok, family = pcall(function()
-		return Font.fromEnum(Enum.Font[enumName]).Family
-	end)
-	return ok and family or fallback
-end
-
-local Family = familyOf("Ubuntu", "rbxasset://fonts/families/BuilderSans.json")
-
-local Fonts = {
-	Regular = Font.new(Family, Enum.FontWeight.Regular),
-	Medium = Font.new(Family, Enum.FontWeight.Medium),
-	Bold = Font.new(Family, Enum.FontWeight.Bold),
-}
-
-local guiParent = playerGui
-do
-	local getHui = getfenv().gethui
-	if getHui then
-		local ok, container = pcall(getHui)
-		if ok and container then
-			guiParent = container
-		end
-	end
-end
-
-for _, parent in ipairs({ guiParent, playerGui }) do
-	local existing = parent:FindFirstChild(Config.GUI_NAME)
-	if existing then
-		existing:Destroy()
-	end
-end
-
-local Lucide = nil
-do
-	local ok, result = pcall(function()
-		return loadstring(game:HttpGet(Config.LUCIDE_URL))()
-	end)
-	if ok and type(result) == "table" then
-		Lucide = result
-	else
-		warn("[Neurothycal UI] Lucide не загружен, используются векторные иконки:", result)
-	end
-end
-
-local FileApi = {}
-do
-	local environment = getfenv()
-	FileApi.write, FileApi.read, FileApi.exists = environment.writefile, environment.readfile, environment.isfile
-	FileApi.list, FileApi.delete = environment.listfiles, environment.delfile
-	FileApi.makeFolder, FileApi.folderExists = environment.makefolder, environment.isfolder
-end
-
-local connections = {}
-
-local function connect(signal, callback)
-	local connection = signal:Connect(callback)
-	table.insert(connections, connection)
-	return connection
-end
-
-local function create(className, props, children)
-	local instance = Instance.new(className)
-	if instance:IsA("GuiObject") then
-		instance.BorderSizePixel = 0
-	end
-	for key, value in pairs(props or {}) do
-		if key == "Font" and typeof(value) == "Font" then
-			instance.FontFace = value
-		elseif key ~= "Parent" then
-			instance[key] = value
-		end
-	end
-	for _, child in ipairs(children or {}) do
-		child.Parent = instance
-	end
-	if props and props.Parent then
-		instance.Parent = props.Parent
-	end
+local cloneref = cloneref or function(instance)
 	return instance
 end
 
-local function tween(instance, props, duration, style)
-	local info = TweenInfo.new(duration or 0.15, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-	local animation = TweenService:Create(instance, info, props)
-	animation:Play()
-	return animation
+local Services = {
+	Players = cloneref(game:GetService("Players")),
+	TweenService = cloneref(game:GetService("TweenService")),
+	UserInputService = cloneref(game:GetService("UserInputService")),
+	HttpService = cloneref(game:GetService("HttpService")),
+	TextService = cloneref(game:GetService("TextService")),
+	RunService = cloneref(game:GetService("RunService")),
+	AssetService = cloneref(game:GetService("AssetService")),
+	GuiService = cloneref(game:GetService("GuiService")),
+}
+local UserInputService = Services.UserInputService
+local player = Services.Players.LocalPlayer
+
+local Executor = {}
+do
+	local environment = getfenv()
+	for _, name in ipairs({
+		"gethui", "writefile", "readfile", "isfile", "listfiles", "delfile", "makefolder", "isfolder",
+		"getcustomasset", "identifyexecutor", "protect_gui",
+	}) do
+		Executor[name] = environment[name]
+	end
 end
 
-local function corner(radius)
-	return create("UICorner", { CornerRadius = UDim.new(0, radius) })
-end
+local Library = { Options = {}, Toggles = {}, Unloaded = false }
 
-local function round()
-	return create("UICorner", { CornerRadius = UDim.new(1, 0) })
-end
+local Config = {
+	Title = "Neurothycal.wtf",
+	Subscription = "29d 3h left",
+	Version = "1.3.9.2",
+	Folder = "neurothycal",
+	MemoryAttribute = "NeurothycalUIConfig",
+	LucideUrl = "https://raw.githubusercontent.com/whoisthisxor/assets/refs/heads/main/lucide.lua",
+	Accent = Color3.fromRGB(126, 166, 88),
+}
 
-local function stroke(color, thickness, parent)
-	return create("UIStroke", {
-		Color = color,
-		Thickness = thickness or 1,
-		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		Parent = parent,
-	})
-end
+local Metrics = {
+	row = 24,
+	rowGap = 6,
+	control = 16,
+	controlX = 10,
+	gap = 6,
+	corner = 4,
+	stroke = 1,
+	pressScale = 0.88,
+	rowHover = 0.93,
+	textSize = 15,
+	subStep = 24,
+	icon = 16,
+}
+Metrics.labelX = Metrics.controlX + Metrics.control + Metrics.gap
 
-local function padding(top, right, bottom, left)
-	return create("UIPadding", {
-		PaddingTop = UDim.new(0, top),
-		PaddingRight = UDim.new(0, right),
-		PaddingBottom = UDim.new(0, bottom),
-		PaddingLeft = UDim.new(0, left),
-	})
-end
+local Geometry = {
+	windowHeight = 660,
+	windowCorner = 6,
+	backdropFade = 0.88,
+	ruleY = 62,
+	tabGap = 10,
+	tabBand = 30,
+	titleY = 28,
+	inset = 6,
+	headerPad = 14,
+	tabPad = 5,
+	tabIconGap = 6,
+	tabSpacing = 14,
+	tabIconSize = 14,
+	columnWidth = 312,
+	columnGap = 30,
+	columnTop = 2,
+	holderX = 5,
+	holderBottom = 14,
+	headerShadow = 9,
+	headerShadowFade = 0.72,
+	cardGap = 18,
+	cardPadTop = 14,
+	cardPadBottom = 10,
+	brandSize = 28,
+	tabSize = 15,
+	sectionSize = 15,
+	footer = 30,
+	previewWidth = 236,
+	previewGap = 8,
+	minSize = Vector2.new(600, 480),
+}
+Geometry.topHeight = Geometry.ruleY + Geometry.tabGap + Geometry.tabBand
+Geometry.tabY = Geometry.ruleY + Geometry.tabGap
+Geometry.holderY = Geometry.topHeight + Geometry.holderBottom
+Geometry.windowWidth = 2 * Geometry.holderX + 2 * Geometry.inset + 2 * Geometry.columnWidth + Geometry.columnGap
 
-local function list(spacing, direction, verticalAlign)
-	return create("UIListLayout", {
-		Padding = UDim.new(0, spacing or 0),
-		FillDirection = direction or Enum.FillDirection.Vertical,
-		VerticalAlignment = verticalAlign or Enum.VerticalAlignment.Top,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	})
-end
+local Z = {
+	HUD = 1,
+	BUBBLE = 8,
+	WINDOW = 20,
+	WIDGET = 30,
+	POPUP = 50,
+	POPUP_CONTENT = 60,
+	POPUP_NESTED = 65,
+	POPUP_NESTED_CONTENT = 70,
+	TOOLTIP = 80,
+	TOP = 100,
+}
 
-local function label(props, children)
-	props.BackgroundTransparency = props.BackgroundTransparency or 1
-	props.Font = props.Font or Fonts.Regular
-	props.TextColor3 = props.TextColor3 or Theme.Text
-	props.TextSize = props.TextSize or 10
-	props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
-	return create("TextLabel", props, children)
-end
+local Motion = {
+	HOVER_IN = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	HOVER_OUT = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	PRESS = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	RELEASE = TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	STATE = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	THEME = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	SLIDE = TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	RESIZE = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+}
 
-local function button(props, children)
-	props.BackgroundTransparency = props.BackgroundTransparency or 1
-	props.AutoButtonColor = false
-	props.Text = props.Text or ""
-	return create("TextButton", props, children)
-end
+local R = {
+	connections = {},
+	created = {},
+	current = {},
+	watchers = {},
+	bindings = {},
+	tabs = {},
+	tabList = {},
+	binds = {},
+	menuOpen = false,
+	menuKey = Enum.KeyCode.Insert,
+	hotkeyListEnabled = true,
+	notificationsEnabled = true,
+	watermarkEnabled = true,
+	configName = "--",
+}
 
-local function textBox(props, children)
-	props.ClearTextOnFocus = false
-	props.Font = props.Font or Fonts.Regular
-	props.TextSize = props.TextSize or 10
-	props.TextColor3 = props.TextColor3 or Theme.Text
-	props.PlaceholderColor3 = Theme.TextMuted
-	props.Text = props.Text or ""
-	return create("TextBox", props, children)
-end
-
-local function isDragInput(input)
-	return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
-end
-
-local function copyValue(value)
-	return type(value) == "table" and table.clone(value) or value
+local function connect(signal, callback)
+	local ok, connection = pcall(signal.Connect, signal, function(...)
+		local success, message = pcall(callback, ...)
+		if not success then
+			warn("[Neurothycal UI] " .. tostring(message))
+		end
+	end)
+	if ok and connection then
+		table.insert(R.connections, connection)
+		return connection
+	end
+	return nil
 end
 
 local function trim(text)
 	return string.match(text, "^%s*(.-)%s*$")
 end
 
+local function copyValue(value)
+	return type(value) == "table" and table.clone(value) or value
+end
+
 local function parseColor(value)
+	if typeof(value) == "Color3" then
+		return value, 1
+	end
 	if type(value) ~= "string" then
 		return nil
 	end
@@ -308,516 +174,1540 @@ local function parseColor(value)
 end
 
 local function formatColor(color, alpha)
-	return string.upper(color:ToHex()) .. string.format("%02X", math.floor(alpha * 255 + 0.5))
+	return string.upper(color:ToHex()) .. string.format("%02X", math.floor((alpha or 1) * 255 + 0.5))
 end
 
-local function noFade(instance)
-	instance:SetAttribute("NoFade", true)
-	return instance
+local function hexOf(color)
+	if typeof(color) == "Color3" then
+		return formatColor(color, 1)
+	end
+	local parsed, alpha = parseColor(color)
+	return parsed and formatColor(parsed, alpha) or "FFFFFFFF"
 end
 
-local function collectFadeTargets(parent, targets)
-	local function add(instance, property)
-		if instance[property] < 1 then
-			table.insert(targets, { instance, property, instance[property] })
-		end
-	end
-	for _, child in ipairs(parent:GetChildren()) do
-		if child:GetAttribute("NoFade") then
-			continue
-		end
-		if child:IsA("UIStroke") then
-			add(child, "Transparency")
-		elseif child:IsA("CanvasGroup") then
-			if child.Visible then
-				add(child, "GroupTransparency")
-			end
-		elseif child:IsA("GuiObject") and child.Visible then
-			add(child, "BackgroundTransparency")
-			if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
-				add(child, "TextTransparency")
-			elseif child:IsA("ImageLabel") or child:IsA("ImageButton") or child:IsA("ViewportFrame") then
-				add(child, "ImageTransparency")
-			elseif child:IsA("ScrollingFrame") then
-				add(child, "ScrollBarImageTransparency")
-			end
-			if not child:IsA("ViewportFrame") then
-				collectFadeTargets(child, targets)
-			end
-		end
-	end
+local function viewport()
+	local camera = workspace.CurrentCamera
+	return camera and camera.ViewportSize or Vector2.new(1920, 1080)
 end
 
-local activeFaders = {}
+local function guiInset()
+	local ok, inset = pcall(Services.GuiService.GetGuiInset, Services.GuiService)
+	return ok and inset or Vector2.zero
+end
 
-local function createFader(props, pop)
-	local fader = { token = 0, tweens = {} }
+local function mouse()
+	return UserInputService:GetMouseLocation() - guiInset()
+end
 
-	local hostProps = { BackgroundTransparency = 1, Visible = false }
-	for key, value in pairs(props) do
-		hostProps[key] = value
+local function relative(frame, position)
+	local origin, size = frame.AbsolutePosition, frame.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		return 0, 0
 	end
-	fader.plain = create("Frame", hostProps)
-	local host = fader.plain
-	if pop then
-		fader.popScale = create("UIScale", { Parent = host })
-	end
+	return math.clamp((position.X - origin.X) / size.X, 0, 1), math.clamp((position.Y - origin.Y) / size.Y, 0, 1)
+end
 
-	function fader.setContent(content)
-		content.Parent = host
-		fader.content = content
-	end
+local Skin = {
+	mode = "light",
+	listeners = {},
+	painted = setmetatable({}, { __mode = "k" }),
+	PALETTES = {
+		dark = {
+			window = Color3.fromRGB(20, 20, 20),
+			surface = Color3.fromRGB(30, 30, 30),
+			raised = Color3.fromRGB(38, 38, 38),
+			footer = Color3.fromRGB(22, 22, 22),
+			border = Color3.fromRGB(60, 60, 60),
+			line = Color3.fromRGB(60, 60, 60),
+			stroke = Color3.fromRGB(70, 70, 70),
+			edge = Color3.fromRGB(100, 100, 100),
+			hard = Color3.fromRGB(0, 0, 0),
+			text = Color3.fromRGB(255, 255, 255),
+			muted = Color3.fromRGB(210, 210, 210),
+			faint = Color3.fromRGB(160, 160, 160),
+			body = Color3.fromRGB(200, 200, 200),
+			dim = Color3.fromRGB(120, 120, 120),
+			hint = Color3.fromRGB(110, 110, 110),
+			disabled = Color3.fromRGB(96, 96, 96),
+			field = Color3.fromRGB(45, 45, 45),
+			control = Color3.fromRGB(50, 50, 50),
+			grab = Color3.fromRGB(235, 235, 235),
+			hover = Color3.fromRGB(62, 62, 62),
+			danger = Color3.fromRGB(255, 90, 90),
+			rowGlow = Color3.fromRGB(255, 255, 255),
+		},
+		light = {
+			window = Color3.fromRGB(232, 232, 234),
+			surface = Color3.fromRGB(246, 246, 248),
+			raised = Color3.fromRGB(255, 255, 255),
+			footer = Color3.fromRGB(238, 238, 240),
+			border = Color3.fromRGB(198, 198, 202),
+			line = Color3.fromRGB(206, 206, 210),
+			stroke = Color3.fromRGB(190, 190, 196),
+			edge = Color3.fromRGB(140, 140, 148),
+			hard = Color3.fromRGB(168, 168, 176),
+			text = Color3.fromRGB(24, 24, 27),
+			muted = Color3.fromRGB(62, 62, 68),
+			faint = Color3.fromRGB(122, 122, 130),
+			body = Color3.fromRGB(48, 48, 54),
+			dim = Color3.fromRGB(126, 126, 134),
+			hint = Color3.fromRGB(148, 148, 156),
+			disabled = Color3.fromRGB(170, 170, 178),
+			field = Color3.fromRGB(255, 255, 255),
+			control = Color3.fromRGB(214, 214, 220),
+			grab = Color3.fromRGB(255, 255, 255),
+			hover = Color3.fromRGB(202, 202, 210),
+			danger = Color3.fromRGB(200, 40, 40),
+			rowGlow = Color3.fromRGB(0, 0, 0),
+		},
+	},
+}
 
-	function fader.set(property, value)
-		host[property] = value
-	end
+local DEFAULT_COLOR_PROPERTY = {
+	TextLabel = "TextColor3",
+	TextBox = "TextColor3",
+	TextButton = "TextColor3",
+	ImageLabel = "ImageColor3",
+	ImageButton = "ImageColor3",
+	UIStroke = "Color",
+}
 
-	function fader.position()
-		return host.Position
-	end
+function Skin.get(role)
+	return (Skin.PALETTES[Skin.mode] or Skin.PALETTES.dark)[role] or Color3.fromRGB(255, 0, 255)
+end
 
-	local function cancelTweens()
-		for _, animation in ipairs(fader.tweens) do
-			animation:Cancel()
-		end
-		table.clear(fader.tweens)
-	end
-
-	function fader.finish()
-		if not fader.targets then
-			return
-		end
-		fader.token += 1
-		cancelTweens()
-		activeFaders[fader] = nil
-		for _, target in ipairs(fader.targets) do
-			target[1][target[2]] = target[3]
-		end
-		fader.targets = nil
-		if fader.popScale then
-			fader.popScale.Scale = 1
-		end
-		if fader.goal then
-			host.Position = fader.goal
-		end
-		host.Visible = fader.showing
-	end
-
-	function fader.snap(shown)
-		fader.showing = shown
-		fader.goal = nil
-		fader.finish()
-		host.Visible = shown
-	end
-
-	local function finishRelated()
-		for other in pairs(activeFaders) do
-			if other ~= fader and other.plain.Parent
-				and (other.plain:IsDescendantOf(host) or host:IsDescendantOf(other.plain)) then
-				other.finish()
-			end
-		end
-	end
-
-	function fader.fade(show, duration, style, from, to)
-
-		if host.Visible == show and not fader.targets then
-			return
-		end
-		finishRelated()
-		fader.token += 1
-		local token = fader.token
-		cancelTweens()
-		fader.showing = show
-		fader.goal = to
-
-		if not fader.targets then
-			fader.targets = {}
-			collectFadeTargets(host, fader.targets)
-			if show then
-				for _, target in ipairs(fader.targets) do
-					target[1][target[2]] = 1
-				end
-				if from then
-					host.Position = from
-				end
-				if fader.popScale then
-					fader.popScale.Scale = 0.95
-				end
-			end
-		end
-		host.Visible = true
-		activeFaders[fader] = true
-
-		for _, target in ipairs(fader.targets) do
-			table.insert(fader.tweens, tween(target[1], { [target[2]] = show and target[3] or 1 }, duration, style))
-		end
-		if to then
-			table.insert(fader.tweens, tween(host, { Position = to }, duration, style))
-		end
-		if fader.popScale then
-			table.insert(fader.tweens, tween(fader.popScale, { Scale = show and 1 or 0.95 }, duration, style))
-		end
-
-		task.delay(duration, function()
-			if token == fader.token then
-				fader.finish()
-			end
+local function writeProperties(instance, properties)
+	for property, value in pairs(properties) do
+		pcall(function()
+			instance[property] = value
 		end)
 	end
-
-	return fader
 end
 
-local accentTargets = {}
-local accentRefreshers = {}
+function Motion.to(instance, info, properties)
+	if not instance then
+		return nil
+	end
+	local ok, animation = pcall(Services.TweenService.Create, Services.TweenService, instance, info, properties)
+	if not ok or not animation then
+		writeProperties(instance, properties)
+		return nil
+	end
+	animation:Play()
+	return animation
+end
 
-local function accented(instance, property)
-	instance[property] = Theme.Accent
-	table.insert(accentTargets, { instance, property })
+function Motion.cancel(animation)
+	if animation then
+		pcall(animation.Cancel, animation)
+	end
+end
+
+function Skin.paint(instance, roles)
+	if not instance or not roles then
+		return instance
+	end
+	if type(roles) == "string" then
+		roles = { [DEFAULT_COLOR_PROPERTY[instance.ClassName] or "BackgroundColor3"] = roles }
+	end
+	Skin.painted[instance] = roles
+	for property, role in pairs(roles) do
+		pcall(function()
+			instance[property] = Skin.get(role)
+		end)
+	end
 	return instance
 end
 
-local function setAccent(value)
-	local color = parseColor(value)
-	if not color or color == Theme.Accent then
+function Skin.unpaint(instance)
+	Skin.painted[instance] = nil
+end
+
+function Skin.onChange(listener)
+	table.insert(Skin.listeners, listener)
+end
+
+function Skin.set(mode)
+	if not Skin.PALETTES[mode] or mode == Skin.mode then
 		return
 	end
-	Theme.Accent = color
-	for _, target in ipairs(accentTargets) do
-		target[1][target[2]] = color
+	Skin.mode = mode
+	for instance, roles in pairs(Skin.painted) do
+		local goal = {}
+		for property, role in pairs(roles) do
+			goal[property] = Skin.get(role)
+		end
+		Motion.to(instance, Motion.THEME, goal)
 	end
-	for _, refresh in ipairs(accentRefreshers) do
-		refresh()
-	end
-end
-
-local function shape(parent, x, y, width, height, color, rotation)
-	return create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromOffset(x, y),
-		Size = UDim2.fromOffset(width, height),
-		BackgroundColor3 = color,
-		Rotation = rotation or 0,
-		Parent = parent,
-	}, { round() })
-end
-
-local function ring(parent, x, y, width, height, thickness, color, radius)
-	return create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromOffset(x, y),
-		Size = UDim2.fromOffset(width, height),
-		BackgroundTransparency = 1,
-		Parent = parent,
-	}, { radius and corner(radius) or round(), stroke(color, thickness) })
-end
-
-local IconPaths = {}
-
-function IconPaths.rage(pen)
-	pen.circle(12, 12, 10)
-	pen.line(22, 12, 18, 12)
-	pen.line(6, 12, 2, 12)
-	pen.line(12, 6, 12, 2)
-	pen.line(12, 22, 12, 18)
-end
-
-function IconPaths.legit(pen)
-	pen.rect(5, 2, 14, 20, 7)
-	pen.line(12, 6, 12, 10)
-end
-
-function IconPaths.visuals(pen)
-	pen.rect(3, 3, 18, 18, 2)
-	pen.circle(9, 9, 2)
-	pen.poly({ { 21, 15 }, { 17.9, 11.9 }, { 16.5, 11.35 }, { 15.1, 11.9 }, { 6, 21 } })
-end
-
-function IconPaths.inventory(pen)
-	pen.poly({ { 12, 2.2 }, { 2.3, 7 }, { 12, 11.8 }, { 21.7, 7 }, { 12, 2.2 } })
-	pen.poly({ { 2, 12 }, { 12, 16.8 }, { 22, 12 } })
-	pen.poly({ { 2, 17 }, { 12, 21.8 }, { 22, 17 } })
-end
-
-function IconPaths.misc(pen)
-	pen.line(14, 17, 5, 17)
-	pen.line(19, 7, 10, 7)
-	pen.circle(17, 17, 3)
-	pen.circle(7, 7, 3)
-end
-
-function IconPaths.hotkeys(pen)
-	pen.rect(2, 4, 20, 16, 2)
-	for _, x in ipairs({ 6, 10, 14, 18 }) do
-		pen.dot(x, 8, 0.3)
-	end
-	for _, x in ipairs({ 8, 12, 16 }) do
-		pen.dot(x, 12, 0.3)
-	end
-	pen.line(7, 16, 17, 16)
-end
-
-function IconPaths.user(pen)
-	pen.circle(12, 7, 4)
-	pen.poly({ { 5, 21 }, { 5, 19 }, { 6.2, 16.2 }, { 9, 15 }, { 15, 15 }, { 17.8, 16.2 }, { 19, 19 }, { 19, 21 } })
-end
-
-function IconPaths.users(pen)
-	pen.circle(9, 7, 4)
-	pen.poly({ { 2, 21 }, { 2, 19 }, { 3.2, 16.2 }, { 6, 15 }, { 12, 15 }, { 14.8, 16.2 }, { 16, 19 }, { 16, 21 } })
-	pen.poly({ { 16, 3.2 }, { 19, 5 }, { 19, 9 }, { 16, 10.8 } })
-	pen.poly({ { 19, 15.2 }, { 21.5, 17 }, { 22, 19 }, { 22, 21 } })
-end
-
-function IconPaths.globe(pen)
-	pen.circle(12, 12, 10)
-	pen.ellipse(12, 12, 4.5, 10)
-	pen.line(2, 12, 22, 12)
-end
-
-function IconPaths.movement(pen)
-	pen.circle(14, 4.5, 2)
-	pen.poly({ { 9, 11 }, { 13, 8.5 }, { 15, 11 }, { 18.5, 12.5 } })
-	pen.poly({ { 13, 8.5 }, { 11.5, 15 }, { 15, 18 }, { 15.5, 22 } })
-	pen.poly({ { 11.5, 15 }, { 9, 18.5 }, { 5, 20 } })
-end
-
-function IconPaths.gear(pen)
-	pen.circle(12, 12, 3)
-	pen.circle(12, 12, 7.5)
-	for index = 0, 7 do
-		local angle = math.rad(index * 45)
-		pen.line(12 + math.cos(angle) * 8.5, 12 + math.sin(angle) * 8.5, 12 + math.cos(angle) * 10.5, 12 + math.sin(angle) * 10.5)
+	for _, listener in ipairs(Skin.listeners) do
+		pcall(listener, mode)
 	end
 end
 
-function IconPaths.search(pen)
-	pen.circle(11, 11, 8)
-	pen.line(21, 21, 16.65, 16.65)
-end
+local Accent = {
+	color = Config.Accent,
+	followers = setmetatable({}, { __mode = "k" }),
+	listeners = {},
+}
 
-function IconPaths.flame(pen)
-	pen.poly({ { 12, 2 }, { 16, 8 }, { 18.5, 12 }, { 18, 17 }, { 15, 21 }, { 12, 22 }, { 9, 21 }, { 6, 17 }, { 5.5, 12 }, { 8, 9 }, { 9.5, 11 }, { 12, 2 } })
-end
-
-function IconPaths.volume(pen)
-	pen.poly({ { 11, 5 }, { 6, 9 }, { 2, 9 }, { 2, 15 }, { 6, 15 }, { 11, 19 }, { 11, 5 } })
-	pen.poly({ { 15.5, 8.5 }, { 17, 12 }, { 15.5, 15.5 } })
-	pen.poly({ { 19, 5 }, { 22, 12 }, { 19, 19 } })
-end
-
-function IconPaths.cart(pen)
-	pen.poly({ { 2, 3 }, { 5, 3 }, { 8, 15 }, { 19, 15 }, { 21, 7 }, { 6, 7 } })
-	pen.circle(9, 20, 1.5)
-	pen.circle(18, 20, 1.5)
-end
-
-function IconPaths.box(pen)
-	pen.rect(3, 7, 18, 14, 2)
-	pen.line(3, 12, 21, 12)
-	pen.poly({ { 8, 7 }, { 8, 3 }, { 16, 3 }, { 16, 7 } })
-end
-
-function IconPaths.sun(pen)
-	pen.circle(12, 12, 4)
-	for index = 0, 7 do
-		local angle = math.rad(index * 45)
-		pen.line(12 + math.cos(angle) * 7, 12 + math.sin(angle) * 7, 12 + math.cos(angle) * 10, 12 + math.sin(angle) * 10)
+local function applyAccent(instance, target)
+	if type(target) == "function" then
+		pcall(target, instance, Accent.color)
+	else
+		pcall(function()
+			instance[target] = Accent.color
+		end)
 	end
 end
 
-function IconPaths.star(pen)
-	pen.poly({ { 12, 2 }, { 15, 9 }, { 22, 9.5 }, { 16.5, 14 }, { 18.5, 21 }, { 12, 17 }, { 5.5, 21 }, { 7.5, 14 }, { 2, 9.5 }, { 9, 9 }, { 12, 2 } })
+function Accent.follow(instance, target)
+	if instance and target then
+		Accent.followers[instance] = target
+		applyAccent(instance, target)
+	end
+	return instance
 end
 
-local function lucideAsset(iconName)
+function Accent.unfollow(instance)
+	Accent.followers[instance] = nil
+end
 
-	local lucideName = Config.LUCIDE_ICONS[iconName] or (not IconPaths[iconName] and iconName)
-	if not Lucide or not lucideName then
+function Accent.get()
+	return Accent.color
+end
+
+function Accent.onChange(listener)
+	table.insert(Accent.listeners, listener)
+end
+
+function Accent.set(color)
+	if typeof(color) ~= "Color3" or color == Accent.color then
+		return
+	end
+	Accent.color = color
+	for instance, target in pairs(Accent.followers) do
+		applyAccent(instance, target)
+	end
+	for _, listener in ipairs(Accent.listeners) do
+		pcall(listener, color)
+	end
+end
+
+local function create(className, props)
+	local ok, instance = pcall(Instance.new, className)
+	if not ok then
 		return nil
 	end
-	local ok, asset = pcall(Lucide.GetAsset, lucideName, 48)
-	return ok and asset or nil
-end
-
-local function createIcon(parent, iconName, size, color, position, anchor)
-	local image = Config.ICON_IMAGES[iconName]
-	local asset = not (image and image ~= "") and lucideAsset(iconName) or nil
-	if asset or (image and image ~= "") then
-		return create("ImageLabel", {
-			AnchorPoint = anchor or Vector2.new(0.5, 0.5),
-			Position = position or UDim2.new(),
-			Size = UDim2.fromOffset(size, size),
-			BackgroundTransparency = 1,
-			Image = asset and asset.Url or image,
-			ImageRectSize = asset and asset.ImageRectSize or Vector2.zero,
-			ImageRectOffset = asset and asset.ImageRectOffset or Vector2.zero,
-			ImageColor3 = color,
-			ScaleType = Enum.ScaleType.Fit,
-			Parent = parent,
-		})
+	local parent, roles
+	if instance:IsA("GuiObject") then
+		instance.BorderSizePixel = 0
 	end
-
-	local holder = create("Frame", {
-		AnchorPoint = anchor or Vector2.new(0.5, 0.5),
-		Position = position or UDim2.new(),
-		Size = UDim2.fromOffset(size, size),
-		BackgroundTransparency = 1,
-		Parent = parent,
-	})
-	if not IconPaths[iconName] then
-		return holder
-	end
-	local k = size / 24
-	local thickness = 2.2 * k
-
-	local pen = {}
-	function pen.line(x1, y1, x2, y2)
-		local dx, dy = (x2 - x1) * k, (y2 - y1) * k
-		local length = math.sqrt(dx * dx + dy * dy)
-		shape(holder, (x1 + x2) / 2 * k, (y1 + y2) / 2 * k, length + thickness, thickness, color, math.deg(math.atan2(dy, dx)))
-	end
-	function pen.poly(points)
-		for index = 1, #points - 1 do
-			pen.line(points[index][1], points[index][2], points[index + 1][1], points[index + 1][2])
+	for key, value in pairs(props or {}) do
+		if key == "Parent" then
+			parent = value
+		elseif key == "skin" then
+			roles = value
+		else
+			local success, message = pcall(function()
+				instance[key] = value
+			end)
+			if not success then
+				warn("[Neurothycal UI] " .. className .. "." .. tostring(key) .. ": " .. tostring(message))
+			end
 		end
 	end
-	function pen.ellipse(cx, cy, rx, ry)
-		ring(holder, cx * k, cy * k, 2 * rx * k - thickness, 2 * ry * k - thickness, thickness, color)
+	if roles then
+		Skin.paint(instance, roles)
 	end
-	function pen.circle(cx, cy, r)
-		pen.ellipse(cx, cy, r, r)
+	if parent then
+		instance.Parent = parent
 	end
-	function pen.rect(x, y, width, height, radius)
-		ring(holder, (x + width / 2) * k, (y + height / 2) * k, width * k - thickness, height * k - thickness, thickness, color, math.max(radius * k - thickness / 2, 0))
-	end
-	function pen.dot(cx, cy, r)
-		shape(holder, cx * k, cy * k, 2 * r * k + thickness, 2 * r * k + thickness, color)
-	end
-
-	IconPaths[iconName](pen)
-	return holder
+	table.insert(R.created, instance)
+	return instance
 end
 
-local function tintIcon(icon, color, duration)
-	if icon:IsA("ImageLabel") then
-		tween(icon, { ImageColor3 = color }, duration)
+local function corner(parent, radius)
+	return create("UICorner", {
+		CornerRadius = typeof(radius) == "UDim" and radius or UDim.new(0, radius or Metrics.corner),
+		Parent = parent,
+	})
+end
+
+local Live = { list = setmetatable({}, { __mode = "k" }) }
+
+function Live.set(instance, info, properties)
+	if not instance then
 		return
 	end
-	for _, descendant in ipairs(icon:GetDescendants()) do
-		if descendant:IsA("UIStroke") then
-			tween(descendant, { Color = color }, duration)
-		elseif descendant:IsA("Frame") and descendant.BackgroundTransparency < 1 then
-			tween(descendant, { BackgroundColor3 = color }, duration)
+	if info then
+		Motion.to(instance, info, properties)
+	else
+		writeProperties(instance, properties)
+	end
+end
+
+function Live.add(owner, painter)
+	Live.list[owner] = painter
+	pcall(painter, nil)
+	return painter
+end
+
+function Live.refresh(info)
+	for _, painter in pairs(Live.list) do
+		pcall(painter, info)
+	end
+end
+
+Skin.onChange(function()
+	Live.refresh(Motion.THEME)
+end)
+Accent.onChange(function()
+	Live.refresh(nil)
+end)
+
+local Fade = { originals = setmetatable({}, { __mode = "k" }) }
+
+local TEXT_CLASSES = { TextLabel = true, TextButton = true, TextBox = true }
+local IMAGE_CLASSES = { ImageLabel = true, ImageButton = true, ViewportFrame = true }
+
+function Fade.record(shot, object, property)
+	local stored = Fade.originals[object] and Fade.originals[object][property]
+	if stored then
+		if stored < 1 then
+			table.insert(shot, { object = object, property = property, original = stored })
+		end
+		return
+	end
+	local ok, value = pcall(function()
+		return object[property]
+	end)
+	if ok and type(value) == "number" and value < 1 then
+		table.insert(shot, { object = object, property = property, original = value })
+	end
+end
+
+function Fade.snapshot(root)
+	local shot = {}
+	if not root then
+		return shot
+	end
+	local objects = root:GetDescendants()
+	table.insert(objects, root)
+	for _, object in ipairs(objects) do
+		if object:IsA("UIStroke") then
+			Fade.record(shot, object, "Transparency")
+		elseif object:IsA("GuiObject") then
+			Fade.record(shot, object, "BackgroundTransparency")
+			if TEXT_CLASSES[object.ClassName] then
+				Fade.record(shot, object, "TextTransparency")
+			end
+			if IMAGE_CLASSES[object.ClassName] then
+				Fade.record(shot, object, "ImageTransparency")
+			end
+			if object.ClassName == "ScrollingFrame" then
+				Fade.record(shot, object, "ScrollBarImageTransparency")
+			end
+		end
+	end
+	return shot
+end
+
+function Fade.apply(shot, amount)
+	local settled = amount <= 0
+	for _, entry in ipairs(shot) do
+		pcall(function()
+			entry.object[entry.property] = entry.original + (1 - entry.original) * amount
+		end)
+		local originals = Fade.originals[entry.object]
+		if settled then
+			if originals then
+				originals[entry.property] = nil
+			end
+		else
+			if not originals then
+				originals = {}
+				Fade.originals[entry.object] = originals
+			end
+			originals[entry.property] = entry.original
 		end
 	end
 end
 
-local function triangle(parent, color, rightInset)
-	local holder = create("CanvasGroup", {
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -rightInset, 0.5, 0),
-		Size = UDim2.fromOffset(9, 5),
-		BackgroundTransparency = 1,
-		Parent = parent,
+local Art = {}
+Art.glyphs = (function()
+	local glyphs = {
+		armor = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\139+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\254\1\255.\253\1\0\16\248\1\255.\246\1\0\16\236\1\255.\233\1\0\16\216\1\255.\213\1\0\16\189\1\255.\186\1\0\16\155\1\255.\151\1\0\16q\1\255.n\1\0\16@\1\255.<\1\0\16\12\1\250\1\255,\249\1\t\1\0\17\197\1\255,\193\1\0\18z\1\255,u\1\0\18'\1\255+\254\1\"\1\0\19\201\1\255*\196\1\0\20b\1\255*\\\1\0\20\8\1\231\1\255(\228\1\6\1\0\21q\1\255(m\1\0\22\8\1\223\1\255&\220\1\7\1\0\23S\1\255&M\1\0\25\175\1\255$\169\1\0\26\22\1\231\1\255\"\226\1\19\1\0\27@\1\251\1\255 \249\1:\1\0\29i\1\255 c\1\0\31\133\1\255\30~\1\0!\140\1\255\28\133\1\0#}\1\254\1\255\24\254\1w\1\0%]\1\247\1\255\22\245\1Y\1\0'2\1\219\1\255\20\215\1.\1\0)\12\1\152\1\254\1\255\16\253\1\147\1\11\1\0,>\1\211\1\255\14\208\1;\1\0/\3\1e\1\226\1\255\n\224\1b\1\3\1\0002\7\1e\1\214\1\255\6\211\1c\1\6\1\0006\1\1@\1\157\1\235\1\234\1\155\1=\1\0\255\0\30",
+		},
+		arrow = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\141&\1\175\1\244\2\179\1V\1\8\1\0008&\1\238\1\255\5\238\1\151\0019\1\0006\174\1\255\t\217\1{\1\30\1\0003\241\1\255\11\253\1\189\1^\1\11\1\0000\241\1\255\14\243\1\160\1A\1\2\1\0-\176\1\255\17\224\1\130\1%\1\0+S\1\255\20\204\1o\1\20\1\0(\6\1\235\1\255\21\248\1\179\1U\1\5\1\0&\149\1\255\24\230\1\145\0011\1\0$6\1\255\27\213\1w\1\22\1\0\"\214\1\255\28\252\1\187\1^\1\t\1\0\31x\1\255\31\239\1\153\1<\1\0\29\27\1\252\1\255!\215\1\128\1 \1\0\27\186\1\255#\253\1\196\1f\1\11\1\0\24[\1\255&\241\1\162\1D\1\1\1\0\21\t\1\240\1\255(\226\1\136\1$\1\0\20\157\1\255*\254\1\193\1a\1\5\1\0\17>\1\255-\198\1\r\1\0\16\1\1\222\1\255-\143\1\0\17\128\1\255-\231\1\0\17#\1\254\1\255,\250\1\0\18\194\1\255,\207\1\0\18c\1\255,X\1\0\18\14\1\246\1\255)\244\1l\1\0\20\165\1\255&\228\1\157\1U\1\15\1\0\21G\1\255\"\251\1\196\1w\0013\1\1\1\0\24\2\1\227\1\255\30\221\1\153\1U\1\14\1\0\29\137\1\255\26\245\1\187\1w\1*\1\0!*\1\255\23\221\1\145\1D\1\7\1\0%\203\1\255\19\209\1`\1\25\1\0)l\1\255\19`\1\0+\18\1\248\1\255\17\254\1\26\1\0,\174\1\255\17\208\1\0-O\1\255\17\137\1\0-\5\1\234\1\255\16B\1\0.\146\1\255\15\244\1\7\1\0.3\1\255\15\177\1\0000\210\1\255\14j\1\0000u\1\255\14#\1\0000\23\1\251\1\255\12\218\1\0002\183\1\255\12\147\1\0002X\1\255\12L\1\0002\8\1\239\1\255\n\249\1\12\1\0003\154\1\255\n\188\1\0004;\1\255\nu\1\0005\216\1\255\t-\1\0005}\1\255\8\230\1\1\1\0005\31\1\253\1\255\7\157\1\0007\191\1\255\7V\1\0007^\1\255\6\244\1\16\1\0007\4\1\194\1\255\5l\1\0009\11\1\139\1\229\1\250\1\206\1W\1\0\159",
+		},
+		badCircle = not {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\153\1\1/\1k\1\156\1\196\1\228\1\245\1\255\2\244\1\225\1\195\1\155\1i\1,\1\0/5\1\148\1\229\1\255\14\226\1\145\0011\1\0)\1\1T\1\202\1\255\20\198\1N\1\1\1\0%<\1\205\1\255\24\200\0016\1\0\"\11\1\151\1\254\1\255\26\253\1\144\1\t\1\0\31)\1\214\1\255\30\209\1$\1\0\29C\1\241\1\255 \237\1=\1\0\27L\1\248\1\255\"\246\1G\1\0\25C\1\248\1\255$\246\1>\1\0\23)\1\241\1\255&\237\1$\1\0\21\11\1\214\1\255(\209\1\8\1\0\20\151\1\255*\143\1\0\19<\1\254\1\255\19\173\1\20\1\21\1\175\1\255\19\253\0015\1\0\17\1\1\205\1\255\20\20\1\0\2\23\1\255\20\198\1\1\1\0\16T\1\255\21\0\4\255\21L\1\0\16\202\1\255\21\0\4\255\21\196\1\0\0155\1\255\22\0\4\255\0220\1\0\14\148\1\255\22\0\4\255\22\142\1\0\r\1\1\229\1\255\22\0\4\255\22\225\1\0\r/\1\255\23\0\4\255\23)\1\0\12k\1\255\23\0\4\255\23f\1\0\12\157\1\255\23\0\4\255\23\152\1\0\12\197\1\255\23\0\4\255\23\192\1\0\12\226\1\255\23\0\4\255\23\222\1\0\12\245\1\255\23\0\4\255\23\242\1\0\12\254\1\255\23\0\4\255\23\252\1\0\12\254\1\255\23\0\4\255\23\252\1\0\12\245\1\255\23\0\4\255\23\242\1\0\12\225\1\255\23\21\1\0\2\24\1\255\23\223\1\0\12\196\1\255\23\175\1\22\1\23\1\177\1\255\23\193\1\0\12\156\1\2552\152\1\0\12j\1\2552f\1\0\12.\1\2552)\1\0\12\1\1\228\1\2550\225\1\0\14\147\1\255\21\248\1j\1\12\1\r\1k\1\248\1\255\21\142\1\0\0144\1\255\21i\1\0\4m\1\255\0211\1\0\15\201\1\255\20\r\1\0\4\16\1\255\20\197\1\0\16R\1\255\20\14\1\0\4\16\1\255\20M\1\0\16\1\1\203\1\255\19k\1\0\4o\1\255\19\199\1\1\1\0\17:\1\253\1\255\18\248\1m\1\14\1\16\1o\1\248\1\255\18\253\0015\1\0\19\148\1\255*\145\1\0\20\n\1\212\1\255(\209\1\t\1\0\21'\1\239\1\255&\238\1%\1\0\23@\1\247\1\255$\247\1?\1\0\25K\1\248\1\255\"\247\1J\1\0\27A\1\239\1\255 \238\1?\1\0\29'\1\212\1\255\30\209\1%\1\0\31\t\1\147\1\253\1\255\26\253\1\145\1\t\1\0\"7\1\201\1\255\24\199\0015\1\0%\1\1O\1\199\1\255\20\197\1M\1\1\1\0)2\1\144\1\226\1\255\14\225\1\142\0011\1\0/*\1g\1\153\1\193\1\223\1\242\1\255\2\242\1\223\1\192\1\152\1f\1)\1\0\255\0\154",
+		},
+		boxDraw = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\11+\1\180\1\246\1\255\8\246\1\178\1)\1\0\18+\1\180\1\246\1\255\8\246\1\178\1)\1\0\17+\1\241\1\255\12\240\1(\1\0\16+\1\241\1\255\12\240\1(\1\0\16\180\1\255\14\176\1\0\16\180\1\255\14\176\1\0\16\246\1\255\14\243\1\0\16\246\1\255\14\243\1\0\16\255\16\0\16\255\16\0\16\255\16\0\16\255\16\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\16\0\16\255\16\0\16\255\16\0\16\255\16\0\16\245\1\255\14\243\1\0\16\245\1\255\14\243\1\0\16\179\1\255\14\175\1\0\16\179\1\255\14\175\1\0\16)\1\240\1\255\12\239\1'\1\0\16)\1\240\1\255\12\239\1'\1\0\17(\1\177\1\244\1\255\8\243\1\175\1'\1\0\18(\1\177\1\244\1\255\8\243\1\175\1'\1\0\23\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\23+\1\180\1\246\1\255\8\246\1\178\1)\1\0\18+\1\180\1\246\1\255\8\246\1\178\1)\1\0\17+\1\241\1\255\12\240\1(\1\0\16+\1\241\1\255\12\240\1(\1\0\16\180\1\255\14\176\1\0\16\180\1\255\14\176\1\0\16\246\1\255\14\243\1\0\16\246\1\255\14\243\1\0\16\255\16\0\16\255\16\0\16\255\16\0\16\255\16\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\16\0\16\255\16\0\16\255\16\0\16\255\16\0\16\245\1\255\14\243\1\0\16\245\1\255\14\243\1\0\16\179\1\255\14\175\1\0\16\179\1\255\14\175\1\0\16)\1\240\1\255\12\239\1'\1\0\16)\1\240\1\255\12\239\1'\1\0\17(\1\177\1\244\1\255\8\243\1\175\1'\1\0\18(\1\177\1\244\1\255\8\243\1\175\1'\1\0\255\0\255\0\11",
+		},
+		caret = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\255\0\255\0\255\0\143S\1\235\1\255(\234\1O\1\0\20\234\1\255*\232\1\0\20\234\1\255*\231\1\0\20T\1\251\1\255(\251\1S\1\0\21T\1\251\1\255&\252\1[\1\0\23T\1\251\1\255$\252\1[\1\0\25T\1\251\1\255\"\252\1[\1\0\27T\1\251\1\255 \252\1[\1\0\29T\1\251\1\255\30\252\1[\1\0\31T\1\251\1\255\28\252\1[\1\0!T\1\251\1\255\26\252\1[\1\0#T\1\251\1\255\24\252\1[\1\0%T\1\251\1\255\22\252\1[\1\0'T\1\251\1\255\20\252\1[\1\0)T\1\251\1\255\18\252\1[\1\0+T\1\251\1\255\16\252\1[\1\0-T\1\251\1\255\14\252\1[\1\0/T\1\251\1\255\12\252\1[\1\0001T\1\251\1\255\n\252\1[\1\0003T\1\251\1\255\8\252\1[\1\0005T\1\251\1\255\6\252\1[\1\0007T\1\251\1\255\4\252\1[\1\0009T\1\251\1\255\2\252\1[\1\0;S\1\232\2S\1\0\255\0\255\0\255\0\255\0\162",
+		},
+		caution = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\157\12\1x\1\208\1\250\1\249\1\207\1v\1\11\1\0007)\1\221\1\255\6\220\1'\1\0005\19\1\227\1\255\8\226\1\18\1\0004\151\1\255\n\151\1\0003+\1\251\1\255\n\252\1/\1\0002\186\1\255\12\190\1\0001S\1\255\14R\1\0/\6\1\219\1\255\14\222\1\8\1\0.y\1\255\16x\1\0-\23\1\241\1\255\16\243\1\26\1\0,\160\1\255\18\159\1\0+2\1\253\1\255\18\253\0016\1\0)\1\1\195\1\255\20\198\1\1\1\0(Z\1\255\22Y\1\0'\t\1\224\1\255\22\227\1\11\1\0&\129\1\255\24\128\1\0%\28\1\244\1\255\24\246\1\31\1\0$\168\1\255\26\167\1\0#;\1\254\1\255\11\173\1\20\1\21\1\175\1\255\11\254\1;\1\0!\2\1\204\1\255\12\20\1\0\2\23\1\255\12\204\1\2\1\0 b\1\255\r\0\4\255\ra\1\0\31\r\1\230\1\255\r\0\4\255\r\232\1\15\1\0\30\137\1\255\14\0\4\255\14\136\1\0\29\"\1\248\1\255\14\0\4\255\14\249\1%\1\0\28\176\1\255\15\0\4\255\15\175\1\0\27B\1\255\16\0\4\255\16F\1\0\25\3\1\209\1\255\16\0\4\255\16\213\1\4\1\0\24j\1\255\17\0\4\255\17i\1\0\23\17\1\235\1\255\17\0\4\255\17\237\1\19\1\0\22\145\1\255\18\0\4\255\18\144\1\0\21)\1\250\1\255\18\21\1\0\2\24\1\255\18\250\1)\1\0\20\182\1\255\19\175\1\22\1\23\1\177\1\255\19\182\1\0\19K\1\255,J\1\0\17\5\1\216\1\255,\219\1\7\1\0\16r\1\255.q\1\0\15\21\1\239\1\255.\241\1\23\1\0\14\152\1\255\21\248\1j\1\12\1\r\1k\1\248\1\255\21\152\1\0\r.\1\252\1\255\21i\1\0\4m\1\255\21\252\1.\1\0\12\190\1\255\22\r\1\0\4\16\1\255\22\190\1\0\11R\1\255\23\14\1\0\4\16\1\255\23R\1\0\t\8\1\221\1\255\23k\1\0\4o\1\255\23\221\1\8\1\0\8q\1\255\24\248\1m\1\14\1\16\1o\1\248\1\255\24o\1\0\8\207\1\2556\203\1\0\8\249\1\2556\246\1\0\8\248\1\2556\245\1\0\8\204\1\2556\199\1\0\8m\1\2556i\1\0\8\6\1\206\1\2554\202\1\5\1\0\t\25\1\205\1\2552\201\1\23\1\0\11\6\1j\1\198\1\245\1\255,\245\1\197\1g\1\5\1\0\255\0\255\0\8",
+		},
+		check = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\137+\1\180\1\246\1\255,\246\1\178\1)\1\0\r+\1\241\1\2550\240\1(\1\0\12\180\1\2552\176\1\0\12\246\1\2552\243\1\0\12\2554\0\12\2554\0\12\2554\0\12\2554\0\12\255*\171\1\21\2\175\1\255\6\0\12\255)\168\1\4\1\0\2\23\1\255\6\0\12\255(\168\1\4\1\0\3\24\1\255\6\0\12\255'\168\1\4\1\0\3\4\1\172\1\255\6\0\12\255&\170\1\4\1\0\3\3\1\164\1\255\7\0\12\255%\170\1\4\1\0\3\3\1\164\1\255\8\0\12\255$\170\1\4\1\0\3\3\1\164\1\255\t\0\12\255#\170\1\4\1\0\3\3\1\164\1\255\n\0\12\255\"\170\1\4\1\0\3\3\1\164\1\255\11\0\12\255!\170\1\4\1\0\3\3\1\164\1\255\12\0\12\255 \170\1\4\1\0\3\3\1\164\1\255\r\0\12\255\31\170\1\4\1\0\3\3\1\164\1\255\14\0\12\255\30\170\1\4\1\0\3\3\1\164\1\255\15\0\12\255\29\170\1\4\1\0\3\3\1\164\1\255\16\0\12\255\8\173\1\21\2\171\1\255\16\168\1\4\1\0\3\4\1\168\1\255\17\0\12\255\8\21\1\0\2\4\1\168\1\255\14\168\1\4\1\0\3\4\1\168\1\255\18\0\12\255\8\22\1\0\3\4\1\168\1\255\12\168\1\4\1\0\3\4\1\168\1\255\19\0\12\255\8\171\1\4\1\0\3\4\1\168\1\255\n\168\1\4\1\0\3\4\1\168\1\255\20\0\12\255\t\171\1\4\1\0\3\3\1\163\1\255\8\170\1\4\1\0\3\3\1\164\1\255\21\0\12\255\n\171\1\4\1\0\3\3\1\163\1\255\6\170\1\4\1\0\3\3\1\164\1\255\22\0\12\255\11\171\1\4\1\0\3\3\1\163\1\255\4\170\1\4\1\0\3\3\1\164\1\255\23\0\12\255\12\171\1\4\1\0\3\3\1\163\1\255\2\170\1\4\1\0\3\3\1\164\1\255\24\0\12\255\r\171\1\4\1\0\3\3\1\163\1\170\1\4\1\0\3\3\1\164\1\255\25\0\12\255\14\168\1\4\1\0\3\4\2\0\3\4\1\168\1\255\26\0\12\255\15\171\1\4\1\0\6\3\1\164\1\255\27\0\12\255\16\171\1\4\1\0\4\3\1\164\1\255\28\0\12\255\17\171\1\4\1\0\2\3\1\164\1\255\29\0\12\255\18\172\1\23\2\172\1\255\30\0\12\2554\0\12\2554\0\12\2554\0\12\2554\0\12\245\1\2552\243\1\0\12\179\1\2552\175\1\0\12)\1\240\1\2550\239\1'\1\0\r(\1\177\1\244\1\255,\243\1\175\1'\1\0\255\0\255\0\137",
+		},
+		clock = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\153\1\1/\1k\1\156\1\196\1\228\1\245\1\255\2\244\1\225\1\195\1\155\1i\1,\1\0/5\1\148\1\229\1\255\14\226\1\145\0011\1\0)\1\1T\1\202\1\255\20\198\1N\1\1\1\0%<\1\205\1\255\24\200\0016\1\0\"\11\1\151\1\254\1\255\26\253\1\144\1\t\1\0\31)\1\214\1\255\30\209\1$\1\0\29C\1\241\1\255 \237\1=\1\0\27L\1\248\1\255\"\246\1G\1\0\25C\1\248\1\255$\246\1>\1\0\23)\1\241\1\255&\237\1$\1\0\21\11\1\214\1\255\18\173\1\20\1\21\1\175\1\255\18\209\1\8\1\0\20\151\1\255\19\20\1\0\2\23\1\255\19\143\1\0\19<\1\254\1\255\19\0\4\255\19\253\0015\1\0\17\1\1\205\1\255\20\0\4\255\20\198\1\1\1\0\16T\1\255\21\0\4\255\21L\1\0\16\202\1\255\21\0\4\255\21\196\1\0\0155\1\255\22\0\4\255\0220\1\0\14\148\1\255\22\0\4\255\22\142\1\0\r\1\1\229\1\255\22\0\4\255\22\225\1\0\r/\1\255\23\0\4\255\23)\1\0\12k\1\255\23\0\4\255\23f\1\0\12\157\1\255\23\0\4\255\23\152\1\0\12\197\1\255\23\0\4\255\23\192\1\0\12\226\1\255\23\0\4\255\23\222\1\0\12\245\1\255\23\0\16\21\1\175\1\255\t\242\1\0\12\254\1\255\23\0\17\23\1\255\t\252\1\0\12\254\1\255\23\21\1\0\16\24\1\255\t\252\1\0\12\245\1\255\23\175\1\22\1\0\14\23\1\177\1\255\t\242\1\0\12\225\1\2552\223\1\0\12\196\1\2552\193\1\0\12\156\1\2552\152\1\0\12j\1\2552f\1\0\12.\1\2552)\1\0\12\1\1\228\1\2550\225\1\0\14\147\1\2550\142\1\0\0144\1\25501\1\0\15\201\1\255.\197\1\0\16R\1\255.M\1\0\16\1\1\203\1\255,\199\1\1\1\0\17:\1\253\1\255*\253\0015\1\0\19\148\1\255*\145\1\0\20\n\1\212\1\255(\209\1\t\1\0\21'\1\239\1\255&\238\1%\1\0\23@\1\247\1\255$\247\1?\1\0\25K\1\248\1\255\"\247\1J\1\0\27A\1\239\1\255 \238\1?\1\0\29'\1\212\1\255\30\209\1%\1\0\31\t\1\147\1\253\1\255\26\253\1\145\1\t\1\0\"7\1\201\1\255\24\199\0015\1\0%\1\1O\1\199\1\255\20\197\1M\1\1\1\0)2\1\144\1\226\1\255\14\225\1\142\0011\1\0/*\1g\1\153\1\193\1\223\1\242\1\255\2\242\1\223\1\192\1\152\1f\1)\1\0\255\0\154",
+		},
+		cloudUp = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\163\12\1M\1\137\1\185\1\219\1\243\1\255\2\243\1\219\1\185\1\137\1M\1\12\1\0/\2\1J\1\174\1\247\1\255\12\247\1\173\1G\1\1\1\0*\1\1T\1\214\1\255\18\211\1Q\1\0(%\1\190\1\255\22\187\1!\1\0%^\1\244\1\255\24\242\1W\1\0\"\1\1\138\1\255\27\254\1\130\1\0 \1\1\155\1\255\30\146\1\1\1\0\30\139\1\255 \131\1\0\29`\1\255\"W\1\0\27%\1\245\1\255\"\242\1!\1\0\25\1\1\192\1\255$\187\1\0\25T\1\255&P\1\0\16\15\1Y\1\128\1\14\1\0\3\2\1\213\1\255\17\171\1\20\1\21\1\171\1\255\17\210\1\1\1\0\r&\1\157\1\247\1\255\2X\1\0\3K\1\255\17\168\1\4\1\0\2\4\1\168\1\255\17G\1\0\11\n\1\141\1\251\1\255\3\254\1\26\1\0\3\175\1\255\16\168\1\4\1\0\4\4\1\168\1\255\16\172\1\0\n%\1\212\1\255\5\209\1\0\3\r\1\248\1\255\15\168\1\4\1\0\6\4\1\168\1\255\15\246\1\11\1\0\0081\1\234\1\255\6\148\1\0\3O\1\255\15\168\1\4\1\0\8\4\1\168\1\255\15K\1\0\7$\1\235\1\255\7c\1\0\3\138\1\255\14\168\1\4\1\0\n\4\1\168\1\255\14\135\1\0\6\n\1\211\1\255\8:\1\0\3\185\1\255\r\168\1\4\1\0\3\4\1\0\4\4\1\0\3\4\1\168\1\255\r\181\1\0\6\141\1\255\t\29\1\0\3\220\1\255\12\168\1\4\1\0\3\4\1\168\1\0\4\168\1\4\1\0\3\4\1\168\1\255\12\217\1\0\5&\1\250\1\255\t\t\1\0\3\243\1\255\11\170\1\4\1\0\3\4\1\168\1\255\1\0\4\255\1\168\1\4\1\0\3\4\1\172\1\255\11\240\1\0\5\158\1\255\n\0\4\254\1\255\11\21\1\0\3\4\1\168\1\255\2\0\4\255\2\168\1\4\1\0\3\23\1\255\11\252\1\0\4\15\1\246\1\255\n\21\1\0\2\26\1\255\12\22\1\0\2\4\1\168\1\255\3\0\4\255\3\168\1\4\1\0\2\24\1\255\11\251\1\0\4Z\1\255\11\174\1\22\1\24\1\181\1\255\12\175\1\23\2\172\1\255\4\0\4\255\4\172\1\23\2\177\1\255\11\238\1\0\4\157\1\255#\0\4\255\19\214\1\0\4\205\1\255#\0\4\255\19\179\1\0\4\238\1\255#\0\4\255\19\131\1\0\4\253\1\255#\0\4\255\19G\1\0\4\253\1\255#\0\4\255\18\245\1\t\1\0\4\237\1\255#\0\4\255\18\169\1\0\5\204\1\255#\0\4\255\18E\1\0\5\154\1\255#\0\4\255\17\208\1\1\1\0\5U\1\255#\0\4\255\17N\1\0\6\11\1\242\1\255\"\0\4\255\16\186\1\0\8\145\1\255\"\21\1\0\2\24\1\255\15\241\1 \1\0\8\27\1\245\1\255!\175\1\22\1\23\1\177\1\255\14\254\1W\1\0\nw\1\2553\132\1\0\11\3\1\191\1\2551\149\1\1\1\0\12\21\1\218\1\255.\254\1\131\1\1\1\0\14\29\1\216\1\255,\241\1V\1\0\17\18\1\184\1\255*\184\1!\1\0\19\1\1k\1\239\1\255&\208\1N\1\0\23\19\1\131\1\233\1\255!\245\1\167\1E\1\1\1\0\26\5\1F\1\141\1\192\1\230\1\250\1\255\23\239\1\214\1\179\1\132\1H\1\n\1\0\255\0\255\0\147",
+		},
+		code = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\137+\1\180\1\246\1\255,\246\1\178\1)\1\0\r+\1\241\1\2550\240\1(\1\0\12\180\1\2552\176\1\0\12\246\1\2552\243\1\0\12\2554\0\12\2554\0\12\255\28\178\1\29\1 \1\183\1\255\20\0\12\255\27\252\1\21\1\0\2\29\1\255\20\0\12\255\27\198\1\0\3\22\1\255\20\0\12\255\27}\1\0\3Z\1\255\20\0\12\255\0274\1\0\3\163\1\255\20\0\12\255\26\234\1\2\1\0\2\2\1\233\1\255\20\0\12\255\26\162\1\0\0035\1\255\21\0\12\255\26Y\1\0\3~\1\255\21\0\12\255\14\159\1\20\1\21\1\175\1\255\7\252\1\19\1\0\3\199\1\255\3\173\1\21\2\160\1\255\14\0\12\255\12\244\1_\1\0\3\24\1\255\7\198\1\0\3\19\1\252\1\255\3\20\1\0\3_\1\244\1\255\12\0\12\255\11\213\1*\1\0\4\24\1\255\7~\1\0\3Y\1\255\4\22\1\0\4*\1\213\1\255\11\0\12\255\n\159\1\n\1\0\4\n\1\176\1\255\0075\1\0\3\162\1\255\4\174\1\n\1\0\4\n\1\159\1\255\n\0\12\255\8\246\1f\1\0\5(\1\210\1\255\7\234\1\2\1\0\2\2\1\233\1\255\5\215\1-\1\0\5^\1\244\1\255\8\0\12\255\7\215\1-\1\0\5^\1\244\1\255\8\162\1\0\0035\1\255\7\246\1o\1\0\5(\1\210\1\255\7\0\12\255\6\173\1\n\1\0\4\11\1\159\1\255\nY\1\0\3~\1\255\t\159\1\11\1\0\4\n\1\175\1\255\6\0\12\255\6\21\1\0\4+\1\213\1\255\n\252\1\19\1\0\3\199\1\255\n\213\1+\1\0\4\24\1\255\6\0\12\255\6\22\1\0\4+\1\213\1\255\n\198\1\0\3\19\1\252\1\255\n\213\1+\1\0\4\24\1\255\6\0\12\255\6\174\1\n\1\0\4\11\1\159\1\255\t~\1\0\3Y\1\255\n\159\1\11\1\0\4\11\1\176\1\255\6\0\12\255\7\215\1-\1\0\5^\1\244\1\255\0074\1\0\3\163\1\255\8\246\1o\1\0\5(\1\210\1\255\7\0\12\255\8\246\1f\1\0\5(\1\210\1\255\5\234\1\2\1\0\2\2\1\233\1\255\7\215\1-\1\0\5^\1\244\1\255\8\0\12\255\n\159\1\n\1\0\4\n\1\175\1\255\4\162\1\0\0035\1\255\7\173\1\n\1\0\4\11\1\160\1\255\n\0\12\255\11\213\1*\1\0\4\24\1\255\4Y\1\0\3~\1\255\7\21\1\0\4+\1\213\1\255\11\0\12\255\12\244\1_\1\0\3\25\1\255\3\252\1\19\1\0\3\199\1\255\7\21\1\0\3`\1\245\1\255\12\0\12\255\14\160\1\23\1\24\1\177\1\255\3\198\1\0\3\19\1\252\1\255\7\175\1\23\1\24\1\161\1\255\14\0\12\255\21}\1\0\3Z\1\255\26\0\12\255\0214\1\0\3\163\1\255\26\0\12\255\20\234\1\2\1\0\2\2\1\233\1\255\26\0\12\255\20\162\1\0\0035\1\255\27\0\12\255\20Y\1\0\3~\1\255\27\0\12\255\19\254\1\19\1\0\3\199\1\255\27\0\12\255\19\254\1\17\1\0\2\22\1\252\1\255\27\0\12\255\20\166\1\15\1\16\1\172\1\255\28\0\12\255\22\254\1\255\29\0\12\2554\0\12\245\1\2552\243\1\0\12\179\1\2552\175\1\0\12)\1\240\1\2550\239\1'\1\0\r(\1\177\1\244\1\255,\243\1\175\1'\1\0\255\0\255\0\137",
+		},
+		copy = {
+			w = 64,
+			h = 64,
+			data = "\0\255\0\255\0\22R\1\235\1\255 \234\1P\1\0\28\235\1\255\"\232\1\0\28\255$\0\28\255$\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\28\255\4\0\16R\1\235\1\255 \234\1P\1\0\8\255\4\0\16\235\1\255\"\232\1\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\255$\0\8\255\4\0\16\2550\0\16\2550\0\16\255/\231\1\0\16\255.\232\1N\1\0\16\255$\0\28\255$\0\28\255$\0\28\255$\0\28\255$\0\28\255$\0\28\255$\0\28\255$\0\28\255$\0\28\255$\0\28\234\1\255\"\231\1\0\28P\1\233\1\255 \232\1N\1\0\255\0\255\0\22",
+		},
+	}
+
+	glyphs.crosshair = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\31R\1\235\1\234\1P\1\0<\235\1\255\2\232\1\0<\255\4\0<\255\4\0007\27\1]\1\148\1\190\1\221\1\255\4\221\1\189\1\147\1\\\1\25\1\0/\19\1p\1\204\1\255\r\254\1\202\1o\1\18\1\0*\27\1\147\1\245\1\255\18\245\1\146\1\25\1\0&\6\1{\1\245\1\255\22\244\1x\1\5\1\0#*\1\207\1\255\6\252\1\196\1\129\1N\1)\1\255\4)\1O\1\130\1\197\1\252\1\255\6\205\1(\1\0!Q\1\243\1\255\5\225\1u\1\24\1\0\4\255\4\0\4\25\1w\1\226\1\255\5\242\1O\1\0\31j\1\253\1\255\4\233\1g\1\5\1\0\6\234\1\255\2\231\1\0\6\6\1i\1\234\1\255\4\253\1h\1\0\29j\1\254\1\255\4\164\1\17\1\0\8P\1\233\1\232\1N\1\0\8\19\1\167\1\255\4\254\1h\1\0\27Q\1\253\1\255\3\249\1e\1\0\24g\1\250\1\255\3\252\1N\1\0\25*\1\243\1\255\3\246\1G\1\0\26I\1\246\1\255\3\242\1'\1\0\23\6\1\207\1\255\3\249\1G\1\0\28J\1\250\1\255\3\205\1\5\1\0\22{\1\255\4e\1\0\30i\1\255\4w\1\0\21\26\1\244\1\255\3\164\1\0 \167\1\255\3\243\1\23\1\0\20\147\1\255\3\233\1\17\1\0 \19\1\235\1\255\3\143\1\0\19\19\1\245\1\255\3g\1\0\12\t\1_\1\174\1\226\1\253\1\251\1\226\1\175\1^\1\8\1\0\12k\1\255\3\244\1\17\1\0\18q\1\255\3\225\1\5\1\0\11Z\1\230\1\255\8\228\1X\1\0\11\6\1\227\1\255\3m\1\0\18\204\1\255\3u\1\0\n\3\1\153\1\255\12\150\1\2\1\0\ny\1\255\3\199\1\0\17\27\1\254\1\255\2\252\1\24\1\0\n\154\1\255\14\149\1\0\n\27\1\253\1\255\2\254\1\24\1\0\16]\1\255\3\196\1\0\n[\1\255\16V\1\0\n\200\1\255\3X\1\0\16\147\1\255\3\130\1\0\t\8\1\230\1\255\16\227\1\7\1\0\t\135\1\255\3\143\1\0\16\190\1\255\3N\1\0\t]\1\255\18[\1\0\tR\1\255\3\186\1\0\16\222\1\255\3(\1\0\t\174\1\255\18\172\1\0\t*\1\255\3\220\1\0\12R\1\235\1\255\8\234\1P\1\0\6\226\1\255\18\224\1\0\6R\1\235\1\255\8\234\1P\1\0\8\235\1\255\n\232\1\0\6\252\1\255\18\249\1\0\6\235\1\255\n\232\1\0\8\234\1\255\n\231\1\0\6\252\1\255\18\249\1\0\6\234\1\255\n\231\1\0\8P\1\233\1\255\8\232\1N\1\0\6\226\1\255\18\223\1\0\6P\1\233\1\255\8\232\1N\1\0\12\221\1\255\3(\1\0\t\173\1\255\18\171\1\0\t+\1\255\3\219\1\0\16\189\1\255\3O\1\0\t]\1\255\18Y\1\0\tR\1\255\3\186\1\0\16\147\1\255\3\131\1\0\t\8\1\228\1\255\16\225\1\7\1\0\t\135\1\255\3\142\1\0\16\\\1\255\3\197\1\0\nW\1\255\16T\1\0\n\201\1\255\3W\1\0\16\26\1\254\1\255\2\252\1\25\1\0\n\149\1\255\14\146\1\0\n\28\1\253\1\255\2\253\1\23\1\0\17\202\1\255\3v\1\0\n\2\1\149\1\255\12\147\1\2\1\0\n{\1\255\3\197\1\0\18o\1\255\3\226\1\6\1\0\11V\1\227\1\255\8\227\1U\1\0\11\7\1\228\1\255\3k\1\0\18\18\1\245\1\255\3i\1\0\12\7\1Z\1\170\1\223\1\250\1\249\1\222\1\171\1[\1\7\1\0\12m\1\255\3\243\1\16\1\0\19\146\1\255\3\234\1\19\1\0 \21\1\236\1\255\3\142\1\0\20\25\1\244\1\255\3\167\1\0 \170\1\255\3\242\1\22\1\0\21x\1\255\4h\1\0\30k\1\255\4t\1\0\22\5\1\205\1\255\3\250\1I\1\0\28L\1\251\1\255\3\203\1\4\1\0\23(\1\242\1\255\3\246\1J\1\0\26L\1\246\1\255\3\241\1%\1\0\25O\1\253\1\255\3\250\1i\1\0\24k\1\251\1\255\3\252\1M\1\0\27h\1\254\1\255\4\168\1\19\1\0\8R\1\235\1\234\1P\1\0\8\21\1\170\1\255\4\254\1f\1\0\29h\1\252\1\255\4\235\1k\1\6\1\0\6\235\1\255\2\232\1\0\6\6\1m\1\236\1\255\4\252\1f\1\0\31O\1\242\1\255\5\227\1y\1\27\1\0\4\255\4\0\4\28\1{\1\228\1\255\5\241\1M\1\0!'\1\205\1\255\6\253\1\200\1\134\1R\1*\1\255\4+\1S\1\136\1\201\1\253\1\255\6\203\1%\1\0#\5\1w\1\243\1\255\22\242\1t\1\4\1\0&\23\1\143\1\244\1\255\18\243\1\142\1\22\1\0*\16\1m\1\199\1\254\1\255\12\253\1\197\1k\1\16\1\0/\23\1X\1\143\1\186\1\219\1\255\4\219\1\186\1\142\1W\1\23\1\0007\255\4\0<\255\4\0<\234\1\255\2\231\1\0<P\1\233\1\232\1N\1\0\255\0\31",
+	}
+
+	glyphs.crouch = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\159R\1\235\1\234\1P\1\0<\235\1\255\2\232\1\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0*S\1\235\1\255$\234\1O\1\0\24\234\1\255&\232\1\0\24\234\1\255&\231\1\0\24T\1\251\1\255$\251\1S\1\0\25T\1\251\1\255\"\252\1[\1\0\27T\1\251\1\255 \252\1[\1\0\29T\1\251\1\255\30\252\1[\1\0\31T\1\251\1\255\28\252\1[\1\0!T\1\251\1\255\26\252\1[\1\0#T\1\251\1\255\24\252\1[\1\0%T\1\251\1\255\22\252\1[\1\0'T\1\251\1\255\20\252\1[\1\0)T\1\251\1\255\18\252\1[\1\0+T\1\251\1\255\16\252\1[\1\0-T\1\251\1\255\14\252\1[\1\0/T\1\251\1\255\12\252\1[\1\0001T\1\251\1\255\n\252\1[\1\0003T\1\251\1\255\8\252\1[\1\0005T\1\251\1\255\6\252\1[\1\0007T\1\251\1\255\4\252\1[\1\0009T\1\251\1\255\2\252\1[\1\0;S\1\232\2S\1\0\255\0'R\1\235\1\255,\234\1P\1\0\16\235\1\255.\232\1\0\16\234\1\255.\231\1\0\16P\1\233\1\255,\232\1N\1\0\255\0\255\0\n",
+	}
+
+	glyphs.download = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\159R\1\235\1\234\1P\1\0<\235\1\255\2\232\1\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0002S\1\235\1\255\20\234\1O\1\0(\234\1\255\22\232\1\0(\234\1\255\22\231\1\0(T\1\251\1\255\20\251\1S\1\0)T\1\251\1\255\18\252\1[\1\0+T\1\251\1\255\16\252\1[\1\0-T\1\251\1\255\14\252\1[\1\0/T\1\251\1\255\12\252\1[\1\0001T\1\251\1\255\n\252\1[\1\0003T\1\251\1\255\8\252\1[\1\0\"R\1\235\1\234\1P\1\0\15W\1\251\1\255\6\251\1W\1\0\15R\1\235\1\234\1P\1\0\16\235\1\255\2\232\1\0\16W\1\251\1\255\4\251\1W\1\0\16\235\1\255\2\232\1\0\16\255\4\0\17T\1\251\1\255\2\252\1[\1\0\17\255\4\0\16\255\4\0\18S\1\232\2S\1\0\18\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\2550\0\16\2550\0\16\234\1\255.\231\1\0\16P\1\233\1\255,\232\1N\1\0\255\0\255\0\138",
+	}
+
+	glyphs.drop = {
+		w = 64,
+		h = 64,
+		data = "\0\158b\1\235\1\233\1]\1\0:\t\1\159\1\255\4\154\1\7\1\0007\27\1\203\1\255\6\198\1\24\1\00050\1\229\1\255\8\225\1,\1\0003B\1\242\1\255\n\240\1?\1\0001P\1\248\1\255\12\246\1K\1\0/T\1\250\1\255\14\249\1P\1\0-O\1\250\1\255\16\249\1L\1\0+B\1\248\1\255\18\247\1?\1\0)-\1\241\1\255\20\240\1-\1\0'\26\1\226\1\255\22\225\1\24\1\0%\8\1\201\1\255\24\199\1\7\1\0$\156\1\255\26\153\1\0#^\1\255\28[\1\0!$\1\243\1\255\28\241\1!\1\0\31\2\1\195\1\255\30\192\1\2\1\0\30j\1\255 g\1\0\29\23\1\240\1\255 \238\1\21\1\0\28\154\1\255\"\151\1\0\27)\1\252\1\255\"\251\1&\1\0\26\165\1\255$\162\1\0\25!\1\252\1\255$\251\1\31\1\0\24\141\1\255&\138\1\0\23\7\1\236\1\255&\234\1\6\1\0\22R\1\255(N\1\0\22\167\1\255(\162\1\0\21\3\1\238\1\255(\235\1\2\1\0\0204\1\255*1\1\0\20m\1\255*j\1\0\20\157\1\255*\153\1\0\20\196\1\255*\192\1\0\20\225\1\255*\221\1\0\20\244\1\255*\242\1\0\20\254\1\255*\253\1\0\20\253\1\255\31\173\1\20\1\21\1\174\1\255\7\251\1\0\20\242\1\255\30\254\1\21\1\0\2\23\1\255\7\239\1\0\20\219\1\255\30\214\1\0\3\19\1\255\7\217\1\0\20\185\1\255\30\130\1\0\3O\1\255\7\181\1\0\20\138\1\255\29\245\1\25\1\0\3\157\1\255\7\133\1\0\20M\1\255\29w\1\0\3\14\1\242\1\255\7J\1\0\20\r\1\247\1\255\27\179\1\2\1\0\3{\1\255\7\246\1\11\1\0\21\174\1\255\26\179\1\t\1\0\3\29\1\242\1\255\7\169\1\0\22J\1\255\24\245\1w\1\3\1\0\3\4\1\190\1\255\8F\1\0\22\2\1\213\1\255\20\254\1\213\1\130\1\24\1\0\5\150\1\255\8\210\1\1\1\0\23T\1\255\19\173\1\21\1\0\6\3\1\150\1\255\tQ\1\0\24\1\1\191\1\255\18\21\1\0\6\28\1\189\1\255\t\188\1\0\26%\1\244\1\255\17\22\1\0\4\14\1z\1\242\1\255\t\242\1\"\1\0\27]\1\255\17\175\1\23\1\17\1N\1\156\1\241\1\255\11Z\1\0\29\137\1\255 \132\1\0\30\1\1\153\1\255\30\150\1\1\1\0\31\1\1\137\1\255\28\133\1\1\1\0\"\\\1\243\1\255\24\242\1Z\1\0%#\1\190\1\255\22\189\1\"\1\0(S\1\211\1\255\18\210\1Q\1\0+\1\1H\1\171\1\246\1\255\12\246\1\169\1F\1\1\1\0/\11\1K\1\134\1\182\1\217\1\240\1\255\2\240\1\216\1\181\1\132\1J\1\n\1\0\255\0\154",
+	}
+
+	glyphs.eye = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\27&\1\\\1\139\1\178\1\210\1\232\1\248\1\255\2\248\1\232\1\211\1\178\1\139\1\\\1%\1\0,\4\1G\1\154\1\228\1\255\16\227\1\153\1F\1\3\1\0&\25\1\130\1\230\1\255\22\229\1\128\1\23\1\0\"\25\1\149\1\248\1\255\26\247\1\146\1\23\1\0\30\6\1y\1\244\1\255\30\242\1u\1\5\1\0\0270\1\210\1\255\"\207\1-\1\0\25m\1\248\1\255$\247\1h\1\0\22\6\1\159\1\255(\154\1\5\1\0\19\r\1\189\1\255*\185\1\12\1\0\17\14\1\198\1\255,\196\1\r\1\0\15\n\1\196\1\255\18\247\1\161\1Q\1\29\1\1\1\3\1\30\1R\1\162\1\247\1\255\18\193\1\t\1\0\r\3\1\178\1\255\18\165\1\26\1\0\8\26\1\167\1\255\18\174\1\2\1\0\12\139\1\255\17\253\1g\1\0\12i\1\253\1\255\17\136\1\0\11T\1\254\1\255\17g\1\0\14j\1\255\17\254\1Q\1\0\t\31\1\240\1\255\17\165\1\0\16\168\1\255\17\238\1\28\1\0\7\1\1\188\1\255\17\247\1\26\1\0\16\28\1\248\1\255\17\185\1\1\1\0\6_\1\255\18\161\1\0\18\164\1\255\18]\1\0\5\14\1\232\1\255\18Q\1\0\18S\1\255\18\230\1\12\1\0\4\128\1\255\19\29\1\0\18\31\1\255\19|\1\0\4\234\1\255\19\3\1\0\18\5\1\255\19\232\1\0\4\234\1\255\19\4\1\0\18\6\1\255\19\232\1\0\4~\1\255\19\29\1\0\18 \1\255\19z\1\0\4\r\1\231\1\255\18Q\1\0\18U\1\255\18\228\1\11\1\0\5^\1\255\18\162\1\0\18\165\1\255\18Z\1\0\6\1\1\186\1\255\17\247\1\27\1\0\16\30\1\248\1\255\17\182\1\0\8\29\1\239\1\255\17\167\1\0\16\171\1\255\17\236\1\27\1\0\tS\1\254\1\255\17i\1\0\14l\1\255\17\254\1M\1\0\11\138\1\255\17\253\1j\1\0\12l\1\253\1\255\17\132\1\0\12\3\1\176\1\255\18\168\1\28\1\0\8\30\1\171\1\255\18\172\1\2\1\0\r\t\1\194\1\255\18\248\1\164\1S\1\31\1\4\1\5\1 \1T\1\165\1\248\1\255\18\191\1\8\1\0\15\14\1\197\1\255,\196\1\r\1\0\17\12\1\187\1\255*\183\1\11\1\0\19\6\1\156\1\255(\151\1\4\1\0\22g\1\247\1\255$\246\1c\1\0\25-\1\207\1\255\"\204\1*\1\0\27\5\1u\1\241\1\255\30\239\1p\1\4\1\0\30\22\1\144\1\246\1\255\26\245\1\141\1\20\1\0\"\22\1\127\1\227\1\255\22\226\1~\1\21\1\0&\2\1C\1\151\1\223\1\255\16\222\1\149\1A\1\2\1\0, \1Y\1\136\1\175\1\207\1\230\1\244\1\255\2\244\1\229\1\207\1\174\1\136\1Y\1 \1\0\255\0\255\0\255\0\27",
+	}
+
+	glyphs.flagPiece = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\18\23\1g\1\169\1\217\1\245\1\255\1\249\1\226\1\190\1\139\1J\1\t\1\0002.\1\169\1\251\1\255\n\244\1\165\1D\1\1\1\0-\14\1\151\1\253\1\255\15\217\1i\1\t\1\0*5\1\222\1\255\19\233\1x\1\r\1\0'P\1\247\1\255\22\236\1|\1\15\1\0\17X\1\233\1\231\1N\1\0\16\233\1\255\25\239\1\133\1\23\1\0\r\t\1\145\1\254\1\255\2\231\1\0\16\255\28\247\1\159\1:\1\0\t\1\1Q\1\218\1\255\5\0\16\255\31\222\1\145\1Q\1#\1\n\1\1\1\22\1>\1\127\1\216\1\255\7\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\7\213\1{\0019\1\17\1\0\1\7\1\"\1O\1\143\1\220\1\255\31\0\16\255\5\215\1L\1\1\1\0\t9\1\158\1\247\1\255\28\0\16\255\4\141\1\7\1\0\r\22\1\132\1\239\1\255\25\230\1\0\16\255\4\0\17\15\1}\1\237\1\255\22\246\1M\1\0\16\255\4\0\19\r\1x\1\233\1\255\19\219\0010\1\0\17\255\4\0\21\t\1i\1\216\1\255\15\251\1\145\1\12\1\0\18\255\4\0\23\1\1D\1\165\1\243\1\255\n\249\1\163\1(\1\0\20\255\4\0\26\t\1I\1\138\1\188\1\226\1\248\1\255\1\242\1\211\1\164\1c\1\19\1\0\22\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\234\1\255\2\231\1\0<P\1\233\1\232\1N\1\0\255\0\179",
+	}
+
+	glyphs.flask = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\149R\1\235\1\255\20\234\1P\1\0(\235\1\255\22\232\1\0(\234\1\255\22\231\1\0(P\1\233\1\255\20\232\1N\1\0,\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0000\255\4\0\8\255\4\0/-\1\255\4\0\8\255\4-\1\0-\1\1\193\1\255\3\214\1\0\8\215\1\255\3\193\1\1\1\0,]\1\255\4M\1\0\8N\1\255\4\\\1\0+\r\1\229\1\255\3\184\1\0\n\179\1\255\3\232\1\15\1\0*\143\1\255\3\248\1&\1\0\n#\1\247\1\255\3\142\1\0)+\1\250\1\255\3\128\1\0\12\129\1\255\3\251\1/\1\0'\1\1\191\1\255\3\225\1\n\1\0\12\t\1\221\1\255\3\195\1\1\1\0&]\1\255\4M\1\0\14N\1\255\4\\\1\0%\r\1\229\1\255\3\184\1\0\16\179\1\255\3\232\1\15\1\0$\143\1\255\3\248\1&\1\0\16#\1\247\1\255\3\142\1\0#+\1\250\1\255\3\128\1\0\18\129\1\255\3\251\1/\1\0!\1\1\191\1\255\3\225\1\n\1\0\18\t\1\222\1\255\3\195\1\1\1\0 \\\1\255\5\239\1\213\1\173\1~\1A\1\7\1\0\14N\1\255\4\\\1\0\31\14\1\230\1\255\n\243\1\168\1L\1\3\1\0\12\181\1\255\3\230\1\14\1\0\30\143\1\255\14\226\1u\1\14\1\0\n#\1\247\1\255\3\143\1\0\29-\1\251\1\255\16\237\1\127\1\19\1\0\t\130\1\255\3\251\1-\1\0\27\1\1\193\1\255\19\245\1\157\1<\1\2\1\0\6\t\1\223\1\255\3\193\1\1\1\0\26[\1\255\23\230\1\160\1d\0015\1\23\1\2\1\0\1\19\1{\1\255\4[\1\0\25\r\1\229\1\255$\232\1\15\1\0\24\143\1\255&\142\1\0\23+\1\250\1\255&\251\1/\1\0\22\191\1\255(\195\1\1\1\0\20\\\1\255*[\1\0\19\r\1\229\1\255*\232\1\15\1\0\18\142\1\255,\141\1\0\17,\1\251\1\255,\251\1,\1\0\16\177\1\255.\176\1\0\16\244\1\255.\242\1\0\16\244\1\255.\243\1\0\16\176\1\255.\176\1\0\16(\1\239\1\255,\238\1'\1\0\17'\1\175\1\243\1\255(\244\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.gauge = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\154\5\1;\1s\1\162\1\197\1\155\1\0\4\161\1\200\1\165\1v\1>\1\7\1\0-\6\1R\1\171\1\242\1\255\5\0\4\255\5\244\1\175\1X\1\8\1\0(\19\1\127\1\232\1\255\8\0\4\255\8\237\1\136\1\24\1\0$\t\1}\1\242\1\255\n\0\4\255\n\245\1\136\1\r\1\0!D\1\221\1\255\12\0\4\255\12\229\1P\1\0\30\5\1\141\1\254\1\255\r\0\4\255\14\158\1\n\1\0\27\19\1\194\1\255\15\0\4\255\15\208\1\30\1\0\25\31\1\217\1\255\16\0\4\255\16\229\1+\1\0\23\30\1\223\1\255\17\21\1\0\2\26\1\255\17\234\1+\1\0\21\18\1\216\1\255\18\174\1\22\1\24\1\180\1\255\18\229\1\30\1\0\19\4\1\190\1\255*\208\1\n\1\0\18\135\1\255,\158\1\0\17<\1\253\1\255\30\174\1\21\1\22\1\178\1\255\11Q\1\0\15\6\1\215\1\255\30\216\1\12\1\0\2\29\1\255\11\229\1\14\1\0\14s\1\255\30\248\0012\1\0\3\28\1\255\12\135\1\0\r\14\1\236\1\255\30p\1\0\4\158\1\255\12\245\1\24\1\0\12t\1\255\30\181\1\1\1\0\3W\1\255\14\135\1\0\11\3\1\225\1\255\29\230\1\22\1\0\3!\1\240\1\255\14\236\1\8\1\0\nF\1\255\29\253\1D\1\0\3\5\1\199\1\255\16W\1\0\n\158\1\255\29\136\1\0\4\134\1\255\17\174\1\0\t\1\1\233\1\255\28\201\1\5\1\0\3C\1\253\1\255\17\244\1\6\1\0\8\1\1\205\1\255\27\241\1\"\1\0\3\21\1\229\1\255\18\216\1\6\1\0\16\23\1\178\1\255\19Z\1\0\3\1\1\180\1\255\11\176\1\22\1\0\25\23\1\255\18\160\1\0\4o\1\255\12\22\1\0\26\23\1\255\17\217\1\12\1\0\0030\1\248\1\255\12\22\1\0\25\23\1\176\1\255\16\249\0012\1\0\3\11\1\216\1\255\r\175\1\23\1\0\16\195\1\255\25r\1\0\4\157\1\255\23\196\1\0\8\253\1\255\24\182\1\1\1\0\3X\1\255\24\254\1\0\8\255\24\231\1\22\1\0\3!\1\240\1\255\25\0\8\255\23\253\1E\1\0\3\4\1\198\1\255\26\0\8\255\23\136\1\0\4\134\1\255\27\0\8\255\22\203\1\6\1\0\3?\1\252\1\255\27\0\8\255\21\243\1&\1\0\3\21\1\229\1\255\28\0\8\255\21\\\1\0\3\1\1\177\1\255\29\0\8\245\1\255\19\161\1\0\4o\1\255\29\243\1\0\8\179\1\255\18\218\1\12\1\0\0031\1\248\1\255\29\175\1\0\8)\1\240\1\255\16\249\0013\1\0\3\1\1\214\1\255\29\239\1'\1\0\t(\1\177\1\244\1\255\r\252\1k\1\0\4\1\1\204\1\255\27\243\1\175\1'\1\0\255\0\255\0\255\0\255\0\t",
+	}
+
+	glyphs.gear = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\149\r\1i\1\198\1\252\1\184\1/\1\0\12.\1\183\1\250\1\195\1d\1\11\1\0&\19\1\133\1\240\1\255\4\253\1\156\1\26\1\0\8\25\1\156\1\252\1\255\4\238\1\131\1\18\1\0\"\4\1q\1\239\1\255\8\244\1~\1\11\1\0\4\n\1~\1\244\1\255\8\238\1o\1\4\1\0\31,\1\206\1\255\12\228\1a\1\2\2`\1\228\1\255\12\204\1+\1\0\29c\1\247\1\255\15\207\2\255\15\246\1b\1\0\27~\1\255$~\1\0\25\2\1\248\1\255$\247\1\2\1\0\24\7\1\255&\6\1\0\24\8\1\255&\7\1\0\24\t\1\255&\8\1\0\24\n\1\255&\t\1\0\24\12\1\255&\n\1\0\24\r\1\255&\n\1\0\24\14\1\255&\11\1\0\24\15\1\255&\12\1\0\23\14\1\139\1\255&\141\1\15\1\0\20\2\1d\1\232\1\255\15\247\1\161\1Q\1\29\1\1\1\3\1\30\1R\1\162\1\247\1\255\15\233\1g\1\3\1\0\17A\1\207\1\255\16\165\1\26\1\0\8\26\1\167\1\255\16\209\1C\1\0\14#\1\174\1\255\16\253\1g\1\0\12i\1\253\1\255\16\177\1%\1\0\n\3\1\135\1\248\1\255\17g\1\0\14j\1\255\17\249\1\137\1\2\1\0\8a\1\255\18\165\1\0\16\168\1\255\18^\1\0\8\158\1\255\17\247\1\26\1\0\16\28\1\248\1\255\17\155\1\0\8\198\1\255\17\161\1\0\18\164\1\255\17\194\1\0\8\226\1\255\17Q\1\0\18S\1\255\17\223\1\0\8\247\1\255\17\29\1\0\18\31\1\255\17\242\1\0\7\1\1\255\18\3\1\0\18\5\1\255\17\251\1\0\7\1\1\255\18\4\1\0\18\6\1\255\17\251\1\0\8\247\1\255\17\29\1\0\18 \1\255\17\242\1\0\8\227\1\255\17Q\1\0\18U\1\255\17\223\1\0\8\198\1\255\17\162\1\0\18\165\1\255\17\194\1\0\8\159\1\255\17\247\1\27\1\0\16\30\1\248\1\255\17\155\1\0\8c\1\255\18\167\1\0\16\171\1\255\18^\1\0\8\3\1\141\1\250\1\255\17i\1\0\14l\1\255\17\248\1\132\1\2\1\0\n(\1\181\1\255\16\253\1j\1\0\12l\1\253\1\255\16\174\1#\1\0\14G\1\213\1\255\16\168\1\28\1\0\8\30\1\171\1\255\16\207\1A\1\0\17\4\1k\1\236\1\255\15\248\1\164\1S\1\31\1\4\1\5\1 \1T\1\165\1\248\1\255\15\232\1d\1\2\1\0\20\17\1\145\1\255&\139\1\14\1\0\23\15\1\255&\14\1\0\24\14\1\255&\r\1\0\24\r\1\255&\12\1\0\24\r\1\255&\11\1\0\24\12\1\255&\t\1\0\24\11\1\255&\8\1\0\24\n\1\255&\7\1\0\24\t\1\255&\6\1\0\24\4\1\249\1\255$\246\1\2\1\0\25\131\1\255$z\1\0\27f\1\247\1\255\15\207\2\255\15\244\1]\1\0\29-\1\206\1\255\12\228\1a\1\2\2a\1\228\1\255\12\200\1(\1\0\31\4\1r\1\239\1\255\8\244\1\127\1\11\1\0\4\11\1~\1\244\1\255\8\237\1k\1\3\1\0\"\18\1\132\1\240\1\255\4\253\1\157\1\26\1\0\8\26\1\156\1\253\1\255\4\237\1\128\1\15\1\0&\12\1g\1\198\1\250\1\184\0010\1\0\12/\1\183\1\250\1\195\1b\1\n\1\0\255\0\149",
+	}
+
+	glyphs.globe = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\153\1\1/\1k\1\156\1\196\1\228\1\245\1\255\2\244\1\225\1\195\1\155\1i\1,\1\0/5\1\148\1\229\1\255\14\226\1\145\0011\1\0)\1\1T\1\202\1\255\20\198\1N\1\1\1\0%<\1\205\1\255\24\200\0016\1\0\"\11\1\151\1\254\1\255\12\247\2\255\4\204\1\243\1\255\6\253\1\144\1\t\1\0\31)\1\214\1\255\r\252\1P\1S\1\253\1\255\3\190\1\n\1Q\1\182\1\254\1\255\5\209\1$\1\0\29C\1\241\1\255\14u\1\0\2{\1\255\4l\1\0\2+\1\172\1\255\5\237\1=\1\0\27L\1\248\1\255\14\179\1\1\1\0\2\2\1\184\1\255\3\242\1\26\1\0\3A\1\220\1\255\4\246\1G\1\0\25C\1\248\1\255\14\235\1\22\1\0\4\26\1\239\1\255\3\159\1\0\4\12\1\165\1\255\4\246\1=\1\0\23)\1\241\1\255\15c\1\0\6j\1\255\3\252\1*\1\0\5z\1\254\1\255\3\237\1$\1\0\21\11\1\214\1\255\15\206\1\2\1\0\6\3\1\211\1\255\3\164\1\0\6k\1\254\1\255\3\209\1\8\1\0\20\151\1\255\16K\1\0\8Q\1\255\3\251\1\28\1\0\6z\1\255\4\143\1\0\19<\1\254\1\255\15\207\1\1\1\0\8\1\1\213\1\255\3\129\1\0\7\165\1\255\3\253\0015\1\0\17\1\1\205\1\255\16a\1\0\ng\1\255\3\224\1\1\1\0\6\12\1\221\1\255\3\198\1\1\1\0\16T\1\255\16\242\1\11\1\0\n\14\1\245\1\255\0039\1\0\7D\1\255\4L\1\0\16\202\1\255\16\163\1\0\12\169\1\255\3\135\1\0\8\176\1\255\3\196\1\0\0155\1\255\17S\1\0\12X\1\255\3\206\1\0\8.\1\254\1\255\0030\1\0\14\148\1\255\16\252\1\16\1\0\12\20\1\253\1\255\2\253\1\16\1\0\8\185\1\255\3\142\1\0\r\1\1\229\1\255\16\206\1\0\14\212\1\255\3D\1\0\8V\1\255\3\225\1\0\r/\1\255\17\153\1\0\14\158\1\255\3s\1\0\8\n\1\245\1\255\3)\1\0\12k\1\255\17m\1\0\14q\1\255\3\155\1\0\t\182\1\255\3f\1\0\12\157\1\255\17H\1\0\14L\1\255\3\188\1\0\tz\1\255\3\152\1\0\12\197\1\255\17+\1\0\14.\1\255\3\214\1\0\tK\1\255\3\192\1\0\12\226\1\255\17\22\1\0\14\24\1\255\3\233\1\0\t'\1\255\3\222\1\0\12\245\1\2552\242\1\0\12\254\1\2552\252\1\0\12\254\1\2552\252\1\0\12\245\1\2552\242\1\0\12\225\1\255\17\22\1\0\14\23\1\255\3\233\1\0\t'\1\255\3\223\1\0\12\196\1\255\17+\1\0\14.\1\255\3\213\1\0\tL\1\255\3\193\1\0\12\156\1\255\17I\1\0\14L\1\255\3\188\1\0\t{\1\255\3\152\1\0\12j\1\255\17n\1\0\14p\1\255\3\155\1\0\t\183\1\255\3f\1\0\12.\1\255\17\154\1\0\14\158\1\255\3r\1\0\8\11\1\246\1\255\3)\1\0\12\1\1\228\1\255\16\208\1\0\14\211\1\255\3C\1\0\8X\1\255\3\225\1\0\14\147\1\255\16\252\1\17\1\0\12\19\1\253\1\255\2\252\1\15\1\0\8\187\1\255\3\142\1\0\0144\1\255\17U\1\0\12X\1\255\3\204\1\0\0080\1\254\1\255\0031\1\0\15\201\1\255\16\165\1\0\12\168\1\255\3\134\1\0\8\178\1\255\3\197\1\0\16R\1\255\16\243\1\12\1\0\n\r\1\245\1\255\0038\1\0\7F\1\255\4M\1\0\16\1\1\203\1\255\16c\1\0\nf\1\255\3\223\1\1\1\0\6\14\1\223\1\255\3\199\1\1\1\0\17:\1\253\1\255\15\210\1\1\1\0\8\1\1\213\1\255\3\129\1\0\6\1\1\168\1\255\3\253\0015\1\0\19\148\1\255\16M\1\0\8O\1\255\3\250\1\27\1\0\6|\1\255\4\145\1\0\20\n\1\212\1\255\15\208\1\2\1\0\6\3\1\211\1\255\3\162\1\0\6n\1\255\4\209\1\t\1\0\21'\1\239\1\255\15f\1\0\6i\1\255\3\252\1)\1\0\4\1\1}\1\255\4\238\1%\1\0\23@\1\247\1\255\14\238\1\25\1\0\4\27\1\239\1\255\3\157\1\0\4\14\1\169\1\255\4\247\1?\1\0\25K\1\248\1\255\14\183\1\1\1\0\2\2\1\185\1\255\3\241\1\25\1\0\3E\1\223\1\255\4\247\1J\1\0\27A\1\239\1\255\14z\1\0\2|\1\255\4k\1\0\2/\1\177\1\255\5\238\1?\1\0\29'\1\212\1\255\r\253\1S\1T\1\253\1\255\3\189\1\11\1V\1\186\1\254\1\255\5\209\1%\1\0\31\t\1\147\1\253\1\255\12\248\1\247\1\255\4\207\1\245\1\255\6\253\1\145\1\t\1\0\"7\1\201\1\255\24\199\0015\1\0%\1\1O\1\199\1\255\20\197\1M\1\1\1\0)2\1\144\1\226\1\255\14\225\1\142\0011\1\0/*\1g\1\153\1\193\1\223\1\242\1\255\2\242\1\223\1\192\1\152\1f\1)\1\0\255\0\154",
+	}
+
+	glyphs.graph = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\137+\1\180\1\246\1\255,\246\1\178\1)\1\0\r+\1\241\1\2550\240\1(\1\0\12\180\1\2552\176\1\0\12\246\1\2552\243\1\0\12\2554\0\12\2554\0\12\255\6\173\1\20\1\21\1\175\1\255*\0\12\255\6\20\1\0\2\23\1\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255 \163\1\19\1\21\1\175\1\255\6\0\12\255\6\0\4\255\30\253\1x\1\0\3\25\1\255\6\0\12\255\6\0\4\255\8\165\1\20\1\21\1\152\1\254\1\255\16\243\1O\1\0\4\26\1\255\6\0\12\255\6\0\4\255\6\254\1z\1\1\1\0\3D\1\224\1\255\14\225\1/\1\0\4\8\1\176\1\255\6\0\12\255\6\0\4\255\5\244\1R\1\0\6\n\1\136\1\253\1\255\11\199\1\24\1\0\4\20\1\194\1\255\7\0\12\255\6\0\4\255\4\228\0014\1\0\t=\1\219\1\255\t\168\1\t\1\0\4.\1\224\1\255\8\0\12\255\6\0\4\255\3\199\1\24\1\0\4\24\1@\1\0\5\r\1\153\1\254\1\255\5\253\1x\1\0\5R\1\244\1\255\t\0\12\255\6\0\4\255\2\168\1\t\1\0\4.\1\224\1\254\1\153\1\r\1\0\5=\1\219\1\255\3\244\1Q\1\0\5o\1\253\1\255\n\0\12\255\6\0\4\254\1\128\1\1\1\0\4K\1\241\1\255\3\224\1D\1\0\5\n\1\136\1\253\1\228\0013\1\0\4\7\1\161\1\255\12\0\12\255\6\0\4R\1\0\4\1\1z\1\254\1\255\5\254\1\152\1\r\1\0\5A\1\23\1\0\4\25\1\200\1\255\r\0\12\255\6\0\8\7\1\161\1\255\t\224\1D\1\0\t.\1\224\1\255\14\0\12\255\6\0\7\20\1\194\1\255\11\254\1\153\1\r\1\0\6K\1\241\1\255\15\0\12\255\6\0\6.\1\224\1\255\14\224\1D\1\0\4o\1\253\1\255\16\0\12\255\6\0\5Q\1\244\1\255\16\254\1\151\1\22\1\24\1\167\1\255\18\0\12\255\6\0\4z\1\253\1\255(\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0\4\255*\0\12\255\6\0&\21\1\175\1\255\6\0\12\255\6\0'\23\1\255\6\0\12\255\6\21\1\0&\24\1\255\6\0\12\255\6\175\1\22\1\0$\23\1\177\1\255\6\0\12\2554\0\12\2554\0\12\245\1\2552\243\1\0\12\179\1\2552\175\1\0\12)\1\240\1\2550\239\1'\1\0\r(\1\177\1\244\1\255,\243\1\175\1'\1\0\255\0\255\0\137",
+	}
+
+	glyphs.grid = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\141+\1\180\1\246\1\255\12\246\1\178\1)\1\0\6+\1\180\1\246\1\255\12\246\1\178\1)\1\0\21+\1\241\1\255\16\240\1(\1\0\4+\1\241\1\255\16\240\1(\1\0\20\180\1\255\18\176\1\0\4\180\1\255\18\176\1\0\20\246\1\255\18\243\1\0\4\246\1\255\18\243\1\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\245\1\255\18\243\1\0\4\245\1\255\18\243\1\0\20\179\1\255\18\175\1\0\4\179\1\255\18\175\1\0\20)\1\240\1\255\16\239\1'\1\0\4)\1\240\1\255\16\239\1'\1\0\21(\1\177\1\244\1\255\12\243\1\175\1'\1\0\6(\1\177\1\244\1\255\12\243\1\175\1'\1\0\255\0\23+\1\180\1\246\1\255\12\246\1\178\1)\1\0\6+\1\180\1\246\1\255\12\246\1\178\1)\1\0\21+\1\241\1\255\16\240\1(\1\0\4+\1\241\1\255\16\240\1(\1\0\20\180\1\255\18\176\1\0\4\180\1\255\18\176\1\0\20\246\1\255\18\243\1\0\4\246\1\255\18\243\1\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\255\20\0\4\255\20\0\20\245\1\255\18\243\1\0\4\245\1\255\18\243\1\0\20\179\1\255\18\175\1\0\4\179\1\255\18\175\1\0\20)\1\240\1\255\16\239\1'\1\0\4)\1\240\1\255\16\239\1'\1\0\21(\1\177\1\244\1\255\12\243\1\175\1'\1\0\6(\1\177\1\244\1\255\12\243\1\175\1'\1\0\255\0\255\0\141",
+	}
+
+	glyphs.grip = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\14+\1\180\1\246\1\255 \246\1\178\1)\1\0\25+\1\241\1\255$\240\1(\1\0\24\180\1\255&\176\1\0\24\246\1\255&\243\1\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255\n\248\1j\1\12\1\r\1k\1\248\1\255\8\248\1j\1\12\1\r\1k\1\248\1\255\n\0\24\255\ni\1\0\4m\1\255\8i\1\0\4m\1\255\n\0\24\255\n\r\1\0\4\16\1\255\8\r\1\0\4\16\1\255\n\0\24\255\n\14\1\0\4\16\1\255\8\14\1\0\4\16\1\255\n\0\24\255\nk\1\0\4o\1\255\8k\1\0\4o\1\255\n\0\24\255\n\248\1m\1\14\1\16\1o\1\248\1\255\8\248\1m\1\14\1\16\1o\1\248\1\255\n\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255\n\248\1j\1\12\1\r\1k\1\248\1\255\8\248\1j\1\12\1\r\1k\1\248\1\255\n\0\24\255\ni\1\0\4m\1\255\8i\1\0\4m\1\255\n\0\24\255\n\r\1\0\4\16\1\255\8\r\1\0\4\16\1\255\n\0\24\255\n\14\1\0\4\16\1\255\8\14\1\0\4\16\1\255\n\0\24\255\nk\1\0\4o\1\255\8k\1\0\4o\1\255\n\0\24\255\n\248\1m\1\14\1\16\1o\1\248\1\255\8\248\1m\1\14\1\16\1o\1\248\1\255\n\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255\n\248\1j\1\12\1\r\1k\1\248\1\255\8\248\1j\1\12\1\r\1k\1\248\1\255\n\0\24\255\ni\1\0\4m\1\255\8i\1\0\4m\1\255\n\0\24\255\n\r\1\0\4\16\1\255\8\r\1\0\4\16\1\255\n\0\24\255\n\14\1\0\4\16\1\255\8\14\1\0\4\16\1\255\n\0\24\255\nk\1\0\4o\1\255\8k\1\0\4o\1\255\n\0\24\255\n\248\1m\1\14\1\16\1o\1\248\1\255\8\248\1m\1\14\1\16\1o\1\248\1\255\n\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\245\1\255&\243\1\0\24\179\1\255&\175\1\0\24)\1\240\1\255$\239\1'\1\0\25(\1\177\1\244\1\255 \243\1\175\1'\1\0\255\0\14",
+	}
+
+	glyphs.health = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\144,\1z\1\181\1\223\1\249\1\255\1\249\1\227\1\189\1\136\1B\1\3\1\0\12\3\1C\1\137\1\189\1\228\1\249\1\255\1\248\1\222\1\180\1y\1*\1\0\25\1\1S\1\201\1\255\11\229\1z\1\r\1\0\8\15\1|\1\230\1\255\11\200\1Q\1\1\1\0\21(\1\196\1\255\15\232\1W\1\0\6Z\1\234\1\255\15\194\1&\1\0\19V\1\245\1\255\18\154\1\5\1\0\2\6\1\157\1\255\18\243\1T\1\0\17i\1\254\1\255\20\178\1\6\2\182\1\255\20\253\1g\1\0\15V\1\254\1\255\22\158\1\161\1\255\22\253\1T\1\0\r(\1\244\1\2550\243\1&\1\0\11\1\1\196\1\2552\194\1\1\1\0\nT\1\2554P\1\0\n\201\1\2554\198\1\0\t,\1\2556(\1\0\8z\1\2556u\1\0\8\180\1\2556\177\1\0\8\222\1\2556\218\1\0\8\247\1\2556\243\1\0\8\2557\253\1\0\8\248\1\2556\245\1\0\8\228\1\2556\224\1\0\8\192\1\2556\189\1\0\8\143\1\2556\139\1\0\8P\1\2556K\1\0\8\12\1\246\1\2554\245\1\n\1\0\t\169\1\2554\164\1\0\nC\1\2554=\1\0\11\206\1\2552\201\1\0\12M\1\2552H\1\0\r\190\1\2550\186\1\0\14+\1\249\1\255.\248\1(\1\0\15}\1\255.z\1\0\16\4\1\197\1\255,\193\1\3\1\0\17\29\1\234\1\255*\233\1\27\1\0\19A\1\250\1\255(\249\1=\1\0\21d\1\255'\254\1_\1\0\23}\1\255&y\1\0\25\139\1\255$\134\1\0\27\139\1\255\"\136\1\0\29\128\1\255 }\1\0\31k\1\252\1\255\28\252\1i\1\0!O\1\244\1\255\26\243\1M\1\0#0\1\225\1\255\24\223\1.\1\0%\21\1\189\1\255\22\186\1\20\1\0'\3\1\132\1\253\1\255\18\253\1\129\1\3\1\0*C\1\230\1\255\16\228\1A\1\0-\20\1\173\1\255\14\169\1\18\1\0000Z\1\236\1\255\n\235\1X\1\0003\22\1\166\1\255\8\163\1\21\1\0006D\1\215\1\255\4\214\1B\1\0009\5\1p\1\229\2o\1\5\1\0\255\0\158",
+	}
+
+	glyphs.heartBreak = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\144/\1|\1\182\1\223\1\249\1\255\1\248\1\223\1\181\1z\1-\1\0\14/\1|\1\183\1\225\1\249\1\255\1\248\1\224\1\183\1|\1.\1\0\25\1\1W\1\206\1\255\11\203\1U\1\1\1\0\8\2\1X\1\205\1\255\11\204\1V\1\1\1\0\21+\1\199\1\255\15\197\1 \1\0\6*\1\200\1\255\15\197\1(\1\0\19Z\1\246\1\255\17\131\1\0\5Y\1\246\1\255\17\244\1U\1\0\17n\1\254\1\255\17\213\1\22\1\0\4k\1\254\1\255\19\253\1f\1\0\15Y\1\254\1\255\17\213\1\23\1\0\4k\1\254\1\255\21\253\1R\1\0\r*\1\245\1\255\17\214\1\23\1\0\4k\1\254\1\255\23\242\1$\1\0\11\1\1\198\1\255\17\219\1\23\1\0\4k\1\254\1\255\25\189\1\0\11V\1\255\18g\1\0\4i\1\254\1\255\27K\1\0\n\203\1\255\18t\1\0\4D\1\246\1\255\27\193\1\0\t,\1\255\19\237\1.\1\0\4D\1\246\1\255\27$\1\0\8{\1\255\20\235\1.\1\0\4D\1\246\1\255\26r\1\0\8\182\1\255\21\235\1.\1\0\4D\1\246\1\255\25\174\1\0\8\223\1\255\22\235\1.\1\0\4E\1\246\1\255\24\216\1\0\8\247\1\255\23\235\1.\1\0\4E\1\246\1\255\23\242\1\0\8\255\25\235\1.\1\0\4E\1\246\1\255\22\252\1\0\8\248\1\255\25\235\1.\1\0\4E\1\246\1\255\21\247\1\0\8\228\1\255\26\235\1.\1\0\4c\1\255\21\225\1\0\8\192\1\255\27\206\1\1\1\0\3%\1\255\21\189\1\0\8\143\1\255\26\225\1\"\1\0\4u\1\255\21\140\1\0\8P\1\255\25\225\1\"\1\0\4[\1\252\1\255\21M\1\0\8\12\1\246\1\255\23\224\1!\1\0\4[\1\252\1\255\21\245\1\11\1\0\t\169\1\255\22\224\1!\1\0\4[\1\252\1\255\22\166\1\0\nC\1\255\21\223\1 \1\0\4[\1\252\1\255\23?\1\0\11\206\1\255\20F\1\0\4[\1\252\1\255\23\201\1\0\12M\1\255\20+\1\0\3[\1\252\1\255\24J\1\0\r\190\1\255\19\164\1\5\1\0\1a\1\252\1\255\24\188\1\0\14+\1\249\1\255\19\232\1\219\1\255\25\248\1)\1\0\15}\1\255.{\1\0\16\4\1\197\1\255,\194\1\3\1\0\17\29\1\234\1\255*\233\1\28\1\0\19A\1\250\1\255(\249\1?\1\0\21d\1\255'\254\1_\1\0\23~\1\255&z\1\0\25\140\1\255$\136\1\0\27\140\1\255\"\136\1\0\29\129\1\255 ~\1\0\31l\1\253\1\255\28\252\1j\1\0!P\1\244\1\255\26\244\1O\1\0#1\1\225\1\255\24\224\0010\1\0%\21\1\189\1\255\22\188\1\21\1\0'\3\1\133\1\253\1\255\18\253\1\130\1\3\1\0*D\1\230\1\255\16\228\1C\1\0-\20\1\173\1\255\14\170\1\19\1\0000[\1\236\1\255\n\236\1Y\1\0003\23\1\167\1\255\8\166\1\23\1\0006F\1\217\1\255\4\217\1E\1\0009\6\1r\1\232\2s\1\6\1\0\255\0\158",
+	}
+
+	glyphs.immune = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\139+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255 \171\1\21\2\175\1\255\12\0\16\255\31\168\1\4\1\0\2\23\1\255\12\0\16\255\30\168\1\4\1\0\3\24\1\255\12\0\16\255\29\168\1\4\1\0\3\3\1\171\1\255\12\0\16\254\1\255\27\168\1\4\1\0\3\3\1\166\1\255\12\253\1\0\16\248\1\255\26\168\1\4\1\0\3\3\1\166\1\255\r\246\1\0\16\236\1\255\25\168\1\4\1\0\3\3\1\166\1\255\14\233\1\0\16\216\1\255\24\168\1\4\1\0\3\3\1\166\1\255\15\213\1\0\16\189\1\255\11\174\1\21\2\170\1\255\8\168\1\4\1\0\3\3\1\166\1\255\16\186\1\0\16\155\1\255\11\22\1\0\2\3\1\166\1\255\6\168\1\4\1\0\3\3\1\166\1\255\17\151\1\0\16q\1\255\11\23\1\0\3\3\1\167\1\255\4\168\1\4\1\0\3\3\1\166\1\255\18n\1\0\16@\1\255\11\172\1\4\1\0\3\3\1\167\1\255\2\168\1\4\1\0\3\3\1\166\1\255\19<\1\0\16\12\1\250\1\255\11\169\1\4\1\0\3\4\1\168\2\4\1\0\3\3\1\166\1\255\19\249\1\t\1\0\17\197\1\255\12\169\1\4\1\0\3\4\2\0\3\3\1\166\1\255\20\193\1\0\18z\1\255\r\169\1\4\1\0\6\3\1\166\1\255\21u\1\0\18'\1\255\14\169\1\4\1\0\4\3\1\166\1\255\21\254\1\"\1\0\19\201\1\255\14\169\1\4\1\0\2\3\1\166\1\255\22\196\1\0\20b\1\255\15\172\1\23\2\171\1\255\23\\\1\0\20\8\1\231\1\255(\228\1\6\1\0\21q\1\255(m\1\0\22\8\1\223\1\255&\221\1\7\1\0\23R\1\255&N\1\0\25\174\1\255$\170\1\0\26\21\1\230\1\255\"\227\1\19\1\0\27?\1\250\1\255 \249\1;\1\0\29g\1\255 e\1\0\31\130\1\255\30\128\1\0!\137\1\255\28\136\1\0#z\1\254\1\255\24\254\1z\1\0%Z\1\246\1\255\22\246\1\\\1\0'0\1\217\1\255\20\217\0010\1\0)\11\1\150\1\254\1\255\16\254\1\150\1\12\1\0,<\1\209\1\255\14\209\1=\1\0/\3\1c\1\225\1\255\n\225\1d\1\3\1\0002\6\1d\1\213\1\255\6\212\1d\1\6\1\0006\1\1>\1\156\1\234\1\235\1\157\1>\1\0\255\0\30",
+	}
+
+	glyphs.jumped = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\31T\1\235\1\234\1T\1\0;U\1\251\1\255\2\252\1\\\1\0009U\1\251\1\255\4\252\1\\\1\0007U\1\251\1\255\6\252\1\\\1\0005U\1\251\1\255\8\252\1\\\1\0003U\1\251\1\255\n\252\1\\\1\0001U\1\251\1\255\12\252\1\\\1\0/U\1\251\1\255\14\252\1\\\1\0-U\1\251\1\255\16\252\1\\\1\0+U\1\251\1\255\18\252\1\\\1\0)U\1\251\1\255\20\252\1\\\1\0'U\1\251\1\255\22\252\1\\\1\0%U\1\251\1\255\24\252\1\\\1\0#U\1\251\1\255\26\252\1\\\1\0!U\1\251\1\255\28\252\1\\\1\0\31U\1\251\1\255\30\252\1\\\1\0\29U\1\251\1\255 \252\1\\\1\0\27U\1\251\1\255\"\252\1\\\1\0\25U\1\251\1\255$\252\1\\\1\0\23U\1\251\1\255&\252\1\\\1\0\21U\1\251\1\255(\252\1\\\1\0\19U\1\251\1\255*\252\1\\\1\0\17U\1\251\1\255,\252\1\\\1\0\15U\1\251\1\255.\252\1\\\1\0\rU\1\251\1\2550\251\1S\1\0\12\235\1\2552\231\1\0\12\234\1\2552\231\1\0\12P\1\233\1\2550\232\1M\1\0\24\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\245\1\255\26\243\1\0$\179\1\255\26\175\1\0$)\1\240\1\255\24\239\1'\1\0%(\1\177\1\244\1\255\20\243\1\175\1'\1\0\255\0\255\0\21",
+	}
+
+	glyphs.keyboard = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\8+\1\180\1\246\1\2550\246\1\178\1)\1\0\t+\1\241\1\2554\240\1(\1\0\8\180\1\2556\176\1\0\8\246\1\2556\243\1\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\255\6\173\1\20\1\0(\21\1\175\1\255\6\0\8\255\6\20\1\0*\23\1\255\6\0\8\255\6\21\1\0*\24\1\255\6\0\8\255\6\175\1\22\1\0(\23\1\177\1\255\6\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\255\6\173\1\20\1\0(\21\1\175\1\255\6\0\8\255\6\20\1\0*\23\1\255\6\0\8\255\6\21\1\0*\24\1\255\6\0\8\255\6\175\1\22\1\0(\23\1\177\1\255\6\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\255\6\173\1\20\1\0\4\21\1\175\1\255\4\173\1\20\1\0\16\21\1\175\1\255\4\173\1\20\1\0\4\21\1\175\1\255\6\0\8\255\6\20\1\0\6\23\1\255\4\20\1\0\18\23\1\255\4\20\1\0\6\23\1\255\6\0\8\255\6\21\1\0\6\24\1\255\4\21\1\0\18\24\1\255\4\21\1\0\6\24\1\255\6\0\8\255\6\175\1\22\1\0\4\23\1\177\1\255\4\175\1\22\1\0\16\23\1\177\1\255\4\175\1\22\1\0\4\23\1\177\1\255\6\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\2558\0\8\245\1\2556\243\1\0\8\179\1\2556\175\1\0\8)\1\240\1\2554\239\1'\1\0\t(\1\177\1\244\1\2550\243\1\175\1'\1\0\255\0\255\0\255\0\8",
+	}
+
+	glyphs.kit = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\140\2\1M\1\167\1\224\1\254\1\253\1\225\1\167\1L\1\1\1\0005,\1\203\1\255\8\203\1,\1\0003D\1\244\1\255\n\244\1F\1\0\22#\1\140\1\211\1\249\1\254\1\227\1\185\1\142\1d\0018\1\14\1\0\16+\1\243\1\255\12\244\1,\1\0\19\3\1\131\1\250\1\255\n\225\1\183\1\139\1Y\1\5\1\0\n\1\1\201\1\255\4\168\0017\1\5\2:\1\170\1\255\4\203\1\1\1\0\17\3\1\166\1\255\16\164\1\0\nI\1\255\4m\1\0\6q\1\255\4L\1\0\16\3\1\163\1\255\17\245\1\0\n\164\1\255\3\170\1\0\8\174\1\255\3\166\1\0\15\2\1\161\1\255\18\184\1\0\n\222\1\255\3:\1\0\8=\1\255\3\223\1\0\14\2\1\159\1\255\18\164\1\15\1\0\n\250\1\255\3\6\1\0\8\t\1\255\3\251\1\0\r\2\1\156\1\255\17\235\1T\1\0\12\249\1\255\3\8\1\0\8\11\1\255\3\251\1\0\12\1\1\154\1\255\17\177\1\23\1\0\r\221\1\255\3>\1\0\8?\1\255\3\222\1\0\11\1\1\151\1\255\16\241\1a\1\0\15\162\1\255\3\176\1\0\8\177\1\255\3\163\1\0\n\1\1\148\1\255\16\189\1\31\1\0\16G\1\255\4x\1\0\6x\1\255\4\177\1\14\1\0\8\1\1\146\1\255\15\246\1n\1\1\1\0\17\1\1\197\1\255\4\179\1B\1\r\1\12\1C\1\180\1\255\6\223\1@\1\0\7`\1\255\15\200\1'\1\0\20'\1\241\1\255\16\253\1\142\1\t\1\0\5<\1\241\1\255\12\250\1{\1\4\1\0\22?\1\241\1\255\17\214\0015\1\0\5\31\1\190\1\255\n\210\0011\1\0\25'\1\196\1\255\8\208\1\252\1\255\7\251\1\129\1\5\1\0\4\1\1o\1\246\1\255\6\252\1\137\1\7\1\0\28E\1\159\1\219\1\248\1\247\1\218\1\159\1E\1\1\1[\1\252\1\255\8\204\1+\1\0\5(\1\201\1\255\4\220\1;\1\0(_\1\253\1\255\8\247\1w\1\3\1\0\4\4\1w\1\249\1\254\1\153\1\12\1\0*a\1\253\1\255\t\194\1\"\1\0\5*\0016\1\0-b\1\253\1\255\t\245\1o\1\1\1\0003c\1\253\1\255\n\185\1\28\1\0002V\1\251\1\255\11\237\1X\1\0000T\1\251\1\255\14\170\1\20\1\0-T\1\251\1\255\16\232\1O\1\0+T\1\251\1\255\19\162\1\r\1\0\31C\1\157\1\215\1\246\1\248\1\219\1\160\1G\1\1\1V\1\251\1\255\21\223\1?\1\0\28$\1\192\1\255\8\208\1\251\1\255\7\251\1\132\1\130\1\255\r\253\1\141\1\8\1\0\0259\1\239\1\255\17\216\0017\1\0\2\130\1\255\14\214\0014\1\0\23\"\1\237\1\255\16\254\1\146\1\n\1\0\4\134\1\255\14\251\1\128\1\5\1\0\21\189\1\255\4\168\0017\1\5\2:\1\170\1\255\6\225\1B\1\0\7\137\1\255\15\204\1*\1\0\19>\1\255\4m\1\0\6q\1\255\4\179\1\15\1\0\t\140\1\255\15\247\1r\1\2\1\0\17\152\1\255\3\170\1\0\8\174\1\255\3\164\1\0\11\144\1\255\16\193\1!\1\0\16\209\1\255\3:\1\0\8=\1\255\3\223\1\0\11\1\1\147\1\255\16\242\1e\1\0\15\238\1\255\3\6\1\0\8\t\1\255\3\251\1\0\12\1\1\150\1\255\17\181\1\25\1\0\r\237\1\255\3\8\1\0\8\n\1\255\3\250\1\0\r\1\1\153\1\255\17\236\1W\1\0\12\209\1\255\3>\1\0\8?\1\255\3\222\1\0\14\2\1\156\1\255\18\168\1\17\1\0\n\151\1\255\3\176\1\0\8\177\1\255\3\164\1\0\15\2\1\159\1\255\18\190\1\0\n<\1\255\4x\1\0\6w\1\255\4H\1\0\16\2\1\162\1\255\17\251\1\0\11\187\1\255\4\179\1B\1\r\1\12\1C\1\180\1\255\4\197\1\1\1\0\17\3\1\164\1\255\16\167\1\0\11!\1\237\1\255\12\241\1(\1\0\19\2\1~\1\249\1\255\n\225\1\183\1\139\1Y\1\5\1\0\0128\1\237\1\255\n\242\1?\1\0\22 \1\136\1\208\1\247\1\253\1\227\1\186\1\142\1d\0018\1\14\1\0\18!\1\189\1\255\8\196\1'\1\0006>\1\153\1\213\1\240\1\242\1\215\1\156\1C\1\0\255\0\255\0\175",
+	}
+
+	glyphs.landed = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\21+\1\180\1\246\1\255\20\246\1\178\1)\1\0%+\1\241\1\255\24\240\1(\1\0$\180\1\255\26\176\1\0$\246\1\255\26\243\1\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0$\255\28\0\24S\1\235\1\2550\234\1O\1\0\12\234\1\2552\232\1\0\12\234\1\2552\231\1\0\12T\1\251\1\2550\251\1S\1\0\rT\1\251\1\255.\252\1[\1\0\15T\1\251\1\255,\252\1[\1\0\17T\1\251\1\255*\252\1[\1\0\19T\1\251\1\255(\252\1[\1\0\21T\1\251\1\255&\252\1[\1\0\23T\1\251\1\255$\252\1[\1\0\25T\1\251\1\255\"\252\1[\1\0\27T\1\251\1\255 \252\1[\1\0\29T\1\251\1\255\30\252\1[\1\0\31T\1\251\1\255\28\252\1[\1\0!T\1\251\1\255\26\252\1[\1\0#T\1\251\1\255\24\252\1[\1\0%T\1\251\1\255\22\252\1[\1\0'T\1\251\1\255\20\252\1[\1\0)T\1\251\1\255\18\252\1[\1\0+T\1\251\1\255\16\252\1[\1\0-T\1\251\1\255\14\252\1[\1\0/T\1\251\1\255\12\252\1[\1\0001T\1\251\1\255\n\252\1[\1\0003T\1\251\1\255\8\252\1[\1\0005T\1\251\1\255\6\252\1[\1\0007T\1\251\1\255\4\252\1[\1\0009T\1\251\1\255\2\252\1[\1\0;S\1\232\2S\1\0\255\0\31",
+	}
+
+	glyphs.letters = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\137+\1\180\1\246\1\255,\246\1\178\1)\1\0\r+\1\241\1\2550\240\1(\1\0\12\180\1\2552\176\1\0\12\246\1\2552\243\1\0\12\2554\0\12\2554\0\12\255\15\172\1\19\1\20\1\174\1\255!\0\12\255\14\246\1\19\1\0\2\19\1\246\1\255 \0\12\255\14\155\1\0\4\156\1\255 \0\12\255\0143\1\0\0040\1\255 \0\12\255\r\195\1\0\6\196\1\255\31\0\12\255\rW\1\0\6X\1\255\31\0\12\255\12\230\1\5\1\0\6\5\1\228\1\255\30\0\12\255\12\127\1\0\3)\2\0\3\127\1\255\30\0\12\255\11\249\1\25\1\0\3\148\2\0\3\25\1\249\1\255\12\254\1\180\1X\1\30\1\2\1\4\1 \1Z\1\181\1\254\1\255\7\0\12\255\11\166\1\0\3\14\1\242\2\14\1\0\3\166\1\255\11\219\0018\1\0\8:\1\219\1\255\6\0\12\255\11;\1\0\3l\1\255\2l\1\0\3;\1\255\11,\1\0\n\19\1\209\1\255\5\0\12\255\n\206\1\0\3\1\1\215\1\255\2\215\1\1\1\0\3\206\1\255\t\254\1\7\1\0\11!\1\244\1\255\4\0\12\255\nb\1\0\3E\1\255\4E\1\0\3b\1\255\nv\1\0\2Q\1\197\1\249\1\248\1\195\1O\1\0\4\137\1\255\4\0\12\255\t\236\1\t\1\0\3\177\1\255\4\177\1\0\3\t\1\236\1\255\n\208\1\209\1\255\6i\1\0\0033\1\255\4\0\12\255\t\137\1\0\3 \1\252\1\255\4\252\1 \1\0\3\137\1\255\18\233\1\0\3\8\1\255\4\0\12\255\8\252\1!\1\0\3\138\1\255\6\137\1\0\3\30\1\252\1\255\18\0\4\255\4\0\12\255\8\176\1\0\3\t\1\236\1\255\6\236\1\t\1\0\3\176\1\255\t\254\1\180\1X\1 \1\3\2\31\1Z\1\182\1\0\4\255\4\0\12\255\8D\1\0\3b\1\255\8b\1\0\3D\1\255\8\218\0017\1\0\12\255\4\0\12\255\7\214\1\1\1\0\16\1\1\214\1\255\6\207\1\18\1\0\r\255\4\0\12\255\7l\1\0\18l\1\255\5\242\1\31\1\0\14\255\4\0\12\255\6\241\1\r\1\0\18\r\1\241\1\255\4\135\1\0\4O\1\196\1\249\1\248\1\194\1M\1\0\5\255\4\0\12\255\6\147\1\0\20\147\1\255\4/\1\0\3m\1\255\6i\1\0\4\255\4\0\12\255\5\254\1(\1\0\3\128\1\255\12\128\1\0\3(\1\254\1\255\3\6\1\0\3\237\1\255\6\234\1\0\4\255\4\0\12\255\5\186\1\0\3\5\1\230\1\255\12\230\1\5\1\0\3\186\1\255\3\6\1\0\3\236\1\255\6\233\1\0\4\255\4\0\12\255\5N\1\0\3X\1\255\14X\1\0\3N\1\255\0030\1\0\3j\1\255\6f\1\0\4\255\4\0\12\255\4\223\1\3\1\0\3\196\1\255\14\196\1\0\3\3\1\223\1\255\2\136\1\0\4N\1\193\1\246\2\192\1K\1\0\5\255\4\0\12\255\4u\1\0\0031\1\255\0161\1\0\3u\1\255\2\243\1!\1\0\14\255\4\0\12\255\4\20\1\0\3\157\1\255\16\157\1\0\3\22\1\255\3\209\1\19\1\0\r\255\4\0\12\255\4\21\1\0\2\19\1\246\1\255\16\246\1\19\1\0\2\24\1\255\4\220\1;\1\0\8\2\1\0\2\24\1\255\4\0\12\255\4\175\1\22\1\24\1\176\1\255\18\174\1\23\2\176\1\255\5\254\1\183\1]\1\"\1\5\2\"\1^\1\186\1\175\1\24\1\23\1\178\1\255\4\0\12\2554\0\12\2554\0\12\2554\0\12\2554\0\12\245\1\2552\243\1\0\12\179\1\2552\175\1\0\12)\1\240\1\2550\239\1'\1\0\r(\1\177\1\244\1\255,\243\1\175\1'\1\0\255\0\255\0\137",
+	}
+
+	glyphs.listBullets = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\11+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\6\248\1j\1\12\1\r\1k\1\248\1\255$\0\16\255\6i\1\0\4m\1\255\4\173\1\20\1\0\22\21\1\175\1\255\6\0\16\255\6\r\1\0\4\16\1\255\4\20\1\0\24\23\1\255\6\0\16\255\6\14\1\0\4\16\1\255\4\21\1\0\24\24\1\255\6\0\16\255\6k\1\0\4o\1\255\4\175\1\22\1\0\22\23\1\177\1\255\6\0\16\255\6\248\1m\1\14\1\16\1o\1\248\1\255$\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\6\248\1j\1\12\1\r\1k\1\248\1\255$\0\16\255\6i\1\0\4m\1\255\4\173\1\20\1\0\22\21\1\175\1\255\6\0\16\255\6\r\1\0\4\16\1\255\4\20\1\0\24\23\1\255\6\0\16\255\6\14\1\0\4\16\1\255\4\21\1\0\24\24\1\255\6\0\16\255\6k\1\0\4o\1\255\4\175\1\22\1\0\22\23\1\177\1\255\6\0\16\255\6\248\1m\1\14\1\16\1o\1\248\1\255$\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\6\248\1j\1\12\1\r\1k\1\248\1\255$\0\16\255\6i\1\0\4m\1\255\4\173\1\20\1\0\22\21\1\175\1\255\6\0\16\255\6\r\1\0\4\16\1\255\4\20\1\0\24\23\1\255\6\0\16\255\6\14\1\0\4\16\1\255\4\21\1\0\24\24\1\255\6\0\16\255\6k\1\0\4o\1\255\4\175\1\22\1\0\22\23\1\177\1\255\6\0\16\255\6\248\1m\1\14\1\16\1o\1\248\1\255$\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.lock = {
+		w = 64,
+		h = 64,
+		data = "\0\155$\1|\1\189\1\231\1\253\2\231\1\189\1{\1#\1\0004$\1\173\1\253\1\255\8\253\1\170\1!\1\0001`\1\245\1\255\12\244\1]\1\0/y\1\255\16v\1\0-`\1\255\5\204\1e\1#\1\4\2$\1g\1\205\1\255\5\\\1\0+$\1\245\1\255\3\245\1`\1\1\1\0\6\1\1d\1\246\1\255\3\243\1 \1\0*\173\1\255\3\245\1;\1\0\n>\1\246\1\255\3\168\1\0)$\1\253\1\255\3a\1\0\12f\1\255\3\252\1!\1\0(}\1\255\3\204\1\1\1\0\12\1\1\207\1\255\3y\1\0(\189\1\255\3e\1\0\14i\1\255\3\186\1\0(\232\1\255\3$\1\0\14'\1\255\3\229\1\0(\252\1\255\3\4\1\0\14\7\1\255\3\250\1\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0\29+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.lowhp = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\144,\1z\1\181\1\223\1\249\1\255\1\249\1\227\1\189\1\136\1B\1\3\1\0\12\3\1C\1\137\1\189\1\228\1\249\1\255\1\248\1\222\1\180\1y\1*\1\0\25\1\1S\1\201\1\255\11\229\1z\1\r\1\0\8\15\1|\1\230\1\255\11\200\1Q\1\1\1\0\21(\1\196\1\255\15\232\1W\1\0\6Z\1\234\1\255\15\194\1&\1\0\19V\1\245\1\255\18\154\1\5\1\0\2\6\1\157\1\255\18\243\1T\1\0\17i\1\254\1\255\20\178\1\6\2\182\1\255\20\253\1g\1\0\15V\1\254\1\255\22\158\1\161\1\255\22\253\1T\1\0\r(\1\244\1\2550\243\1&\1\0\11\1\1\196\1\2552\194\1\1\1\0\nT\1\2554P\1\0\n\201\1\2554\198\1\0\t,\1\2556(\1\0\8z\1\2556u\1\0\8\180\1\2556\177\1\0\8\222\1\2556\218\1\0\8\247\1\2556\243\1\0\8\2557\253\1\0\8\247\1\255\15\174\1\21\2\174\1\255#\245\1\0\8\227\1\255\14\224\1\r\1\0\2\r\1\224\1\255\"\224\1\0\8\192\1\255\r\254\1D\1\0\4D\1\254\1\255!\189\1\0\8\144\1\255\r\152\1\0\6\152\1\255!\139\1\0\8P\1\255\12\224\1\r\1\0\6\r\1\224\1\255 K\1\0\8\11\1\220\1\255\n\254\1D\1\0\3\r\2\0\3D\1\254\1\255\30\245\1\n\1\0\25\152\1\151\1\0\4\152\1\255\4\173\1\21\1\0\6\23\1\178\1\255\16\164\1\0\25D\1\254\2C\1\0\3\r\1\224\1\255\2\224\1\r\1\0\8\24\1\255\16=\1\0\24\r\1\224\1\255\2\224\1\r\1\0\3C\1\254\2D\1\0\t\23\1\255\15\201\1\0\24\24\1\177\1\255\4\152\1\0\4\151\1\152\1\0\t\23\1\176\1\255\15H\1\0\r!\1\238\1\255\15\254\1D\1\0\3\r\2\0\3D\1\254\1\255\20\186\1\0\14!\1\248\1\255\16\224\1\r\1\0\6\r\1\224\1\255\20\248\1(\1\0\15{\1\255\17\152\1\0\6\152\1\255\21z\1\0\16\4\1\195\1\255\16\254\1D\1\0\4D\1\254\1\255\20\193\1\3\1\0\17\28\1\234\1\255\16\224\1\r\1\0\2\r\1\224\1\255\20\233\1\27\1\0\19>\1\249\1\255\16\174\1\23\2\177\1\255\20\249\1=\1\0\21`\1\254\1\255&\254\1_\1\0\23y\1\255&y\1\0\25\135\1\255$\134\1\0\27\137\1\255\"\136\1\0\29~\1\255 }\1\0\31i\1\252\1\255\28\252\1i\1\0!M\1\243\1\255\26\243\1M\1\0#/\1\223\1\255\24\223\1.\1\0%\20\1\187\1\255\22\186\1\20\1\0'\3\1\130\1\253\1\255\18\253\1\129\1\3\1\0*B\1\228\1\255\16\228\1A\1\0-\19\1\169\1\255\14\169\1\18\1\0000X\1\235\1\255\n\235\1X\1\0003\21\1\164\1\255\8\163\1\21\1\0006D\1\215\1\255\4\214\1B\1\0009\5\1p\1\229\2o\1\5\1\0\255\0\158",
+	}
+
+	glyphs.missing = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\11+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\n\173\1\21\2\171\1\255\20\171\1\21\2\175\1\255\n\0\16\255\n\21\1\0\2\4\1\168\1\255\18\168\1\4\1\0\2\23\1\255\n\0\16\255\n\22\1\0\3\4\1\168\1\255\16\168\1\4\1\0\3\24\1\255\n\0\16\255\n\171\1\4\1\0\3\4\1\168\1\255\14\168\1\4\1\0\3\4\1\172\1\255\n\0\16\255\11\171\1\4\1\0\3\3\1\163\1\255\12\170\1\4\1\0\3\3\1\164\1\255\11\0\16\255\12\171\1\4\1\0\3\3\1\163\1\255\n\170\1\4\1\0\3\3\1\164\1\255\12\0\16\255\r\171\1\4\1\0\3\3\1\163\1\255\8\170\1\4\1\0\3\3\1\164\1\255\r\0\16\255\14\171\1\4\1\0\3\3\1\163\1\255\6\170\1\4\1\0\3\3\1\164\1\255\14\0\16\255\15\171\1\4\1\0\3\3\1\163\1\255\4\170\1\4\1\0\3\3\1\164\1\255\15\0\16\255\16\171\1\4\1\0\3\3\1\163\1\255\2\170\1\4\1\0\3\3\1\164\1\255\16\0\16\255\17\171\1\4\1\0\3\3\1\163\1\170\1\4\1\0\3\3\1\164\1\255\17\0\16\255\18\168\1\4\1\0\3\4\2\0\3\4\1\168\1\255\18\0\16\255\19\171\1\4\1\0\6\3\1\164\1\255\19\0\16\255\20\171\1\4\1\0\4\3\1\164\1\255\20\0\16\255\20\170\1\4\1\0\4\3\1\163\1\255\20\0\16\255\19\170\1\4\1\0\6\3\1\163\1\255\19\0\16\255\18\168\1\4\1\0\3\4\2\0\3\4\1\168\1\255\18\0\16\255\17\170\1\4\1\0\3\3\1\164\1\171\1\4\1\0\3\3\1\163\1\255\17\0\16\255\16\170\1\4\1\0\3\3\1\164\1\255\2\171\1\4\1\0\3\3\1\163\1\255\16\0\16\255\15\170\1\4\1\0\3\3\1\164\1\255\4\171\1\4\1\0\3\3\1\163\1\255\15\0\16\255\14\170\1\4\1\0\3\3\1\164\1\255\6\171\1\4\1\0\3\3\1\163\1\255\14\0\16\255\r\170\1\4\1\0\3\3\1\164\1\255\8\171\1\4\1\0\3\3\1\163\1\255\r\0\16\255\12\170\1\4\1\0\3\3\1\164\1\255\n\171\1\4\1\0\3\3\1\163\1\255\12\0\16\255\11\170\1\4\1\0\3\3\1\164\1\255\12\171\1\4\1\0\3\3\1\163\1\255\11\0\16\255\n\170\1\4\1\0\3\4\1\168\1\255\14\168\1\4\1\0\3\4\1\172\1\255\n\0\16\255\n\21\1\0\3\4\1\168\1\255\16\168\1\4\1\0\3\23\1\255\n\0\16\255\n\22\1\0\2\4\1\168\1\255\18\168\1\4\1\0\2\24\1\255\n\0\16\255\n\175\1\23\2\172\1\255\20\172\1\23\2\177\1\255\n\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.money = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\144\8\0017\1g\1\142\1\176\1\201\1\224\1\238\1\254\1\255\2\254\1\238\1\224\1\201\1\175\1\141\1f\0017\1\7\1\0),\1|\1\195\1\249\1\255\18\248\1\194\1{\1+\1\0#\11\1j\1\210\1\255\26\208\1h\1\n\1\0\30\5\1p\1\234\1\255\30\233\1l\1\4\1\0\27,\1\209\1\255\"\206\1)\1\0\25J\1\244\1\255$\242\1F\1\0\23=\1\248\1\255&\247\1:\1\0\21\15\1\229\1\255(\226\1\12\1\0\20z\1\255*v\1\0\20\208\1\255*\205\1\0\20\249\1\255*\247\1\0\20\255,\0\20\255,\138\1c\0014\1\5\1\0\16\255/\247\1\192\1y\1*\1\0\r\2553\208\1j\1\11\1\0\n\2555\234\1p\1\5\1\0\8\2557\209\1,\1\0\7\255\4\205\1\255\"\203\1\255\16\244\1K\1\0\6\255\4\4\1k\1\231\1\255\30\230\1h\1\3\1\255\17\248\1>\1\0\5\255\4\0\2\t\1f\1\203\1\255\26\202\1e\1\8\1\0\2\255\18\228\1\14\1\0\4\255\4\0\5'\1w\1\190\1\255\20\189\1v\1&\1\0\5\255\19w\1\0\4\249\1\255\3\19\1\0\7\255\4\171\1\197\1\220\1\238\1\249\1\255\2\249\1\238\1\219\1\197\1\171\1\255\4\0\7\22\1\255\19\205\1\0\4\207\1\255\3\133\1\0\7\255\4\0\12\255\4\0\7\136\1\255\19\247\1\0\4x\1\255\3\253\1h\1\0\6\255\4\0\12\255\4\0\6l\1\254\1\255\20\0\4\r\1\227\1\255\4\165\1\24\1\0\4\255\4\0\12\255\4\0\4\25\1\167\1\255\22\0\5;\1\247\1\255\4\243\1\140\1!\1\0\2\255\4\0\12\255\4\0\2\"\1\141\1\244\1\255\23\0\6F\1\242\1\255\5\253\1\193\1n\1\255\4\0\12\255\4n\1\194\1\254\1\255\25\0\7)\1\204\1\255\11_\1?\1(\1\20\1\8\1\0\2\8\1\20\1(\1@\1_\1\255 \0\8\4\1j\1\231\1\2555\0\n\t\1e\1\203\1\255.\203\1\255\4\0\r&\1v\1\189\1\246\1\255(\230\1h\1\3\1\255\4\0\16\5\0012\1b\1\137\1\255\4\249\1\255\2\249\1\238\1\255\26\202\1e\1\8\1\0\2\255\4\0\20\255\4\0\5\"\1r\1\184\1\255\20\189\1v\1&\1\0\5\255\4\0\20\249\1\255\3\19\1\0\7\255\4\169\1\196\1\217\1\238\1\248\1\255\2\249\1\238\1\219\1\197\1\171\1\255\4\0\7\22\1\255\3\246\1\0\20\207\1\255\3\133\1\0\7\255\4\0\12\255\4\0\7\136\1\255\3\204\1\0\20x\1\255\3\253\1h\1\0\6\255\4\0\12\255\4\0\6l\1\254\1\255\3t\1\0\20\r\1\227\1\255\4\165\1\24\1\0\4\255\4\0\12\255\4\0\4\25\1\167\1\255\4\223\1\11\1\0\21;\1\247\1\255\4\243\1\140\1!\1\0\2\255\4\0\12\255\4\0\2\"\1\141\1\244\1\255\4\246\0018\1\0\23E\1\242\1\255\5\253\1\193\1n\1\255\4\0\12\255\4n\1\194\1\254\1\255\5\240\1B\1\0\25(\1\205\1\255\11_\1@\1)\1\22\1\t\1\0\2\n\1\22\1)\1A\1_\1\255\11\202\1&\1\0\27\4\1k\1\232\1\255\30\231\1h\1\3\1\0\30\t\1f\1\204\1\255\26\201\1d\1\8\1\0#(\1x\1\190\1\246\1\255\18\245\1\188\1v\1&\1\0)\5\0014\1c\1\138\1\171\1\199\1\220\1\238\1\248\1\255\2\248\1\238\1\220\1\198\1\170\1\137\1a\0013\1\5\1\0\255\0\255\0\144",
+	}
+
+	glyphs.moon = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0Y4\1\146\1\224\1\228\1Q\1\0008\1\1P\1\202\1\255\4\237\1\1\1\00069\1\203\1\255\6\243\1\2\1\0004\n\1\147\1\253\1\255\7\178\1\0004'\1\212\1\255\tv\1\0003A\1\239\1\255\nG\1\0002K\1\247\1\255\11%\1\0001C\1\248\1\255\12\r\1\0000(\1\240\1\255\r\2\1\0/\11\1\213\1\255\14\2\1\0/\152\1\255\15\14\1\0.>\1\254\1\255\15%\1\0-\2\1\207\1\255\16H\1\0-W\1\255\17w\1\0-\206\1\255\17\180\1\0,:\1\255\18\243\1\t\1\0+\151\1\255\19S\1\0*\2\1\232\1\255\19\183\1\0*2\1\255\20\254\1,\1\0)n\1\255\21\173\1\0)\159\1\255\22B\1\0(\198\1\255\22\220\1\12\1\0'\226\1\255\23\164\1\0'\246\1\255\24x\1\0&\255\25\254\1g\1\0%\254\1\255\25\254\1v\1\0$\245\1\255\27\162\1\12\1\0\"\225\1\255\28\219\1@\1\0!\196\1\255\30\171\1+\1\0\31\156\1\255\31\253\1\181\1R\1\8\1\0\28j\1\255\"\243\1\178\1w\1G\1%\1\12\1\0\2\12\1$\1F\1u\1\176\1\241\1\236\1Q\1\0\r.\1\2551\229\1\0\r\1\1\228\1\2550\227\1\0\14\147\1\2550\144\1\0\0144\1\25501\1\0\15\201\1\255.\196\1\0\16R\1\255.L\1\0\16\1\1\202\1\255,\197\1\0\18:\1\253\1\255*\253\0015\1\0\19\148\1\255*\143\1\0\20\n\1\213\1\255(\208\1\8\1\0\21'\1\239\1\255&\236\1#\1\0\23A\1\248\1\255$\246\1<\1\0\25L\1\248\1\255\"\246\1G\1\0\27A\1\239\1\255 \238\1?\1\0\29'\1\213\1\255\30\213\1&\1\0\31\n\1\148\1\254\1\255\26\253\1\147\1\n\1\0\":\1\203\1\255\24\200\0018\1\0%\1\1R\1\201\1\255\20\198\1P\1\1\1\0)4\1\145\1\227\1\255\14\226\1\144\0012\1\0.\1\1,\1i\1\154\1\194\1\226\1\244\1\255\2\243\1\225\1\194\1\154\1h\1+\1\1\1\0\255\0\255\0\24",
+	}
+
+	glyphs.mouseLeft = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\23\15\1Z\1\157\1\205\1\238\1\255\n\237\1\205\1\156\1Y\1\15\1\0*&\1\158\1\246\1\255\18\246\1\156\1%\1\0&\t\1\141\1\251\1\255\22\250\1\139\1\t\1\0#$\1\212\1\255\26\210\1#\1\0!0\1\234\1\255\14\0\4\2\1\24\1C\1\133\1\221\1\255\5\233\0010\1\0\31$\1\234\1\255\15\0\8\2\1V\1\223\1\255\4\234\1#\1\0\29\n\1\212\1\255\16\0\n\12\1\164\1\255\4\210\1\t\1\0\28\141\1\255\17\0\11\1\1\139\1\255\4\138\1\0\27&\1\251\1\255\17\0\12\1\1\165\1\255\3\250\1$\1\0\26\158\1\255\18\0\r\12\1\224\1\255\3\155\1\0\25\15\1\246\1\255\18\0\14Y\1\255\3\245\1\r\1\0\24Z\1\255\19\0\14\3\1\223\1\255\3W\1\0\24\156\1\255\19\0\15\136\1\255\3\153\1\0\24\205\1\255\19\0\15F\1\255\3\202\1\0\24\238\1\255\19\0\15\27\1\255\3\234\1\0\24\253\1\255\19\0\15\6\1\255\3\251\1\0\24\255\20\0\16\255\4\0\24\255\20\0\16\255\4\0\24\255\20\0\16\255\4\0\24\255\20\0\16\255\4\0\24\255\20\0\16\255\4\0\24\255\20\0\16\255\4\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\253\1\255\3\3\1\0\30\6\1\255\3\251\1\0\24\238\1\255\3\24\1\0\30\28\1\255\3\234\1\0\24\204\1\255\3C\1\0\30G\1\255\3\201\1\0\24\156\1\255\3\133\1\0\30\137\1\255\3\152\1\0\24Y\1\255\3\221\1\2\1\0\28\3\1\224\1\255\3V\1\0\24\15\1\246\1\255\3V\1\0\28[\1\255\3\244\1\r\1\0\25\157\1\255\3\223\1\12\1\0\26\14\1\226\1\255\3\154\1\0\26%\1\250\1\255\3\163\1\1\1\0\24\1\1\168\1\255\3\249\1#\1\0\27\139\1\255\4\139\1\1\1\0\22\1\1\141\1\255\4\135\1\0\28\t\1\210\1\255\4\165\1\r\1\0\20\14\1\168\1\255\4\208\1\8\1\0\29#\1\234\1\255\4\224\1Y\1\3\1\0\16\3\1[\1\227\1\255\4\233\1\"\1\0\0310\1\234\1\255\5\223\1\136\1G\1\27\1\4\1\0\8\4\1\28\1G\1\137\1\225\1\255\5\233\1/\1\0!#\1\210\1\255\26\208\1\"\1\0#\t\1\138\1\250\1\255\22\249\1\135\1\8\1\0&$\1\155\1\245\1\255\18\245\1\154\1#\1\0*\r\1W\1\153\1\202\1\233\1\253\1\255\8\253\1\233\1\202\1\152\1V\1\r\1\0\255\0\23",
+	}
+
+	glyphs.mouseRight = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\23\15\1Z\1\157\1\205\1\238\1\255\n\237\1\205\1\156\1Y\1\15\1\0*&\1\158\1\246\1\255\18\246\1\156\1%\1\0&\t\1\141\1\251\1\255\22\250\1\139\1\t\1\0#$\1\212\1\255\26\210\1#\1\0!0\1\234\1\255\5\220\1\132\1C\1\24\1\2\1\0\4\255\14\233\0010\1\0\31$\1\234\1\255\4\220\1T\1\2\1\0\8\255\15\234\1#\1\0\29\n\1\212\1\255\4\160\1\11\1\0\n\255\16\210\1\t\1\0\28\141\1\255\4\136\1\0\12\255\17\138\1\0\27&\1\251\1\255\3\160\1\0\r\255\17\250\1$\1\0\26\158\1\255\3\220\1\11\1\0\r\255\18\155\1\0\25\15\1\246\1\255\3T\1\0\14\255\18\245\1\r\1\0\24Z\1\255\3\220\1\2\1\0\14\255\19W\1\0\24\156\1\255\3\132\1\0\15\255\19\153\1\0\24\205\1\255\3C\1\0\15\255\19\202\1\0\24\238\1\255\3\23\1\0\15\255\19\234\1\0\24\253\1\255\3\3\1\0\15\255\19\251\1\0\24\255\4\0\16\255\20\0\24\255\4\0\16\255\20\0\24\255\4\0\16\255\20\0\24\255\4\0\16\255\20\0\24\255\4\0\16\255\20\0\24\255\4\0\16\255\20\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\255\4\0 \255\4\0\24\253\1\255\3\3\1\0\30\6\1\255\3\251\1\0\24\238\1\255\3\24\1\0\30\28\1\255\3\234\1\0\24\204\1\255\3C\1\0\30G\1\255\3\201\1\0\24\156\1\255\3\133\1\0\30\137\1\255\3\152\1\0\24Y\1\255\3\221\1\2\1\0\28\3\1\224\1\255\3V\1\0\24\15\1\246\1\255\3V\1\0\28[\1\255\3\244\1\r\1\0\25\157\1\255\3\223\1\12\1\0\26\14\1\226\1\255\3\154\1\0\26%\1\250\1\255\3\163\1\1\1\0\24\1\1\168\1\255\3\249\1#\1\0\27\139\1\255\4\139\1\1\1\0\22\1\1\141\1\255\4\135\1\0\28\t\1\210\1\255\4\165\1\r\1\0\20\14\1\168\1\255\4\208\1\8\1\0\29#\1\234\1\255\4\224\1Y\1\3\1\0\16\3\1[\1\227\1\255\4\233\1\"\1\0\0310\1\234\1\255\5\223\1\136\1G\1\27\1\4\1\0\8\4\1\28\1G\1\137\1\225\1\255\5\233\1/\1\0!#\1\210\1\255\26\208\1\"\1\0#\t\1\138\1\250\1\255\22\249\1\135\1\8\1\0&$\1\155\1\245\1\255\18\245\1\154\1#\1\0*\r\1W\1\153\1\202\1\233\1\253\1\255\8\253\1\233\1\202\1\152\1V\1\r\1\0\255\0\23",
+	}
+
+	glyphs.okCircle = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\153\1\1/\1k\1\156\1\196\1\228\1\245\1\255\2\244\1\225\1\195\1\155\1i\1,\1\0/5\1\148\1\229\1\255\14\226\1\145\0011\1\0)\1\1T\1\202\1\255\20\198\1N\1\1\1\0%<\1\205\1\255\24\200\0016\1\0\"\11\1\151\1\254\1\255\26\253\1\144\1\t\1\0\31)\1\214\1\255\30\209\1$\1\0\29C\1\241\1\255 \237\1=\1\0\27L\1\248\1\255\"\246\1G\1\0\25C\1\248\1\255$\246\1>\1\0\23)\1\241\1\255&\237\1$\1\0\21\11\1\214\1\255(\209\1\8\1\0\20\151\1\255*\143\1\0\19<\1\254\1\255*\253\0015\1\0\17\1\1\205\1\255,\198\1\1\1\0\16T\1\255.L\1\0\16\202\1\255.\196\1\0\0155\1\25500\1\0\14\148\1\2550\142\1\0\r\1\1\229\1\255 \171\1\21\2\175\1\255\12\225\1\0\r/\1\255 \168\1\4\1\0\2\23\1\255\r)\1\0\12k\1\255\31\168\1\4\1\0\3\24\1\255\rf\1\0\12\157\1\255\30\168\1\4\1\0\3\4\1\172\1\255\r\152\1\0\12\197\1\255\29\168\1\4\1\0\3\4\1\168\1\255\14\192\1\0\12\226\1\255\28\168\1\4\1\0\3\4\1\168\1\255\15\222\1\0\12\245\1\255\27\168\1\4\1\0\3\4\1\168\1\255\16\242\1\0\12\254\1\255\26\168\1\4\1\0\3\4\1\168\1\255\17\252\1\0\12\254\1\255\r\173\1\21\2\171\1\255\8\168\1\4\1\0\3\4\1\168\1\255\18\252\1\0\12\245\1\255\r\21\1\0\2\4\1\168\1\255\6\168\1\4\1\0\3\4\1\168\1\255\19\242\1\0\12\225\1\255\r\22\1\0\3\4\1\168\1\255\4\168\1\4\1\0\3\4\1\168\1\255\20\223\1\0\12\196\1\255\r\171\1\4\1\0\3\4\1\168\1\255\2\168\1\4\1\0\3\4\1\168\1\255\21\193\1\0\12\156\1\255\14\168\1\4\1\0\3\4\1\168\2\4\1\0\3\4\1\168\1\255\22\152\1\0\12j\1\255\15\168\1\4\1\0\3\4\2\0\3\4\1\168\1\255\23f\1\0\12.\1\255\16\168\1\4\1\0\6\4\1\168\1\255\24)\1\0\12\1\1\228\1\255\16\168\1\4\1\0\4\4\1\168\1\255\24\225\1\0\14\147\1\255\17\168\1\4\1\0\2\4\1\168\1\255\25\142\1\0\0144\1\255\18\172\1\23\2\172\1\255\0261\1\0\15\201\1\255.\197\1\0\16R\1\255.M\1\0\16\1\1\203\1\255,\199\1\1\1\0\17:\1\253\1\255*\253\0015\1\0\19\148\1\255*\145\1\0\20\n\1\212\1\255(\209\1\t\1\0\21'\1\239\1\255&\238\1%\1\0\23@\1\247\1\255$\247\1?\1\0\25K\1\248\1\255\"\247\1J\1\0\27A\1\239\1\255 \238\1?\1\0\29'\1\212\1\255\30\209\1%\1\0\31\t\1\147\1\253\1\255\26\253\1\145\1\t\1\0\"7\1\201\1\255\24\199\0015\1\0%\1\1O\1\199\1\255\20\197\1M\1\1\1\0)2\1\144\1\226\1\255\14\225\1\142\0011\1\0/*\1g\1\153\1\193\1\223\1\242\1\255\2\242\1\223\1\192\1\152\1f\1)\1\0\255\0\154",
+	}
+
+	glyphs.person = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\155'\1p\1\170\1\213\1\243\1\255\2\242\1\212\1\169\1o\1%\1\0001\5\1_\1\204\1\255\12\202\1^\1\5\1\0-M\1\220\1\255\16\218\1J\1\0*\11\1\161\1\255\20\158\1\n\1\0'\26\1\208\1\255\22\205\1\25\1\0%\26\1\220\1\255\24\218\1\25\1\0#\11\1\206\1\255\26\205\1\n\1\0\"\160\1\255\28\156\1\0!M\1\255\30I\1\0\31\5\1\219\1\255\30\216\1\4\1\0\30`\1\255 Z\1\0\30\203\1\255 \198\1\0\29%\1\255!\254\1!\1\0\28n\1\255\"k\1\0\28\170\1\255\"\165\1\0\28\213\1\255\"\208\1\0\28\241\1\255\"\236\1\0\27\1\1\254\1\255\"\250\1\0\27\1\1\254\1\255\"\250\1\0\28\239\1\255\"\236\1\0\28\210\1\255\"\208\1\0\28\167\1\255\"\165\1\0\28n\1\255\"k\1\0\28$\1\255!\254\1!\1\0\29\200\1\255 \197\1\0\30\\\1\255 X\1\0\30\4\1\216\1\255\30\213\1\3\1\0\31I\1\255\30D\1\0!\156\1\255\28\152\1\0\"\t\1\204\1\255\26\200\1\8\1\0#\23\1\216\1\255\24\214\1\21\1\0%\23\1\203\1\255\22\201\1\22\1\0'\t\1\154\1\255\20\152\1\8\1\0)\26\1\179\1\255\18\177\1\25\1\0(?\1\176\1\252\1\255\20\252\1\174\1=\1\0$8\1\193\1\255\26\191\0016\1\0 \19\1\160\1\254\1\255\28\254\1\156\1\17\1\0\29G\1\231\1\255 \229\1D\1\0\26\1\1~\1\253\1\255\"\253\1{\1\1\1\0\23\6\1\165\1\255&\162\1\5\1\0\21\7\1\180\1\255(\177\1\6\1\0\19\3\1\175\1\255*\171\1\3\1\0\18\148\1\255,\144\1\0\17e\1\255.`\1\0\15+\1\246\1\255.\245\1(\1\0\r\4\1\204\1\2550\201\1\3\1\0\12p\1\2552n\1\0\12\234\1\2552\232\1\0\12\233\1\2552\231\1\0\12P\1\232\1\2550\231\1N\1\0\255\0\255\0\8",
+	}
+
+	glyphs.plus = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\11+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\22\173\1\20\1\21\1\175\1\255\22\0\16\255\22\20\1\0\2\23\1\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\8\173\1\20\1\0\28\21\1\175\1\255\8\0\16\255\8\20\1\0\30\23\1\255\8\0\16\255\8\21\1\0\30\24\1\255\8\0\16\255\8\175\1\22\1\0\28\23\1\177\1\255\8\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\21\1\0\2\24\1\255\22\0\16\255\22\175\1\22\1\23\1\177\1\255\22\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.pulse = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\137+\1\180\1\246\1\255,\246\1\178\1)\1\0\r+\1\241\1\2550\240\1(\1\0\12\180\1\2552\176\1\0\12\246\1\2552\243\1\0\12\2554\0\12\2554\0\12\255\18\171\1\19\2\173\1\255\30\0\12\255\17\234\1\15\1\0\2\19\1\246\1\255\29\0\12\255\17g\1\0\4\155\1\255\29\0\12\255\16\213\1\4\1\0\4,\1\254\1\255\28\0\12\255\16F\1\0\6\192\1\255\28\0\12\255\15\175\1\0\7S\1\255\28\0\12\255\14\249\1%\1\0\3\"\1\0\3\4\1\225\1\255\27\0\12\255\14\139\1\0\3\3\1\209\0013\1\0\3w\1\255\27\0\12\255\r\234\1\16\1\0\3h\1\255\1\157\1\0\3\17\1\245\1\255\26\0\12\255\rh\1\0\3\r\1\231\1\255\1\248\1\22\1\0\3\156\1\255\26\0\12\255\12\213\1\4\1\0\3\139\1\255\3y\1\0\3,\1\254\1\255\25\0\12\255\12F\1\0\3\"\1\248\1\255\3\228\1\5\1\0\3\192\1\255\25\0\12\255\11\176\1\0\4\175\1\255\5U\1\0\3S\1\255\25\0\12\255\n\249\1&\1\0\3A\1\255\6\194\1\0\3\3\1\223\1\255\24\0\12\255\4\173\1\20\1\0\8\3\1\207\1\255\0071\1\0\3x\1\255\n\171\1\20\1\0\6\23\1\178\1\255\4\0\12\255\4\20\1\0\te\1\255\8\158\1\0\3\19\1\246\1\255\8\233\1\14\1\0\8\26\1\255\4\0\12\255\4\21\1\0\8\14\1\232\1\255\8\247\1\20\1\0\3\156\1\255\8f\1\0\t\26\1\255\4\0\12\255\4\175\1\22\1\0\6\23\1\173\1\255\nz\1\0\3/\1\255\7\208\1\3\1\0\8\22\1\178\1\255\4\0\12\255\24\229\1\5\1\0\3\193\1\255\6E\1\0\3#\1\248\1\255\n\0\12\255\25U\1\0\3T\1\255\5\174\1\0\4\178\1\255\11\0\12\255\25\194\1\0\3\3\1\223\1\255\3\249\1%\1\0\3B\1\255\12\0\12\255\0264\1\0\3y\1\255\3\137\1\0\3\3\1\210\1\255\12\0\12\255\26\158\1\0\3\18\1\245\1\255\1\233\1\15\1\0\3i\1\255\r\0\12\255\26\248\1\23\1\0\3\157\1\255\1f\1\0\3\14\1\232\1\255\r\0\12\255\27z\1\0\3,\1\212\1\4\1\0\3\140\1\255\14\0\12\255\27\227\1\4\1\0\3\"\1\0\3$\1\249\1\255\14\0\12\255\28V\1\0\7\175\1\255\15\0\12\255\28\195\1\0\6A\1\255\16\0\12\255\0294\1\0\4\2\1\204\1\255\16\0\12\255\29\159\1\0\4f\1\255\17\0\12\255\29\247\1\21\1\0\2\14\1\232\1\255\17\0\12\255\30\177\1\23\2\174\1\255\18\0\12\2554\0\12\2554\0\12\245\1\2552\243\1\0\12\179\1\2552\175\1\0\12)\1\240\1\2550\239\1'\1\0\r(\1\177\1\244\1\255,\243\1\175\1'\1\0\255\0\255\0\137",
+	}
+
+	glyphs.refresh = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\28\t\0015\1Y\1r\1\129\1\136\1|\1m\1Q\1)\1\3\1\00022\1\133\1\202\1\251\1\255\t\243\1\185\1o\1\28\1\0,\7\1f\1\209\1\255\16\253\1\182\1F\1\0\nT\1\234\1\233\1O\1\0\26\2\1a\1\227\1\255\21\199\1;\1\0\7V\1\251\1\255\2\232\1\0\25&\1\196\1\255\7\253\1\216\1\172\1\142\1{\1w\1\129\1\148\1\183\1\229\1\255\7\254\1\155\1\14\1\0\4V\1\251\1\255\4\0\24[\1\244\1\255\5\250\1\175\1X\1\18\1\0\t#\1o\1\200\1\255\6\220\0010\1\0\2V\1\251\1\255\5\0\22\1\1\133\1\255\5\245\1\138\1\26\1\0\0152\1\173\1\254\1\255\4\245\1N\1V\1\251\1\255\6\0\22\134\1\255\5\174\1\28\1\0\19<\1\212\1\255\4\251\2\255\7\0\22\239\1\255\3\245\1^\1\0\22\8\1\147\1\255\12\0\22\199\1\255\2\233\0014\1\0\25f\1\252\1\255\n\0\22\30\1\156\1\159\1%\1\0\26Y\1\252\1\255\n\0003U\1\251\1\255\11\0002U\1\251\1\255\12\0001U\1\251\1\255\r\0000U\1\251\1\255\14\0000\235\1\255\15\0000\234\1\255\14\231\1\0000P\1\233\1\255\12\232\1N\1\0\255\0\255\0\255\0\19R\1\235\1\255\12\235\1Q\1\0000\235\1\255\14\234\1\0000\255\15\233\1\0000\255\14\252\1T\1\0000\255\r\252\1\\\1\0001\255\12\252\1\\\1\0002\255\11\252\1\\\1\0003\255\n\252\1Y\1\0\26&\1\165\1\160\1\30\1\0\22\255\n\252\1g\1\0\0259\1\236\1\255\2\198\1\0\22\255\12\150\1\t\1\0\22h\1\247\1\255\3\237\1\0\22\255\7\251\2\255\4\214\1?\1\0\19\"\1\181\1\255\5\130\1\0\22\255\6\251\1W\1N\1\244\1\255\5\178\0017\1\0\15\31\1\146\1\248\1\255\4\254\1\129\1\0\23\255\5\251\1W\1\0\0020\1\220\1\255\6\205\1t\1)\1\0\t\25\1b\1\183\1\252\1\255\5\242\1W\1\0\24\255\4\251\1W\1\0\4\14\1\155\1\254\1\255\7\235\1\188\1\155\1\136\1w\1\132\1\149\1\181\1\223\1\255\8\195\1#\1\0\25\234\1\255\2\251\1W\1\0\7;\1\199\1\255\21\225\1^\1\1\1\0\26O\1\233\1\232\1S\1\0\nF\1\182\1\253\1\255\16\209\1c\1\6\1\0,\27\1n\1\182\1\242\1\255\t\251\1\200\1\130\1/\1\0002\3\1&\1M\1k\1x\1\136\1}\1o\1W\0013\1\t\1\0\255\0\255\0\28",
+	}
+
+	glyphs.save = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\11+\1\180\1\246\1\255\31\251\1\196\1@\1\0\26+\1\241\1\255#\251\1W\1\0\25\180\1\255%\251\1W\1\0\24\246\1\255&\251\1W\1\0\23\255\4\0\31T\1\251\1\255\3\252\1\\\1\0\22\255\4\0 T\1\251\1\255\3\252\1\\\1\0\21\255\4\0!T\1\251\1\255\3\252\1\\\1\0\20\255\4\0\"T\1\251\1\255\3\252\1\\\1\0\19\255\4\0\nR\1\235\1\255\14\234\1P\1\0\7W\1\251\1\255\3\251\1W\1\0\18\255\4\0\n\235\1\255\16\232\1\0\8W\1\251\1\255\3\251\1W\1\0\17\255\4\0\n\234\1\255\16\231\1\0\tW\1\251\1\255\3\251\1?\1\0\16\255\4\0\nP\1\233\1\255\14\232\1N\1\0\nW\1\251\1\255\3\193\1\0\16\255\4\0'W\1\255\3\248\1\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0\7+\1\180\1\246\1\255\20\246\1\178\1)\1\0\7\255\4\0\16\255\4\0\6+\1\241\1\255\24\240\1(\1\0\6\255\4\0\16\255\4\0\6\180\1\255\26\176\1\0\6\255\4\0\16\255\4\0\6\246\1\255\26\243\1\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\255\4\0\6\255\28\0\6\255\4\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.search = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\150\15\1T\1\143\1\189\1\225\1\248\1\255\2\249\1\224\1\189\1\141\1P\1\15\1\0/\3\1P\1\180\1\250\1\255\12\249\1\178\1O\1\2\1\0*\1\1[\1\219\1\255\18\217\1Y\1\1\1\0'*\1\197\1\255\22\195\1'\1\0%e\1\247\1\255\6\217\1\143\1V\1,\1\15\1\0\2\16\1,\1W\1\144\1\218\1\255\6\245\1b\1\0\"\2\1\145\1\255\5\250\1\161\0015\1\0\0126\1\162\1\251\1\255\5\141\1\1\1\0\31\2\1\159\1\255\5\179\1%\1\0\16&\1\182\1\255\5\157\1\1\1\0\30\144\1\255\4\244\1_\1\0\20b\1\245\1\255\4\140\1\0\29d\1\255\4\230\0010\1\0\5\3\1D\1\144\1\199\1\234\1\255\2\234\1\198\1\143\1B\1\2\1\0\0052\1\231\1\255\4`\1\0\27)\1\246\1\255\3\230\1&\1\0\4\4\1i\1\223\1\255\n\221\1f\1\4\1\0\4&\1\231\1\255\3\245\1&\1\0\25\1\1\197\1\255\3\244\0010\1\0\4-\1\207\1\255\14\205\1*\1\0\0043\1\246\1\255\3\192\1\1\1\0\24Z\1\255\4_\1\0\4O\1\245\1\255\16\243\1K\1\0\4c\1\255\4U\1\0\23\3\1\218\1\255\3\179\1\0\4O\1\251\1\255\18\250\1K\1\0\4\184\1\255\3\213\1\1\1\0\22N\1\255\3\250\1%\1\0\3-\1\244\1\255\20\243\1)\1\0\3)\1\252\1\255\3I\1\0\22\177\1\255\3\161\1\0\3\4\1\208\1\255\22\204\1\3\1\0\3\165\1\255\3\173\1\0\21\r\1\249\1\255\0035\1\0\3h\1\255\24d\1\0\0039\1\255\3\247\1\12\1\0\20P\1\255\3\217\1\0\3\2\1\221\1\255\24\219\1\2\1\0\3\222\1\255\3K\1\0\20\139\1\255\3\143\1\0\3B\1\255\26@\1\0\3\148\1\255\3\134\1\0\20\185\1\255\3V\1\0\3\143\1\255\26\140\1\0\3Z\1\255\3\181\1\0\20\221\1\255\3+\1\0\3\200\1\255\26\196\1\0\3/\1\255\3\217\1\0\20\243\1\255\3\15\1\0\3\236\1\255\26\232\1\0\3\18\1\255\3\240\1\0\20\254\1\255\3\1\1\0\2\1\1\254\1\255\26\251\1\0\3\3\1\255\3\251\1\0\20\254\1\255\3\1\1\0\2\1\1\253\1\255\26\251\1\0\3\3\1\255\3\250\1\0\20\243\1\255\3\16\1\0\3\235\1\255\26\232\1\0\3\18\1\255\3\238\1\0\20\219\1\255\3,\1\0\3\197\1\255\26\194\1\0\0030\1\255\3\215\1\0\20\184\1\255\3X\1\0\3\141\1\255\26\138\1\0\3Z\1\255\3\180\1\0\20\136\1\255\3\145\1\0\3A\1\255\26>\1\0\3\149\1\255\3\133\1\0\20L\1\255\3\219\1\0\3\2\1\221\1\255\24\217\1\1\1\0\2\1\1\223\1\255\3H\1\0\20\12\1\247\1\255\0038\1\0\3e\1\255\24a\1\0\3;\1\255\3\245\1\n\1\0\21\173\1\255\3\164\1\0\3\3\1\205\1\255\22\203\1\3\1\0\3\167\1\255\3\168\1\0\22J\1\255\3\251\1(\1\0\3*\1\243\1\255\20\242\1'\1\0\3*\1\252\1\255\3E\1\0\22\2\1\213\1\255\3\184\1\0\4K\1\250\1\255\18\249\1G\1\0\4\187\1\255\3\209\1\1\1\0\23S\1\255\4d\1\0\4K\1\243\1\255\16\242\1G\1\0\4f\1\255\4O\1\0\24\1\1\190\1\255\3\246\0014\1\0\4)\1\205\1\255\14\202\1'\1\0\0045\1\246\1\255\3\186\1\0\26#\1\243\1\255\3\232\1(\1\0\4\3\1d\1\219\1\255\n\219\1b\1\3\1\0\4'\1\232\1\255\3\242\1!\1\0\27[\1\255\4\232\0014\1\0\5\2\1?\1\139\1\195\1\231\1\252\2\231\1\194\1\138\1>\1\2\1\0\0055\1\232\1\255\4Y\1\0\29\135\1\255\4\246\1e\1\0\20f\1\246\1\255\4\252\1W\1\0\29\1\1\150\1\255\5\186\1)\1\0\16*\1\187\1\255\7\251\1W\1\0\29\1\1\133\1\255\5\252\1\166\1:\1\0\12;\1\167\1\252\1\255\5\253\1\255\3\251\1W\1\0\30Z\1\242\1\255\6\222\1\149\1[\0010\1\20\1\0\2\20\0010\1Z\1\149\1\223\1\255\6\242\1Y\1W\1\251\1\255\3\251\1W\1\0\30\"\1\188\1\255\22\185\1!\1\0\2W\1\251\1\255\3\251\1W\1\0\31O\1\209\1\255\18\207\1M\1\0\5W\1\251\1\255\3\251\1W\1\0\31\1\1E\1\168\1\245\1\255\12\244\1\166\1B\1\0\8W\1\251\1\255\3\251\1W\1\0!\t\1G\1\130\1\175\1\212\1\235\1\249\1\246\1\234\1\212\1\177\1\130\1F\1\8\1\0\11W\1\251\1\255\3\251\1W\1\0:T\1\251\1\255\3\252\1\\\1\0:T\1\251\1\255\3\252\1\\\1\0:T\1\251\1\255\3\252\1\\\1\0:T\1\251\1\255\3\252\1\\\1\0:W\1\251\1\255\3\251\1S\1\0:W\1\251\1\255\3\232\1\0;W\1\251\1\255\2\231\1\0<S\1\232\2N\1\0\255\0\135",
+	}
+
+	glyphs.shield = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\139+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\22\173\1\20\1\21\1\175\1\255\22\0\16\255\22\20\1\0\2\23\1\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\255\22\0\4\255\22\0\16\254\1\255\21\0\4\255\21\253\1\0\16\248\1\255\21\0\4\255\21\246\1\0\16\236\1\255\21\0\4\255\21\233\1\0\16\216\1\255\21\0\4\255\21\213\1\0\16\189\1\255\21\0\4\255\21\186\1\0\16\155\1\255\21\0\4\255\21\151\1\0\16q\1\255\21\21\1\0\2\24\1\255\21n\1\0\16@\1\255\21\175\1\22\1\23\1\177\1\255\21<\1\0\16\12\1\250\1\255,\249\1\t\1\0\17\197\1\255,\193\1\0\18z\1\255,u\1\0\18'\1\255+\254\1\"\1\0\19\201\1\255\18\248\1j\1\12\1\r\1k\1\248\1\255\18\196\1\0\20b\1\255\18i\1\0\4m\1\255\18\\\1\0\20\8\1\231\1\255\17\r\1\0\4\16\1\255\17\228\1\6\1\0\21q\1\255\17\14\1\0\4\16\1\255\17m\1\0\22\8\1\223\1\255\16k\1\0\4o\1\255\16\221\1\7\1\0\23R\1\255\16\248\1m\1\14\1\16\1o\1\248\1\255\16N\1\0\25\174\1\255$\170\1\0\26\21\1\230\1\255\"\227\1\19\1\0\27?\1\250\1\255 \249\1;\1\0\29g\1\255 e\1\0\31\130\1\255\30\128\1\0!\137\1\255\28\136\1\0#z\1\254\1\255\24\254\1z\1\0%Z\1\246\1\255\22\246\1\\\1\0'0\1\217\1\255\20\217\0010\1\0)\11\1\150\1\254\1\255\16\254\1\150\1\12\1\0,<\1\209\1\255\14\209\1=\1\0/\3\1c\1\225\1\255\n\225\1d\1\3\1\0002\6\1d\1\213\1\255\6\212\1d\1\6\1\0006\1\1>\1\156\1\234\1\235\1\157\1>\1\0\255\0\30",
+	}
+
+	glyphs.shoot = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\153\1\1/\1k\1\156\1\196\1\228\1\245\1\255\2\244\1\225\1\195\1\155\1i\1,\1\0/5\1\148\1\229\1\255\14\226\1\145\0011\1\0)\1\1T\1\202\1\255\20\198\1N\1\1\1\0%<\1\205\1\255\24\200\0016\1\0\"\11\1\151\1\254\1\255\6\242\1\177\1w\1F\1$\1\12\1\0\2\r\1$\1G\1x\1\178\1\243\1\255\6\253\1\144\1\t\1\0\31)\1\214\1\255\5\253\1\180\1P\1\7\1\0\12\8\1Q\1\181\1\253\1\255\5\209\1$\1\0\29C\1\241\1\255\4\254\1\168\1)\1\0\18*\1\170\1\254\1\255\4\237\1=\1\0\27L\1\248\1\255\4\217\1=\1\0\22?\1\218\1\255\4\246\1G\1\0\25C\1\248\1\255\4\158\1\n\1\0\6\"\1m\1\167\1\210\1\0\4\210\1\167\1l\1\"\1\0\6\11\1\161\1\255\4\246\1>\1\0\23)\1\241\1\255\3\254\1s\1\0\5\4\1[\1\198\1\255\4\0\4\255\4\197\1Y\1\3\1\0\5u\1\254\1\255\3\237\1$\1\0\21\11\1\214\1\255\3\254\1e\1\0\5I\1\216\1\255\6\0\4\255\6\214\1F\1\0\5f\1\254\1\255\3\209\1\8\1\0\20\151\1\255\4s\1\0\4\n\1\156\1\255\8\0\4\255\8\153\1\8\1\0\4v\1\255\4\143\1\0\19<\1\254\1\255\3\158\1\0\4\23\1\204\1\255\t\0\4\255\t\201\1\22\1\0\4\162\1\255\3\253\0015\1\0\17\1\1\205\1\255\3\217\1\n\1\0\3\23\1\215\1\255\n\0\4\255\n\214\1\22\1\0\3\11\1\219\1\255\3\198\1\1\1\0\16T\1\255\3\254\1=\1\0\3\n\1\204\1\255\11\21\1\0\2\24\1\255\11\201\1\8\1\0\3A\1\255\4L\1\0\16\202\1\255\3\169\1\0\4\156\1\255\12\175\1\22\1\23\1\177\1\255\12\152\1\0\4\172\1\255\3\196\1\0\0155\1\255\3\253\1)\1\0\3I\1\255\29\254\1E\1\0\3,\1\254\1\255\0030\1\0\14\148\1\255\3\180\1\0\3\4\1\216\1\255\30\213\1\3\1\0\3\183\1\255\3\142\1\0\r\1\1\229\1\255\3P\1\0\3[\1\255 X\1\0\3T\1\255\3\225\1\0\r/\1\255\3\242\1\7\1\0\3\199\1\255 \196\1\0\3\t\1\244\1\255\3)\1\0\12k\1\255\3\177\1\0\3\"\1\255!\254\1 \1\0\3\182\1\255\3f\1\0\12\157\1\255\3v\1\0\3m\1\255\"j\1\0\3y\1\255\3\152\1\0\12\197\1\255\3G\1\0\3\167\1\255\"\164\1\0\3J\1\255\3\192\1\0\12\226\1\255\3$\1\0\3\210\1\255\"\208\1\0\3'\1\255\3\222\1\0\12\245\1\255\3\12\1\0\t\21\1\175\1\255\20\173\1\20\1\0\t\16\1\255\3\242\1\0\12\254\1\255\3\2\1\0\n\23\1\255\20\20\1\0\n\3\1\255\3\252\1\0\12\254\1\255\3\2\1\0\n\24\1\255\20\21\1\0\n\4\1\255\3\252\1\0\12\245\1\255\3\r\1\0\t\23\1\177\1\255\20\175\1\22\1\0\t\17\1\255\3\242\1\0\12\225\1\255\3$\1\0\3\210\1\255\"\207\1\0\3(\1\255\3\223\1\0\12\196\1\255\3H\1\0\3\167\1\255\"\163\1\0\3L\1\255\3\193\1\0\12\156\1\255\3w\1\0\3l\1\255\"i\1\0\3{\1\255\3\152\1\0\12j\1\255\3\178\1\0\3\"\1\254\1\255 \254\1\31\1\0\3\184\1\255\3f\1\0\12.\1\255\3\242\1\8\1\0\3\197\1\255 \195\1\0\3\11\1\246\1\255\3)\1\0\12\1\1\228\1\255\3Q\1\0\3Y\1\255 W\1\0\3W\1\255\3\225\1\0\14\147\1\255\3\181\1\0\3\3\1\214\1\255\30\211\1\3\1\0\3\186\1\255\3\142\1\0\0144\1\255\3\253\1*\1\0\3F\1\255\29\254\1B\1\0\3/\1\254\1\255\0031\1\0\15\201\1\255\3\170\1\0\4\153\1\255\12\173\1\20\1\21\1\175\1\255\12\148\1\0\4\176\1\255\3\197\1\0\16R\1\255\3\254\1?\1\0\3\8\1\201\1\255\11\20\1\0\2\23\1\255\11\198\1\7\1\0\3E\1\255\4M\1\0\16\1\1\203\1\255\3\218\1\11\1\0\3\22\1\214\1\255\n\0\4\255\n\213\1\21\1\0\3\r\1\221\1\255\3\199\1\1\1\0\17:\1\253\1\255\3\161\1\0\4\22\1\201\1\255\t\0\4\255\t\198\1\21\1\0\4\167\1\255\3\253\0015\1\0\19\148\1\255\4u\1\0\4\8\1\152\1\255\8\0\4\255\7\254\1\148\1\7\1\0\4{\1\255\4\145\1\0\20\n\1\212\1\255\3\254\1f\1\0\5E\1\213\1\255\6\0\4\255\6\211\1B\1\0\5j\1\254\1\255\3\209\1\t\1\0\21'\1\239\1\255\3\254\1v\1\0\5\3\1X\1\196\1\255\4\0\4\255\3\254\1\195\1W\1\2\1\0\5{\1\254\1\255\3\238\1%\1\0\23@\1\247\1\255\4\162\1\11\1\0\6 \1j\1\164\1\207\1\0\4\207\1\163\1i\1\31\1\0\6\r\1\167\1\255\4\247\1?\1\0\25K\1\248\1\255\4\219\1@\1\0\22E\1\221\1\255\4\247\1J\1\0\27A\1\239\1\255\5\173\1,\1\0\18/\1\176\1\255\5\238\1?\1\0\29'\1\212\1\255\5\254\1\183\1T\1\t\1\0\12\n\1W\1\186\1\254\1\255\5\209\1%\1\0\31\t\1\147\1\253\1\255\6\244\1\181\1z\1J\1(\1\15\1\0\2\17\1)\1L\1|\1\184\1\246\1\255\6\253\1\145\1\t\1\0\"7\1\201\1\255\24\199\0015\1\0%\1\1O\1\199\1\255\20\197\1M\1\1\1\0)2\1\144\1\226\1\255\14\225\1\142\0011\1\0/*\1g\1\153\1\193\1\223\1\242\1\255\2\242\1\223\1\192\1\152\1f\1)\1\0\255\0\154",
+	}
+
+	glyphs.signal = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\174*\1\179\1\246\2\177\1(\1\00096\1\240\1\255\4\239\1(\1\00076\1\240\1\255\6\176\1\00066\1\240\1\255\7\243\1\00052\1\237\1\255\t\00042\1\237\1\255\n\00032\1\237\1\255\11\00022\1\237\1\255\12\00012\1\237\1\255\r\00002\1\237\1\255\14\0/2\1\237\1\255\15\0.2\1\237\1\255\16\0-2\1\237\1\255\17\0,2\1\237\1\255\18\0+2\1\237\1\255\19\0*2\1\237\1\255\20\0)2\1\237\1\255\21\0(2\1\237\1\255\22\0'2\1\237\1\255\23\0&2\1\237\1\255\24\0%2\1\237\1\255\25\0$2\1\237\1\255\26\0#2\1\237\1\255\27\0\"2\1\237\1\255\28\0!2\1\237\1\255\29\0 2\1\237\1\255\30\0\0312\1\237\1\255\31\0\0302\1\237\1\255 \0\0292\1\237\1\255!\0\0282\1\237\1\255\"\0\0272\1\237\1\255#\0\0262\1\237\1\255$\0\0252\1\237\1\255%\0\0242\1\237\1\255&\0\0232\1\237\1\255'\0\0222\1\237\1\255(\0\0212\1\237\1\255)\0\0202\1\237\1\255*\0\0192\1\237\1\255+\0\0182\1\237\1\255,\0\0172\1\237\1\255-\0\16*\1\240\1\255.\0\16\179\1\255/\0\16\245\1\255/\0\16\245\1\255.\243\1\0\16\177\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\175\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\143",
+	}
+
+	glyphs.silenced = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\167\\\1\234\1\233\1P\1\0:\6\1\148\1\255\3\231\1\0\"K\1\230\1\232\1R\1\0\19\29\1\199\1\255\5\0\"\229\1\255\2\249\1E\1\0\17C\1\234\1\255\6\0\"\231\1\255\3\243\0014\1\0\14\1\1y\1\252\1\255\7\0\"V\1\253\1\255\3\234\1&\1\0\12\16\1\177\1\255\t\0#i\1\255\4\226\1\29\1\0\n/\1\219\1\255\n\0$\133\1\255\4\211\1\17\1\0\8[\1\244\1\255\11\0$\1\1\156\1\255\4\194\1\t\1\0\5\6\1\150\1\255\r\0%\3\1\176\1\255\4\176\1\3\1\0\4a\1\255\14\0&\t\1\194\1\255\4\155\1\1\1\0\3\25\1\224\1\255\r\0'\14\1\207\1\255\4\133\1\0\4$\1\232\1\255\12\0(\26\1\223\1\255\4q\1\0\0045\1\243\1\255\11\0)$\1\232\1\255\3\254\1^\1\0\4B\1\248\1\255\n\0\29+\1\180\1\246\1\255\15\249\1E\1\0\4[\1\254\1\255\t\0\14P\1\235\2Q\1\0\n+\1\241\1\255\18\243\0014\1\0\4q\1\255\t\0\14\233\1\255\2\232\1\0\n\180\1\255\20\234\1&\1\0\4\136\1\255\8\0\14\255\4\0\n\246\1\255\21\223\1\26\1\0\3\1\1\159\1\255\7\0\14\255\4\0\n\255\23\209\1\16\1\0\3\4\1\179\1\255\6\0\6S\1\236\1\234\1M\1\0\4\255\4\0\n\255\24\194\1\t\1\0\3\n\1\197\1\255\5\0\6\234\1\255\2\230\1\0\4\255\4\0\n\255\25\176\1\3\1\0\3\18\1\212\1\255\4\0\6\255\4\0\4\255\4\0\n\255\26\162\1\1\1\0\3\26\1\224\1\255\3\0\6\255\4\0\4\255\4\0\n\255\27\133\1\0\4%\1\233\1\255\2\0\6\255\4\0\4\255\4\0\n\255\28m\1\0\0048\1\244\1\238\1\0\6\255\4\0\4\255\4\0\n\255\28\253\1X\1\0\4'\1%\1\0\6\255\4\0\4\255\4\0\n\255\29\250\1H\1\0\11\255\4\0\4\255\4\0\n\255\30\245\0019\1\0\n\255\4\0\4\255\4\0\n\255\31\235\1(\1\0\t\255\4\0\4\255\4\0\n\255 \226\1\29\1\0\8\255\4\0\4\255\4\0\n\255!\211\1\17\1\0\7\255\4\0\4\255\4\0\n\255\"\199\1\n\1\0\6\255\4\0\4\255\4\0\n\255#\176\1\3\1\0\5\255\4\0\4\255\4\0\n\255$\155\1\1\1\0\4\234\1\255\2\229\1\0\4\255\4\0\n\255%\133\1\0\4Q\1\233\1\231\1J\1\0\4\255\4\0\n\245\1\255%m\1\0\11\255\4\0\n\179\1\255%\253\1X\1\0\n\255\4\0\n)\1\240\1\255%\249\1E\1\0\t\232\1\255\2\231\1\0\11(\1\177\1\244\1\255 \249\1\255\3\243\0014\1\0\8M\1\231\2N\1\0\25)\1\214\1\255\19X\1\253\1\255\3\235\1(\1\0%\14\1\172\1\255\18\0\1j\1\255\4\226\1\29\1\0%\1\1o\1\251\1\255\16\0\2\133\1\255\4\211\1\17\1\0&?\1\232\1\255\15\0\2\1\1\155\1\255\4\199\1\n\1\0&\28\1\198\1\255\14\0\3\3\1\172\1\255\4\178\1\4\1\0&\4\1\136\1\255\r\0\4\t\1\193\1\255\4\162\1\1\1\0'[\1\244\1\255\11\0\5\14\1\207\1\255\4\133\1\0()\1\214\1\255\n\0\6\26\1\222\1\255\4q\1\0(\16\1\177\1\255\t\0\7&\1\234\1\255\3\253\1V\1\0(\1\1z\1\252\1\255\7\0\0084\1\243\1\255\3\234\1\0*D\1\234\1\255\6\0\tE\1\249\1\255\2\236\1\1\1\0*\29\1\200\1\255\5\0\nR\1\235\1\236\1U\1\0,\7\1\150\1\255\3\228\1\0<]\1\232\1\231\1L\1\0\255\0\151",
+	}
+
+	glyphs.skull = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\25\4\0017\1q\1\161\1\199\1\227\1\246\1\255\2\245\1\228\1\198\1\161\1q\0016\1\3\1\0-\2\1G\1\162\1\238\1\255\14\237\1\160\1F\1\2\1\0(\8\1m\1\221\1\255\20\220\1k\1\8\1\0$\1\1_\1\228\1\255\24\226\1\\\1\1\1\0!!\1\190\1\255\28\189\1 \1\0\31R\1\241\1\255\30\239\1P\1\0\29|\1\254\1\255 \254\1y\1\0\26\1\1\142\1\255$\139\1\0\25\135\1\255&\131\1\0\23f\1\255(a\1\0\0215\1\249\1\255(\248\0011\1\0\19\t\1\217\1\255*\214\1\7\1\0\18\135\1\255,\128\1\0\17 \1\248\1\255,\246\1\27\1\0\16\154\1\255.\149\1\0\15\23\1\247\1\255.\246\1\20\1\0\14v\1\2550q\1\0\14\207\1\2550\203\1\0\r\31\1\2551\254\1\26\1\0\12`\1\2552[\1\0\12\149\1\2552\146\1\0\12\192\1\2552\189\1\0\12\223\1\2552\221\1\0\12\245\1\2552\242\1\0\12\254\1\255\r\172\1<\1\7\2=\1\173\1\255\12\172\1<\1\7\2=\1\173\1\255\r\252\1\0\12\254\1\255\12r\1\0\6s\1\255\nr\1\0\6s\1\255\12\252\1\0\12\244\1\255\11\171\1\0\8\175\1\255\8\171\1\0\8\175\1\255\11\240\1\0\12\222\1\255\11;\1\0\8>\1\255\8;\1\0\8>\1\255\11\218\1\0\12\189\1\255\11\8\1\0\8\n\1\255\8\8\1\0\8\n\1\255\11\186\1\0\12\146\1\255\11\8\1\0\8\n\1\255\8\8\1\0\8\n\1\255\11\142\1\0\12\\\1\255\11<\1\0\8?\1\255\8<\1\0\8?\1\255\11W\1\0\12\26\1\254\1\255\n\173\1\0\8\177\1\255\8\173\1\0\8\177\1\255\n\253\1\23\1\0\r\203\1\255\11s\1\0\6v\1\255\ns\1\0\6v\1\255\11\198\1\0\14r\1\255\12\175\1?\1\t\2?\1\177\1\255\12\175\1?\1\t\2?\1\177\1\255\12l\1\0\14\19\1\246\1\255.\244\1\17\1\0\15\150\1\255.\145\1\0\16\28\1\246\1\255,\245\1\26\1\0\17\129\1\255,~\1\0\18\8\1\214\1\255*\211\1\7\1\0\0192\1\248\1\255(\246\1.\1\0\21d\1\255(^\1\0\23\134\1\255&\130\1\0\25\142\1\255$\138\1\0\27{\1\254\1\255 \254\1x\1\0\29R\1\240\1\255\8\176\1\22\1\21\1\175\1\255\6\176\1\22\1\21\1\175\1\255\8\239\1O\1\0\31 \1\190\1\255\7\23\1\0\2\23\1\255\6\23\1\0\2\23\1\255\7\188\1\31\1\0!\1\1\255\7\0\4\255\6\0\4\255\7\1\1\0#\255\7\0\4\255\6\0\4\255\7\0$\255\7\0\4\255\6\0\4\255\7\0$\255\7\0\4\255\6\0\4\255\7\0$\245\1\255\6\0\4\255\6\0\4\255\6\243\1\0$\179\1\255\6\0\4\255\6\0\4\255\6\175\1\0$)\1\240\1\255\5\0\4\255\6\0\4\255\5\240\1'\1\0%(\1\177\1\244\1\255\2\198\1\0\4\202\1\255\4\199\1\0\4\202\1\255\2\244\1\176\1(\1\0\255\0\148",
+	}
+
+	glyphs.smoke = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\163\12\1M\1\137\1\185\1\219\1\243\1\255\2\243\1\219\1\185\1\137\1M\1\12\1\0/\2\1J\1\174\1\247\1\255\12\247\1\173\1G\1\1\1\0*\1\1T\1\214\1\255\18\211\1Q\1\0(%\1\190\1\255\22\187\1!\1\0%^\1\244\1\255\24\242\1W\1\0\"\1\1\138\1\255\27\254\1\130\1\0 \1\1\155\1\255\30\146\1\1\1\0\30\139\1\255 \131\1\0\29`\1\255\"W\1\0\27%\1\245\1\255\"\242\1!\1\0\25\1\1\192\1\255$\187\1\0\25T\1\255&P\1\0\16\15\1Y\1\128\1\14\1\0\3\2\1\213\1\255&\210\1\1\1\0\r&\1\157\1\247\1\255\2X\1\0\3K\1\255(G\1\0\11\n\1\141\1\251\1\255\3\254\1\26\1\0\3\175\1\255(\172\1\0\n%\1\212\1\255\5\209\1\0\3\r\1\248\1\255(\246\1\11\1\0\0081\1\234\1\255\6\148\1\0\3O\1\255*K\1\0\7$\1\235\1\255\7c\1\0\3\138\1\255*\135\1\0\6\n\1\211\1\255\8:\1\0\3\185\1\255*\181\1\0\6\141\1\255\t\29\1\0\3\220\1\255*\217\1\0\5&\1\250\1\255\t\t\1\0\3\243\1\255*\240\1\0\5\158\1\255\n\0\4\254\1\255*\252\1\0\4\15\1\246\1\255\n\21\1\0\2\26\1\255+\251\1\0\4Z\1\255\11\174\1\22\1\24\1\181\1\255+\238\1\0\4\157\1\255:\214\1\0\4\205\1\255:\179\1\0\4\238\1\255:\131\1\0\4\253\1\255:G\1\0\4\253\1\2559\245\1\t\1\0\4\237\1\2559\169\1\0\5\204\1\2559E\1\0\5\154\1\2558\208\1\1\1\0\5U\1\2558N\1\0\6\11\1\242\1\2556\186\1\0\8\145\1\2555\241\1 \1\0\8\27\1\245\1\2553\254\1W\1\0\nw\1\2553\132\1\0\11\3\1\191\1\2551\149\1\1\1\0\12\21\1\218\1\255.\254\1\131\1\1\1\0\14\29\1\216\1\255,\241\1V\1\0\17\18\1\184\1\255*\184\1!\1\0\19\1\1k\1\239\1\255&\208\1N\1\0\23\19\1\131\1\233\1\255!\245\1\167\1E\1\1\1\0\26\5\1F\1\141\1\192\1\230\1\250\1\255\23\239\1\214\1\179\1\132\1H\1\n\1\0\255\0\255\0\147",
+	}
+
+	glyphs.sortDown = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\11+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255 \171\1\20\1\21\1\171\1\255\12\0\16\255\31\170\1\4\1\0\2\3\1\163\1\255\11\0\16\255\8\173\1\20\1\0\n\21\1\175\1\255\8\168\1\4\1\0\4\4\1\168\1\255\n\0\16\255\8\20\1\0\12\23\1\255\7\168\1\4\1\0\6\4\1\168\1\255\t\0\16\255\8\21\1\0\12\24\1\255\6\168\1\4\1\0\8\4\1\168\1\255\8\0\16\255\8\175\1\22\1\0\n\23\1\177\1\255\5\168\1\4\1\0\n\4\1\168\1\255\7\0\16\255\26\170\1\4\1\0\3\4\1\0\4\4\1\0\3\4\1\172\1\255\6\0\16\255\26\21\1\0\3\4\1\168\1\0\4\168\1\4\1\0\3\23\1\255\6\0\16\255\26\22\1\0\2\4\1\168\1\255\1\0\4\255\1\168\1\4\1\0\2\24\1\255\6\0\16\255\26\175\1\23\2\172\1\255\2\0\4\255\2\172\1\23\2\177\1\255\6\0\16\255 \0\4\255\12\0\16\255 \0\4\255\12\0\16\255 \0\4\255\12\0\16\255 \0\4\255\12\0\16\255\8\173\1\20\1\0\12\21\1\175\1\255\8\0\4\255\12\0\16\255\8\20\1\0\14\23\1\255\8\0\4\255\12\0\16\255\8\21\1\0\14\24\1\255\8\0\4\255\12\0\16\255\8\175\1\22\1\0\12\23\1\177\1\255\8\0\4\255\12\0\16\255 \21\1\0\2\24\1\255\12\0\16\255 \175\1\22\1\23\1\177\1\255\12\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\8\173\1\20\1\0\24\21\1\175\1\255\12\0\16\255\8\20\1\0\26\23\1\255\12\0\16\255\8\21\1\0\26\24\1\255\12\0\16\255\8\175\1\22\1\0\24\23\1\177\1\255\12\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.sortUp = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\11+\1\180\1\246\1\255(\246\1\178\1)\1\0\17+\1\241\1\255,\240\1(\1\0\16\180\1\255.\176\1\0\16\246\1\255.\243\1\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255\8\173\1\20\1\0\24\21\1\175\1\255\12\0\16\255\8\20\1\0\26\23\1\255\12\0\16\255\8\21\1\0\26\24\1\255\12\0\16\255\8\175\1\22\1\0\24\23\1\177\1\255\12\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\255 \173\1\20\1\21\1\175\1\255\12\0\16\255 \20\1\0\2\23\1\255\12\0\16\255\8\173\1\20\1\0\12\21\1\175\1\255\8\0\4\255\12\0\16\255\8\20\1\0\14\23\1\255\8\0\4\255\12\0\16\255\8\21\1\0\14\24\1\255\8\0\4\255\12\0\16\255\8\175\1\22\1\0\12\23\1\177\1\255\8\0\4\255\12\0\16\255 \0\4\255\12\0\16\255 \0\4\255\12\0\16\255 \0\4\255\12\0\16\255 \0\4\255\12\0\16\255\26\173\1\21\2\171\1\255\2\0\4\255\2\171\1\21\2\175\1\255\6\0\16\255\26\21\1\0\2\4\1\168\1\255\1\0\4\255\1\168\1\4\1\0\2\23\1\255\6\0\16\255\26\22\1\0\3\4\1\168\1\0\4\168\1\4\1\0\3\24\1\255\6\0\16\255\26\171\1\4\1\0\3\4\1\0\4\4\1\0\3\4\1\172\1\255\6\0\16\255\8\173\1\20\1\0\n\21\1\175\1\255\5\168\1\4\1\0\n\4\1\168\1\255\7\0\16\255\8\20\1\0\12\23\1\255\6\168\1\4\1\0\8\4\1\168\1\255\8\0\16\255\8\21\1\0\12\24\1\255\7\168\1\4\1\0\6\4\1\168\1\255\t\0\16\255\8\175\1\22\1\0\n\23\1\177\1\255\8\168\1\4\1\0\4\4\1\168\1\255\n\0\16\255\31\171\1\4\1\0\2\3\1\164\1\255\11\0\16\255 \172\1\23\2\172\1\255\12\0\16\2550\0\16\2550\0\16\2550\0\16\2550\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.speaker = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\165\\\1\234\1\233\1O\1\0:\6\1\149\1\255\3\230\1\0009\29\1\199\1\255\5\0008?\1\231\1\255\6\0006\1\1o\1\251\1\255\7\0005\14\1\172\1\255\t\0004)\1\214\1\255\n\0003[\1\244\1\255\11\0001\4\1\136\1\255\r\0000\27\1\198\1\255\14\0/?\1\231\1\255\15\0-\1\1x\1\252\1\255\16\0\15\t\1\0\28\15\1\176\1\255\18\0\r\27\1\209\1\254\1\171\1\6\1\0\26\211\1\255\19\0\r\140\1\255\3\157\1\0\11+\1\180\1\246\1\255\7\200\1\0\4\255\20\0\r\133\1\255\4\\\1\0\t+\1\241\1\255\n\0\4\255\20\0\r\18\1\217\1\255\3\238\1\23\1\0\8\180\1\255\11\0\4\255\20\0\14*\1\245\1\255\3\153\1\0\8\246\1\255\11\0\4\255\20\0\15p\1\255\3\250\1\31\1\0\7\255\12\0\4\255\20\0\0073\0014\1\0\6\4\1\216\1\255\3\139\1\0\7\255\12\0\4\255\20\0\6\139\1\255\2\149\1\0\6a\1\255\3\231\1\3\1\0\6\255\12\0\4\255\20\0\6\244\1\255\3Y\1\0\5\8\1\239\1\255\3;\1\0\6\255\12\0\4\255\20\0\6\204\1\255\3\229\1\8\1\0\5\164\1\255\3|\1\0\6\255\12\0\4\255\20\0\6+\1\246\1\255\3]\1\0\5c\1\255\3\177\1\0\6\255\12\0\4\255\20\0\7\140\1\255\3\173\1\0\0052\1\255\3\215\1\0\6\255\12\0\4\255\20\0\0071\1\255\3\226\1\0\5\17\1\255\3\240\1\0\6\255\12\0\4\255\20\0\7\6\1\255\3\252\1\0\5\1\1\254\1\255\2\254\1\0\6\255\12\0\4\255\20\0\7\6\1\255\3\251\1\0\5\1\1\254\1\255\2\254\1\0\6\255\12\0\4\255\20\0\0072\1\255\3\225\1\0\5\17\1\255\3\240\1\0\6\255\12\0\4\255\20\0\7\141\1\255\3\172\1\0\0052\1\255\3\214\1\0\6\255\12\0\4\255\20\0\6,\1\247\1\255\3\\\1\0\5d\1\255\3\176\1\0\6\255\12\0\4\255\20\0\6\208\1\255\3\227\1\7\1\0\5\166\1\255\3{\1\0\6\255\12\0\4\255\20\0\5\1\1\249\1\255\3V\1\0\5\t\1\240\1\255\0039\1\0\6\255\12\0\4\255\20\0\6\147\1\255\2\147\1\0\6c\1\255\3\230\1\2\1\0\6\255\12\0\4\255\20\0\0078\2\0\6\5\1\218\1\255\3\137\1\0\7\245\1\255\11\0\4\255\20\0\15s\1\255\3\250\1\29\1\0\7\179\1\255\11\0\4\255\20\0\14+\1\246\1\255\3\150\1\0\8)\1\240\1\255\n\0\4\255\20\0\r\18\1\218\1\255\3\236\1\21\1\0\t(\1\177\1\244\1\255\7\198\1\0\4\255\20\0\r\134\1\255\4Y\1\0\25\210\1\255\19\0\r\140\1\255\3\154\1\0\26\16\1\177\1\255\18\0\r\27\1\207\1\254\1\168\1\6\1\0\27\1\1y\1\252\1\255\16\0\15\7\1\0\31?\1\231\1\255\15\0000\27\1\198\1\255\14\0001\4\1\136\1\255\r\0003[\1\244\1\255\11\0004)\1\214\1\255\n\0005\14\1\172\1\255\t\0006\1\1o\1\251\1\255\7\0008?\1\231\1\255\6\0009\29\1\200\1\255\5\0:\6\1\150\1\255\3\228\1\0<]\1\232\1\231\1L\1\0\255\0\153",
+	}
+
+	glyphs.stack = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\30\4\1o\1\234\1\235\1q\1\5\1\0009B\1\210\1\255\4\217\1K\1\0006\29\1\162\1\255\8\187\1)\1\0002\n\1\128\1\247\1\255\n\250\1\145\1\14\1\0/M\1\224\1\255\14\230\1f\1\2\1\0+1\1\194\1\255\18\202\0019\1\0(\18\1\145\1\252\1\255\20\254\1\162\1\23\1\0$\4\1f\1\235\1\255\24\243\1\128\1\7\1\0!B\1\210\1\255\28\217\1K\1\0\30\29\1\162\1\255 \187\1)\1\0\26\n\1\128\1\247\1\255\"\250\1\145\1\14\1\0\23M\1\224\1\255&\230\1f\1\2\1\0\0191\1\194\1\255*\202\0019\1\0\16\18\1\145\1\252\1\255,\254\1\162\1\23\1\0\rP\1\239\1\2550\240\1Q\1\0\12\232\1\2552\233\1\0\12\231\1\2552\232\1\0\12N\1\239\1\2550\240\1O\1\0\r\18\1\145\1\252\1\255,\254\1\162\1\23\1\0\0161\1\194\1\255*\202\0018\1\0\20M\1\224\1\255&\229\1f\1\2\1\0\22\n\1\128\1\247\1\255\"\250\1\145\1\14\1\0\26\29\1\162\1\255 \187\1)\1\0\30A\1\210\1\255\28\217\1J\1\0!\4\1f\1\235\1\255\24\243\1\128\1\7\1\0$\18\1\145\1\252\1\255\20\254\1\162\1\23\1\0\0255\1\211\1\224\1o\1\4\1\0\n1\1\194\1\255\18\202\0018\1\0\n\4\1o\1\235\1\238\1X\1\0\12\202\1\255\3\213\1D\1\0\11M\1\224\1\255\14\229\1f\1\2\1\0\nD\1\213\1\255\3\239\1\1\1\0\11\211\1\255\5\175\1\"\1\0\n\n\1\128\1\247\1\255\n\250\1\145\1\14\1\0\n\"\1\175\1\255\5\237\1\1\1\0\11G\1\239\1\255\5\247\1\132\1\11\1\0\n\29\1\162\1\255\8\187\1)\1\0\n\11\1\132\1\247\1\255\5\240\1Q\1\0\r\18\1\145\1\252\1\255\5\229\1^\1\1\1\0\nA\1\210\1\255\4\217\1J\1\0\11M\1\224\1\255\5\254\1\162\1\23\1\0\0161\1\194\1\255\6\202\0018\1\0\n\4\1o\1\231\1\232\1q\1\5\1\0\n1\1\194\1\255\6\202\0018\1\0\20M\1\224\1\255\5\253\1\162\1\23\1\0\22\18\1\145\1\252\1\255\5\229\1f\1\2\1\0\22\n\1\128\1\247\1\255\5\239\1w\1\6\1\0\18\4\1f\1\235\1\255\5\250\1\145\1\14\1\0\26\29\1\162\1\255\6\217\1J\1\0\16B\1\211\1\255\6\187\1)\1\0\30A\1\210\1\255\6\179\1\"\1\0\12\29\1\162\1\255\6\217\1J\1\0!\4\1f\1\235\1\255\5\249\1\145\1\r\1\0\8\n\1\128\1\247\1\255\5\243\1\128\1\7\1\0$\18\1\145\1\252\1\255\5\229\1^\1\1\1\0\5M\1\224\1\255\5\254\1\162\1\23\1\0\0255\1\211\1\224\1o\1\4\1\0\n1\1\194\1\255\6\202\0018\1\0\0021\1\194\1\255\6\202\0018\1\0\n\4\1o\1\235\1\238\1X\1\0\12\202\1\255\3\213\1D\1\0\n\1\1Z\1\227\1\255\5\253\1\154\2\253\1\255\5\229\1\\\1\1\1\0\nD\1\213\1\255\3\239\1\1\1\0\11\211\1\255\5\175\1\"\1\0\n\n\1\128\1\247\1\255\n\250\1\145\1\14\1\0\n\"\1\175\1\255\5\237\1\1\1\0\11G\1\239\1\255\5\247\1\132\1\11\1\0\n\29\1\162\1\255\8\187\1)\1\0\n\11\1\132\1\247\1\255\5\240\1Q\1\0\r\18\1\145\1\252\1\255\5\229\1^\1\1\1\0\nA\1\210\1\255\4\217\1J\1\0\11M\1\224\1\255\5\254\1\162\1\23\1\0\0161\1\194\1\255\6\202\0018\1\0\n\4\1o\1\231\1\232\1q\1\5\1\0\n1\1\194\1\255\6\202\0018\1\0\20M\1\224\1\255\5\253\1\162\1\23\1\0\22\18\1\145\1\252\1\255\5\229\1f\1\2\1\0\22\n\1\128\1\247\1\255\5\239\1w\1\6\1\0\18\4\1f\1\235\1\255\5\250\1\145\1\14\1\0\26\29\1\162\1\255\6\217\1J\1\0\16B\1\211\1\255\6\187\1)\1\0\30A\1\210\1\255\6\179\1\"\1\0\12\29\1\162\1\255\6\217\1J\1\0!\4\1f\1\235\1\255\5\249\1\145\1\r\1\0\8\n\1\128\1\247\1\255\5\243\1\128\1\7\1\0$\18\1\145\1\252\1\255\5\229\1^\1\1\1\0\5M\1\224\1\255\5\254\1\162\1\23\1\0(1\1\194\1\255\6\202\0018\1\0\0021\1\194\1\255\6\202\0018\1\0+\1\1Z\1\227\1\255\5\253\1\154\2\253\1\255\5\229\1\\\1\1\1\0.\n\1\128\1\247\1\255\n\250\1\145\1\14\1\0002\29\1\162\1\255\8\187\1)\1\0006A\1\210\1\255\4\217\1J\1\0009\4\1o\1\231\1\232\1q\1\5\1\0\255\0\30",
+	}
+
+	glyphs.star = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\30.\1\180\1\245\1\244\1\177\1+\1\00093\1\244\1\255\4\242\1/\1\0008\196\1\255\6\192\1\0007/\1\255\8-\1\0006\154\1\255\8\149\1\0005\15\1\244\1\255\8\243\1\14\1\0004n\1\255\nj\1\0004\212\1\255\n\213\1\1\1\0002B\1\255\12=\1\0002\171\1\255\12\166\1\0001\25\1\250\1\255\12\249\1\23\1\0000\127\1\255\14z\1\0/\4\1\227\1\255\14\225\1\3\1\0.S\1\255\16N\1\0.\188\1\255\16\183\1\0-$\1\254\1\255\16\254\1%\1\0$\11\1\31\0015\1J\1^\1q\1\134\1\156\1\206\1\255\18\205\1\156\1\133\1q\1]\1I\0015\1\30\1\n\1\0\20.\1v\1\143\1\163\1\183\1\205\1\226\1\246\1\255$\245\1\225\1\204\1\183\1\163\1\143\1u\1+\1\0\n\1\1\141\1\254\1\2552\254\1\137\1\0\tf\1\2556b\1\0\8\211\1\2556\209\1\0\8\250\1\2556\245\1\0\8\224\1\2556\220\1\0\8\130\1\2556}\1\0\8\7\1\187\1\2554\187\1\6\1\0\t\4\1\152\1\2552\169\1\8\1\0\12o\1\253\1\255.\254\1\136\1\1\1\0\14U\1\247\1\255,\249\1^\1\0\0179\1\234\1\255*\238\1@\1\0\19#\1\216\1\255(\222\1)\1\0\21\18\1\193\1\255&\200\1\23\1\0\23\7\1\165\1\255$\173\1\n\1\0\25\1\1\128\1\255\"\145\1\2\1\0\28b\1\250\1\255\30\252\1k\1\0\31s\1\255\30w\1\0 \144\1\255\30\147\1\0 \205\1\255\30\207\1\0\31\12\1\251\1\255\30\253\1\16\1\0\30G\1\255 I\1\0\30\131\1\255 \133\1\0\30\192\1\255 \193\1\0\29\5\1\245\1\255 \248\1\7\1\0\0289\1\255\":\1\0\28v\1\255\"w\1\0\28\179\1\255\"\179\1\0\27\2\1\237\1\255\16\225\2\255\16\237\1\2\1\0\26,\1\255\15\251\1\145\1\r\1\n\1\128\1\249\1\255\15,\1\0\26i\1\255\14\196\1-\1\0\4'\1\189\1\255\14h\1\0\26\165\1\255\12\236\1c\1\1\1\0\6\1\1c\1\236\1\255\12\165\1\0\26\214\1\255\n\254\1\158\1\20\1\0\n\20\1\159\1\254\1\255\n\211\1\0\26\207\1\255\t\211\1=\1\0\14=\1\212\1\255\t\203\1\0\26\132\1\255\7\244\1v\1\5\1\0\16\5\1w\1\245\1\255\7\130\1\0\26\15\1\214\1\255\5\177\1\31\1\0\20 \1\178\1\255\5\213\1\14\1\0\27\18\1\149\1\230\1\248\1\196\1M\1\0\24O\1\198\1\249\1\232\1\149\1\19\1\0\255\0\143",
+	}
+
+	glyphs.steps = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\16\1\1]\1\196\1\249\1\248\1\194\1X\1\1\1\0007\17\1\186\1\255\6\181\1\15\1\0005\15\1\207\1\255\8\202\1\12\1\0003\1\1\183\1\255\n\173\1\0003m\1\255\12d\1\0001\24\1\242\1\255\12\237\1\19\1\0000\150\1\255\14\141\1\0\14\1\1\\\1\196\1\249\1\248\1\194\1Y\1\1\1\0\25\25\1\247\1\255\14\246\1\21\1\0\12\16\1\185\1\255\6\183\1\16\1\0\24\130\1\255\16{\1\0\11\14\1\206\1\255\8\204\1\14\1\0\22\3\1\229\1\255\16\222\1\1\1\0\t\1\1\180\1\255\n\178\1\1\1\0\21D\1\255\18<\1\0\tj\1\255\12j\1\0\21\150\1\255\18\141\1\0\8\23\1\240\1\255\12\240\1\22\1\0\20\224\1\255\18\214\1\0\8\147\1\255\14\146\1\0\19 \1\255\20\25\1\0\6\24\1\247\1\255\14\247\1\24\1\0\18Z\1\255\20P\1\0\6\128\1\255\16\128\1\0\18\138\1\255\20\129\1\0\5\2\1\227\1\255\16\227\1\2\1\0\17\178\1\255\20\170\1\0\5B\1\255\18A\1\0\17\211\1\255\20\202\1\0\5\148\1\255\18\147\1\0\17\233\1\255\20\226\1\0\5\222\1\255\18\220\1\0\17\248\1\255\20\241\1\0\4\30\1\255\20\30\1\0\16\255\21\247\1\0\4X\1\255\20V\1\0\16\253\1\255\20\244\1\0\4\136\1\255\20\135\1\0\16\241\1\255\20\230\1\0\4\176\1\255\20\176\1\0\16\216\1\255\20\206\1\0\4\209\1\255\20\208\1\0\16\180\1\255\20\171\1\0\4\231\1\255\20\232\1\0\16\131\1\255\20z\1\0\4\246\1\255\20\248\1\0\16C\1\255\20:\1\0\4\254\1\255\20\254\1\0\16\5\1\235\1\255\18\229\1\2\1\0\4\252\1\255\20\251\1\0\17\139\1\255\18\129\1\0\5\239\1\255\20\237\1\0\17\24\1\243\1\255\16\239\1\19\1\0\5\214\1\255\20\214\1\0\18n\1\255\16g\1\0\6\179\1\255\20\179\1\0\18\1\1\143\1\245\1\255\12\244\1\138\1\0\7\129\1\255\20\130\1\0*A\1\255\20B\1\0*\4\1\234\1\255\18\235\1\5\1\0+\137\1\255\18\138\1\0,\23\1\242\1\255\16\243\1\25\1\0\19R\1\235\1\255\14\234\1P\1\0\8l\1\255\16p\1\0\20\235\1\255\16\232\1\0\8\1\1\144\1\247\1\255\12\248\1\147\1\1\1\0\20\255\18\0.\255\18\0.\255\18\0.\251\1\255\16\249\1\0.\223\1\255\16\220\1\0\8R\1\235\1\255\14\235\1S\1\0\20\165\1\255\16\160\1\0\8\235\1\255\16\235\1\0\20J\1\255\16G\1\0\8\255\18\4\1\0\19\1\1\201\1\255\14\197\1\1\1\0\8\255\18\4\1\0\20*\1\242\1\255\12\241\1(\1\0\t\255\18\4\1\0\21A\1\242\1\255\n\241\1@\1\0\n\251\1\255\16\252\1\1\1\0\22)\1\199\1\255\8\197\1(\1\0\11\223\1\255\16\224\1\0\24\1\1H\1\161\1\221\1\250\2\220\1\160\1G\1\1\1\0\12\165\1\255\16\165\1\0.K\1\255\16K\1\0.\1\1\202\1\255\14\200\1\1\1\0/+\1\243\1\255\12\242\1*\1\0001B\1\243\1\255\n\242\1B\1\0003*\1\201\1\255\8\200\1*\1\0005\1\1J\1\163\1\223\1\251\1\252\1\223\1\163\1J\1\1\1\0\255\0\15",
+	}
+
+	glyphs.sun = {
+		w = 64,
+		h = 64,
+		data = "\0\158R\1\235\1\234\1P\1\0<\235\1\255\2\232\1\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0(R\1\234\2T\1\0\16\234\1\255\2\231\1\0\16T\1\234\2P\1\0\20\234\1\255\2\251\1W\1\0\15P\1\233\1\232\1N\1\0\15W\1\251\1\255\2\232\1\0\20\233\1\255\3\251\1W\1\0 W\1\251\1\255\3\231\1\0\20T\1\251\1\255\3\251\1W\1\0\30W\1\251\1\255\3\251\1S\1\0\21W\1\251\1\255\3\251\1S\1\0\28U\1\251\1\255\3\251\1W\1\0\23W\1\251\1\255\3\232\1\0\28\235\1\255\3\251\1W\1\0\25W\1\251\1\255\2\231\1\0\8\16\1Z\1\157\1\205\1\238\1\255\2\237\1\205\1\156\1Y\1\15\1\0\8\234\1\255\2\251\1W\1\0\27S\1\232\2N\1\0\6'\1\158\1\247\1\255\n\246\1\156\1%\1\0\6P\1\233\1\232\1S\1\0$\n\1\142\1\251\1\255\14\250\1\139\1\t\1\0+%\1\213\1\255\18\210\1#\1\0)2\1\235\1\255\20\233\0010\1\0'%\1\235\1\255\22\234\1#\1\0%\n\1\213\1\255\24\210\1\t\1\0$\142\1\255\26\138\1\0#'\1\251\1\255\26\250\1$\1\0\"\159\1\255\28\155\1\0!\15\1\246\1\255\28\245\1\r\1\0 [\1\255\30W\1\0 \157\1\255\30\153\1\0 \205\1\255\30\202\1\0\18R\1\235\1\255\6\234\1P\1\0\4\238\1\255\30\234\1\0\4R\1\235\1\255\6\234\1P\1\0\4\235\1\255\8\232\1\0\4\253\1\255\30\251\1\0\4\235\1\255\8\232\1\0\4\234\1\255\8\231\1\0\4\253\1\255\30\251\1\0\4\234\1\255\8\231\1\0\4P\1\233\1\255\6\232\1N\1\0\4\238\1\255\30\235\1\0\4P\1\233\1\255\6\232\1N\1\0\18\205\1\255\30\202\1\0 \156\1\255\30\154\1\0 Z\1\255\30W\1\0 \15\1\246\1\255\28\245\1\r\1\0!\157\1\255\28\155\1\0\"%\1\250\1\255\26\249\1$\1\0#\140\1\255\26\137\1\0$\t\1\211\1\255\24\209\1\8\1\0%$\1\234\1\255\22\233\1#\1\0'1\1\234\1\255\20\233\0010\1\0)$\1\211\1\255\18\209\1#\1\0+\t\1\139\1\250\1\255\14\250\1\137\1\8\1\0$T\1\234\2P\1\0\6%\1\156\1\246\1\255\n\245\1\155\1$\1\0\6R\1\234\2T\1\0\27W\1\251\1\255\2\232\1\0\8\14\1X\1\154\1\203\1\234\1\254\2\233\1\203\1\153\1W\1\r\1\0\8\234\1\255\2\251\1W\1\0\25W\1\251\1\255\3\231\1\0\28\233\1\255\3\251\1W\1\0\23W\1\251\1\255\3\251\1S\1\0\28T\1\251\1\255\3\251\1W\1\0\21U\1\251\1\255\3\251\1W\1\0\30W\1\251\1\255\3\251\1S\1\0\20\234\1\255\3\251\1W\1\0 W\1\251\1\255\3\232\1\0\20\233\1\255\2\251\1W\1\0\15R\1\235\1\234\1P\1\0\15W\1\251\1\255\2\231\1\0\20P\1\232\2S\1\0\16\235\1\255\2\232\1\0\16S\1\232\2N\1\0(\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\234\1\255\2\231\1\0<P\1\233\1\232\1N\1\0\158",
+	}
+
+	glyphs.swatches = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\16\t\1\136\1\231\1\253\1\219\1\172\1\127\1R\1$\1\2\1\0005\2\1\187\1\255\8\244\1\201\1\154\1m\1A\1\18\1\0000V\1\255\15\228\1\183\1\137\1C\1\0,\155\1\255\19\169\1\4\1\0*\199\1\255\20z\1\0)\1\1\243\1\255\20\222\1\0)!\1\255\21\251\1\0)N\1\255\21\223\1\0){\1\255\21\178\1\0)\168\1\255\21\133\1\0)\212\1\255\21Y\1\0(\6\1\249\1\255\21,\1\0(.\1\255\21\250\1\6\1\0([\1\255\21\210\1\0)\135\1\255\21\165\1\0)\180\1\255\21x\1\0)\225\1\255\21L\1\0(\r\1\254\1\255\21\31\1\0(:\1\255\21\241\1\1\1\0\12\2\1@\1\157\1\234\1\251\1\198\1F\1\0\21g\1\255\21\197\1\0\11+\1\135\1\226\1\255\5\253\1T\1\0\20\147\1\255\21\152\1\0\8\24\1q\1\205\1\255\t\230\1\5\1\0\19\192\1\255\21l\1\0\5\8\1U\1\179\1\250\1\255\12M\1\0\19\236\1\255\21?\1\0\2\2\1<\1\153\1\242\1\255\8\246\1\170\1M\1\154\1\255\3\170\1\0\18\26\1\255\22\19\1+\1\128\1\223\1\255\8\253\1\187\1^\1\12\1\0\0029\1\255\3\247\1\16\1\0\17F\1\255\21\250\1\209\1\255\t\205\1p\1\24\1\0\6\217\1\255\3f\1\0\17s\1\255\29\228\1\145\0010\1\0\t}\1\255\3\195\1\0\17\160\1\255\26\241\1\162\1M\1\3\1\0\11\31\1\254\1\255\2\254\1#\1\0\16\204\1\255\23\252\1\187\1^\1\11\1\0\15\193\1\255\3~\1\0\15\3\1\245\1\255\21\203\1m\1\21\1\0\18c\1\255\3\219\1\1\1\0\14&\1\255\21\252\1\t\1\0\20\14\1\246\1\255\0039\1\0\14S\1\255\21\216\1\0\22\168\1\255\3\150\1\0\14\128\1\255\21\172\1\0\22K\1\255\3\238\1\7\1\0\r\172\1\255\21\127\1\0\22\4\1\231\1\255\3R\1\0\r\216\1\255\21S\1\0\23\143\1\255\3\175\1\0\12\t\1\252\1\255\21&\1\0\0231\1\255\3\241\1\0\0122\1\255\21\246\1\3\1\0\21\17\1f\1\196\1\254\1\255\3\0\12_\1\255\21\204\1\0\19\8\1M\1\170\1\250\1\255\6\0\12\139\1\255\7\212\1K\1\8\1\t\1M\1\214\1\255\8\159\1\0\16\2\1@\1\157\1\240\1\255\t\0\12\184\1\255\6\212\1\15\1\0\4\15\1\215\1\255\7s\1\0\14*\1\134\1\225\1\255\12\0\12\227\1\255\6K\1\0\6O\1\255\7F\1\0\11\23\1p\1\204\1\255\t\210\1u\1\255\4\0\12\251\1\255\6\t\1\0\6\12\1\255\7\26\1\0\8\n\1Z\1\181\1\251\1\255\8\229\1\139\1.\1\0\2\255\4\0\12\252\1\255\6\t\1\0\6\12\1\255\6\236\1\0\6\2\1C\1\160\1\242\1\255\8\243\1\162\1E\1\3\1\0\4\255\4\0\12\231\1\255\6M\1\0\6P\1\255\6\191\1\0\4,\1\137\1\227\1\255\8\252\1\183\1\\\1\11\1\0\7\255\4\0\12\184\1\255\6\214\1\15\1\0\4\16\1\216\1\255\6\140\1\0\1\25\1r\1\207\1\255\t\206\1q\1\25\1\0\n\255\4\0\12p\1\255\7\215\1O\1\11\1\12\1P\1\216\1\255\7\154\1\184\1\252\1\255\8\226\1\136\1+\1\0\r\255\4\0\12\22\1\246\1\255\27\241\1\158\1A\1\2\1\0\15\255\4\0\r\138\1\255\24\251\1\180\1X\1\t\1\0\18\255\4\0\r\11\1\216\1\255\21\203\1n\1\22\1\0\21\255\4\0\14&\1\232\1\255/\243\1\0\15%\1\215\1\255.\175\1\0\16\n\1\136\1\246\1\255+\239\1'\1\0\18\20\1m\1\180\1\227\1\251\1\255%\243\1\175\1'\1\0\255\0\255\0\7",
+	}
+
+	glyphs.target = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\153\1\0011\1m\1\158\1\198\1\229\1\250\1\255\2\248\1\229\1\199\1\157\1k\1.\1\1\1\0\14V\1\236\1\235\1Q\1\0\28;\1\152\1\232\1\255\14\229\1\147\0016\1\0\11Y\1\252\1\255\2\233\1\0\25\2\1X\1\207\1\255\20\203\1S\1\1\1\0\7Y\1\252\1\255\3\231\1\0\24A\1\208\1\255\24\204\1;\1\0\5Y\1\252\1\255\3\251\1R\1\0\22\r\1\158\1\255\7\249\1\189\1\128\1Q\1+\1\21\1\8\1\3\1\19\1)\1N\1|\1\183\1\245\1\255\6\254\1\150\1\11\1\0\2X\1\252\1\255\3\251\1V\1\0\22/\1\219\1\255\6\191\1\\\1\r\1\0\12\t\1U\1\184\1\254\1\255\5\214\1)\1X\1\252\1\255\3\251\1V\1\0\22K\1\243\1\255\5\182\0012\1\0\18-\1\173\1\255\5\241\1\252\1\255\3\251\1V\1\0\22T\1\250\1\255\4\225\1J\1\0\22B\1\219\1\255\7\251\1V\1\0\22J\1\250\1\255\4\175\1\16\1\0\24\12\1\162\1\255\5\251\1V\1\0\22.\1\243\1\255\4\133\1\1\1\0\26W\1\254\1\255\3\251\1V\1\0\22\14\1\220\1\255\4v\1\0\27W\1\251\1\255\3\251\1V\1\0\23\159\1\255\4\134\1\0\27V\1\251\1\255\3\251\1V\1\0\23C\1\254\1\255\3\177\1\1\1\0\n\2\1>\1\138\1\194\1\230\1\251\2\231\1\195\1\140\1A\1\2\1\0\4V\1\251\1\255\3\251\1V\1\0\23\3\1\211\1\255\3\228\1\18\1\0\t\3\1a\1\218\1\255\n\221\1e\1\4\1\0\1V\1\251\1\255\3\251\1V\1\0\4\16\1Q\1(\1\0\17\\\1\255\4Q\1\0\t&\1\201\1\255\14\205\1s\1\251\1\255\3\251\1V\1\0\4\16\1\224\1\255\1\251\1F\1\0\16\210\1\255\3\187\1\0\tF\1\241\1\255\20\251\1V\1\0\5P\1\255\3\200\1\0\15>\1\255\4:\1\0\8D\1\248\1\255\20\251\1V\1\0\6%\1\253\1\255\0034\1\0\14\154\1\255\3\198\1\0\8%\1\240\1\255\20\251\1V\1\0\8\180\1\255\3\146\1\0\r\3\1\234\1\255\3c\1\0\7\2\1\199\1\255\20\251\1V\1\0\tQ\1\255\3\227\1\1\1\0\0126\1\255\3\251\1\18\1\0\7`\1\255\20\251\1V\1\0\n\8\1\243\1\255\3-\1\0\12s\1\255\3\196\1\0\7\1\1\216\1\255\19\251\1V\1\0\12\178\1\255\3i\1\0\12\165\1\255\3\136\1\0\7<\1\255\19\251\1V\1\0\rv\1\255\3\155\1\0\12\205\1\255\3X\1\0\7\137\1\255\18\251\1V\1\0\14G\1\255\3\195\1\0\12\234\1\255\0034\1\0\7\193\1\255\17\251\1V\1\0\4\"\1\155\1\152\1\29\1\0\7$\1\255\3\224\1\0\11\2\1\253\1\255\3\30\1\0\7\229\1\255\16\251\1V\1\0\5\210\1\255\2\200\1\0\7\12\1\255\3\245\1\0\11\t\1\255\4\18\1\0\7\246\1\255\15\251\1V\1\0\5\3\1\255\3\253\1\0\7\1\1\255\3\254\1\0\11\t\1\255\4\17\1\0\7\247\1\255\14\251\1V\1\0\6\5\1\255\3\252\1\0\7\1\1\255\3\254\1\0\11\1\1\253\1\255\3\30\1\0\7\230\1\255\r\251\1V\1\0\7\31\1\255\3\233\1\0\7\14\1\255\3\246\1\0\12\234\1\255\0036\1\0\7\193\1\255\12\251\1V\1\0\8T\1\255\3\195\1\0\7&\1\255\3\226\1\0\12\205\1\255\3Y\1\0\7\137\1\255\11\251\1V\1\0\t\165\1\255\3\140\1\0\7I\1\255\3\196\1\0\12\165\1\255\3\136\1\0\7>\1\255\n\251\1V\1\0\t\28\1\248\1\255\3>\1\0\7w\1\255\3\157\1\0\12s\1\255\3\196\1\0\7\1\1\218\1\255\8\251\1V\1\0\n\170\1\255\3\218\1\1\1\0\7\179\1\255\3k\1\0\0127\1\255\3\251\1\17\1\0\7b\1\255\7\251\1V\1\0\nl\1\255\4b\1\0\7\8\1\243\1\255\3.\1\0\12\3\1\236\1\255\3c\1\0\7\3\1\203\1\255\5\251\1V\1\0\nl\1\253\1\255\3\203\1\3\1\0\7T\1\255\3\229\1\1\1\0\r\157\1\255\3\199\1\0\8(\1\242\1\255\4\203\1\27\1\0\8\28\1\169\1\255\4\242\1(\1\0\8\182\1\255\3\147\1\0\14>\1\255\4;\1\0\8I\1\249\1\255\4\248\1\164\1T\1 \1\5\1\6\1 \1T\1\165\1\248\1\255\4\249\1H\1\0\8+\1\254\1\255\0035\1\0\14\1\1\212\1\255\3\189\1\0\tI\1\242\1\255\16\242\1I\1\0\t\173\1\255\3\203\1\0\16^\1\255\4R\1\0\t(\1\202\1\255\14\202\1(\1\0\t@\1\254\1\255\3T\1\0\16\3\1\213\1\255\3\230\1\19\1\0\t\3\1b\1\218\1\255\n\219\1b\1\3\1\0\t\12\1\220\1\255\3\205\1\2\1\0\17F\1\255\4\180\1\2\1\0\n\2\1>\1\138\1\194\1\230\1\251\2\231\1\194\1\138\1>\1\2\1\0\11\165\1\255\3\254\1=\1\0\19\162\1\255\4\138\1\0 {\1\255\4\151\1\0\20\16\1\222\1\255\4z\1\0\30j\1\254\1\255\3\215\1\11\1\0\0211\1\244\1\255\4\137\1\2\1\0\27{\1\254\1\255\3\240\1)\1\0\23M\1\251\1\255\4\178\1\18\1\0\24\r\1\167\1\255\4\249\1D\1\0\25W\1\251\1\255\4\229\1P\1\0\22D\1\222\1\255\4\249\1O\1\0\27M\1\244\1\255\5\187\0018\1\0\0180\1\178\1\255\5\241\1D\1\0\0290\1\221\1\255\6\196\1`\1\15\1\0\12\11\1Y\1\188\1\254\1\255\5\215\1*\1\0\31\15\1\161\1\255\7\249\1\192\1\131\1T\0010\1\24\1\17\2\21\1,\1Q\1\127\1\187\1\247\1\255\6\254\1\153\1\12\1\0\"D\1\212\1\255\24\207\1@\1\0%\3\1]\1\211\1\255\20\206\1V\1\2\1\0(\1\1>\1\156\1\235\1\255\14\233\1\151\1:\1\0.\3\0016\1q\1\164\1\204\1\231\1\253\1\255\2\253\1\231\1\202\1\161\1o\0013\1\2\1\0007\3\1\1\1\0\255\0`",
+	}
+
+	glyphs.timer = {
+		w = 64,
+		h = 64,
+		data = "\0\152R\1\235\1\255\12\234\1P\1\0000\235\1\255\14\232\1\0000\234\1\255\14\231\1\0000P\1\233\1\255\12\232\1N\1\0\255\0002\29\1^\1\148\1\190\1\223\1\243\1\255\2\243\1\221\1\189\1\145\1\\\1\26\1\0/\20\1s\1\206\1\255\r\254\1\202\1o\1\18\1\0*\28\1\150\1\247\1\255\18\245\1\146\1\25\1\0&\6\1\127\1\246\1\255\22\244\1y\1\5\1\0#+\1\210\1\255\26\206\1(\1\0!U\1\244\1\255\28\242\1O\1\0\31n\1\253\1\255\30\253\1h\1\0\29n\1\255!\254\1h\1\0\27U\1\253\1\255\"\253\1O\1\0\25,\1\244\1\255$\242\1(\1\0\23\6\1\210\1\255&\205\1\5\1\0\22\127\1\255(w\1\0\21\28\1\246\1\255\28\171\1\21\2\175\1\255\8\243\1\24\1\0\20\151\1\255\28\168\1\4\1\0\2\23\1\255\t\144\1\0\19\20\1\246\1\255\27\168\1\4\1\0\3\24\1\255\t\244\1\17\1\0\18s\1\255\27\168\1\4\1\0\3\4\1\172\1\255\nm\1\0\18\206\1\255\26\168\1\4\1\0\3\4\1\168\1\255\11\199\1\0\17\29\1\255\26\168\1\4\1\0\3\4\1\168\1\255\12\254\1\23\1\0\16^\1\255\25\168\1\4\1\0\3\4\1\168\1\255\14X\1\0\16\148\1\255\24\168\1\4\1\0\3\4\1\168\1\255\15\143\1\0\16\191\1\255\23\168\1\4\1\0\3\4\1\168\1\255\16\186\1\0\16\223\1\255\22\168\1\4\1\0\3\4\1\168\1\255\17\219\1\0\16\244\1\255\21\170\1\4\1\0\3\4\1\168\1\255\18\240\1\0\16\253\1\255\21\21\1\0\3\4\1\168\1\255\19\251\1\0\16\253\1\255\21\22\1\0\2\4\1\168\1\255\20\252\1\0\16\244\1\255\21\175\1\23\2\172\1\255\21\240\1\0\16\222\1\255.\219\1\0\16\190\1\255.\186\1\0\16\147\1\255.\144\1\0\16]\1\255.Y\1\0\16\28\1\254\1\255,\254\1\24\1\0\17\204\1\255,\200\1\0\18q\1\255,n\1\0\18\19\1\246\1\255*\244\1\18\1\0\19\148\1\255*\144\1\0\20\27\1\245\1\255(\243\1\25\1\0\21|\1\255(w\1\0\22\6\1\208\1\255&\206\1\5\1\0\23*\1\244\1\255$\242\1(\1\0\25S\1\253\1\255\"\253\1P\1\0\27l\1\255\"j\1\0\29k\1\253\1\255\30\253\1j\1\0\31R\1\243\1\255\28\242\1P\1\0!)\1\208\1\255\26\206\1(\1\0#\5\1z\1\244\1\255\22\243\1w\1\5\1\0&\26\1\146\1\245\1\255\18\244\1\144\1\24\1\0*\18\1o\1\202\1\254\1\255\12\254\1\200\1n\1\18\1\0/\25\1[\1\144\1\187\1\219\1\241\1\255\2\240\1\218\1\187\1\144\1Z\1\24\1\0\255\0\154",
+	}
+
+	glyphs.users = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\14\n\1c\1\179\1\231\1\255\2\228\1\177\1_\1\8\1\0\22\8\1a\1\178\1\229\1\255\2\230\1\178\1b\1\n\1\0\21_\1\232\1\255\8\229\1Y\1\0\20Z\1\229\1\255\8\231\1\\\1\0\18\4\1\159\1\255\12\150\1\2\1\0\16\3\1\153\1\255\12\155\1\3\1\0\16\160\1\255\14\149\1\0\16\153\1\255\14\155\1\0\15`\1\255\16V\1\0\14Y\1\255\16\\\1\0\r\11\1\233\1\255\16\226\1\6\1\0\12\8\1\229\1\255\16\230\1\t\1\0\12c\1\255\18X\1\0\12\\\1\255\18`\1\0\12\180\1\255\18\168\1\0\12\172\1\255\18\175\1\0\12\230\1\255\18\212\1\0\12\216\1\255\18\228\1\0\11\2\1\254\1\255\17\217\1K\1\0\12M\1\218\1\255\17\252\1\0\11\2\1\253\1\255\15\245\1p\1\4\1\0\14\5\1s\1\246\1\255\15\251\1\0\12\229\1\255\14\218\1*\1\0\18,\1\219\1\255\14\225\1\0\12\176\1\255\r\204\1\19\1\0\5'\1\127\1\192\1\233\1\255\2\231\1\190\1{\1#\1\0\5\20\1\206\1\255\r\172\1\0\12^\1\255\12\217\1\19\1\0\4&\1\177\1\254\1\255\8\253\1\170\1!\1\0\4\21\1\220\1\255\12\\\1\0\12\8\1\229\1\255\n\245\1*\1\0\4e\1\246\1\255\12\243\1\\\1\0\4-\1\246\1\255\n\226\1\7\1\0\rY\1\255\ns\1\0\4\128\1\255\15\254\1t\1\0\4u\1\255\nU\1\0\15\151\1\255\8\216\1\4\1\0\3e\1\255\17\254\1Y\1\0\3\5\1\219\1\255\8\147\1\0\16J\1\244\1\255\7a\1\0\3'\1\247\1\255\18\242\1\30\1\0\3d\1\255\7\243\1H\1\0\14(\1\190\1\255\8\240\1\t\1\0\3\177\1\255\20\164\1\0\3\11\1\242\1\255\8\188\1%\1\0\11b\1\246\1\255\t\165\1\0\3'\1\254\1\255\20\252\1\29\1\0\3\168\1\255\t\245\1_\1\0\8\1\1\137\1\255\11b\1\0\3\128\1\255\22t\1\0\3f\1\255\11\131\1\0\7\135\1\255\0122\1\0\3\194\1\255\22\181\1\0\0035\1\255\12\129\1\0\5_\1\255\r\18\1\0\3\236\1\255\22\224\1\0\3\20\1\255\r[\1\0\4\233\1\255\r\2\1\0\2\3\1\254\1\255\22\245\1\0\3\4\1\255\r\230\1\0\4\234\1\255\r\2\1\0\2\3\1\254\1\255\22\244\1\0\3\3\1\255\r\231\1\0\4Q\1\232\1\255\11\205\1\1\1\0\3\236\1\255\22\223\1\0\3\2\1\207\1\255\11\231\1O\1\0\22\192\1\255\22\179\1\0(}\1\255\22r\1\0(%\1\253\1\255\20\250\1\27\1\0)\171\1\255\20\159\1\0*\"\1\244\1\255\18\240\1\27\1\0+^\1\255\17\254\1S\1\0-w\1\255\15\254\1l\1\0.\8\1\181\1\255\14\173\1\7\1\0-\\\1\227\1\255\16\225\1X\1\0*\20\1\180\1\255\20\177\1\18\1\0'(\1\223\1\255\22\220\1&\1\0%*\1\234\1\255\24\232\1(\1\0#\24\1\227\1\255\26\225\1\23\1\0!\2\1\192\1\255\28\189\1\2\1\0 o\1\255\30l\1\0 \235\1\255\30\232\1\0 \233\1\255\30\231\1\0 P\1\232\1\255\28\231\1N\1\0\255\0\255\0\18",
+	}
+
+	glyphs.vector = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\29T\1\235\1\234\1T\1\0;U\1\251\1\255\2\252\1\\\1\0009U\1\251\1\255\4\252\1\\\1\0007U\1\251\1\255\6\252\1\\\1\0005U\1\251\1\255\8\252\1\\\1\0003U\1\251\1\255\n\252\1\\\1\0001U\1\251\1\255\12\252\1\\\1\0/U\1\251\1\255\14\252\1\\\1\0-U\1\251\1\255\16\251\1S\1\0,\235\1\255\18\232\1\0,\234\1\255\18\232\1\0,P\1\233\1\255\16\232\1M\1\0004\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0<\255\4\0\16S\1\235\1\234\1T\1\0(\255\4\0\16\235\1\255\2\251\1W\1\0'\255\4\0\16\255\4\252\1\\\1\0&\255\4\0\16\255\5\252\1\\\1\0%\255\4\0\16\255\6\252\1\\\1\0$\255\4\0\16\255\7\252\1\\\1\0#\255\4\0\16\255\8\252\1\\\1\0\"\255\4\0\16\255\t\252\1\\\1\0!\255\30\251\1S\1\0\31W\1\255\31\232\1\0\30W\1\251\1\255\31\231\1\0\29W\1\251\1\255\31\251\1S\1\0\28U\1\251\1\255\3\252\1[\1\0\17\255\t\252\1[\1\0\28U\1\251\1\255\3\252\1[\1\0\18\255\8\252\1[\1\0\16S\1\235\1\234\1T\1\0\8W\1\251\1\255\3\251\1W\1\0\19\255\7\251\1W\1\0\17\235\1\255\2\251\1W\1\0\6W\1\251\1\255\3\251\1W\1\0\20\255\6\251\1W\1\0\18\255\4\252\1\\\1\0\4U\1\251\1\255\3\252\1[\1\0\21\255\5\252\1[\1\0\19\255\5\252\1\\\1\0\2U\1\251\1\255\3\252\1[\1\0\22\255\4\252\1[\1\0\20\255\6\251\1W\2\251\1\255\3\251\1W\1\0\23\234\1\255\2\251\1W\1\0\21\255\7\251\2\255\3\251\1W\1\0\24O\1\233\1\232\1S\1\0\22\255\11\252\1[\1\0003\255\n\252\1[\1\0004\255\n\252\1\\\1\0004\255\11\252\1\\\1\0003\255\12\252\1\\\1\0002\255\r\252\1\\\1\0001\255\14\251\1S\1\0000\255\15\232\1\0000\234\1\255\14\232\1\0000P\1\233\1\255\12\232\1M\1\0\255\0\255\0\168",
+	}
+
+	glyphs.verified = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\29\5\1h\1\200\1\249\2\199\1g\1\5\1\0007)\1\209\1\255\6\208\1'\1\0005A\1\240\1\255\8\239\1?\1\0003K\1\247\1\255\n\246\1K\1\0001\\\1\250\1\255\12\250\1[\1\0.\25\1\148\1\254\1\255\14\254\1\146\1\24\1\0$7\1~\1\168\1\190\1\204\2\214\1\230\1\255\20\230\1\213\1\204\2\190\1\168\1}\0016\1\0\26&\1\197\1\255$\195\1%\1\0\23&\1\235\1\255&\234\1%\1\0\22\197\1\255(\193\1\0\0217\1\255*3\1\0\20}\1\255*{\1\0\20\168\1\255*\165\1\0\20\190\1\255*\188\1\0\20\200\1\255*\199\1\0\20\206\1\255*\205\1\0\20\213\1\255*\210\1\0\20\231\1\255*\227\1\0\19\25\1\254\1\255*\254\1\23\1\0\18\148\1\255,\145\1\0\17\\\1\254\1\255\30\171\1\21\2\175\1\255\n\254\1Z\1\0\15K\1\250\1\255\30\168\1\4\1\0\2\23\1\255\11\249\1K\1\0\rA\1\247\1\255\30\168\1\4\1\0\3\24\1\255\12\246\1?\1\0\11)\1\240\1\255\30\168\1\4\1\0\3\4\1\172\1\255\r\239\1&\1\0\t\5\1\209\1\255\30\168\1\4\1\0\3\4\1\168\1\255\15\207\1\4\1\0\8i\1\255\30\168\1\4\1\0\3\4\1\168\1\255\17d\1\0\8\200\1\255\29\168\1\4\1\0\3\4\1\168\1\255\18\197\1\0\8\248\1\255\28\168\1\4\1\0\3\4\1\168\1\255\19\246\1\0\8\248\1\255\15\173\1\21\2\171\1\255\8\168\1\4\1\0\3\4\1\168\1\255\20\246\1\0\8\200\1\255\15\21\1\0\2\4\1\168\1\255\6\168\1\4\1\0\3\4\1\168\1\255\21\196\1\0\8g\1\255\15\22\1\0\3\4\1\168\1\255\4\168\1\4\1\0\3\4\1\168\1\255\22b\1\0\8\5\1\208\1\255\14\171\1\4\1\0\3\4\1\168\1\255\2\168\1\4\1\0\3\4\1\168\1\255\22\206\1\4\1\0\t'\1\239\1\255\14\168\1\4\1\0\3\4\1\168\2\4\1\0\3\4\1\168\1\255\22\238\1%\1\0\11?\1\246\1\255\14\168\1\4\1\0\3\4\2\0\3\4\1\168\1\255\22\246\1>\1\0\rK\1\250\1\255\14\168\1\4\1\0\6\4\1\168\1\255\22\249\1J\1\0\15[\1\254\1\255\14\168\1\4\1\0\4\4\1\168\1\255\22\254\1Y\1\0\17\146\1\255\15\168\1\4\1\0\2\4\1\168\1\255\23\143\1\0\18\24\1\254\1\255\15\172\1\23\2\172\1\255\23\254\1\22\1\0\19\231\1\255*\227\1\0\20\213\1\255*\210\1\0\20\206\1\255*\205\1\0\20\200\1\255*\198\1\0\20\191\1\255*\188\1\0\20\168\1\255*\164\1\0\20}\1\255*z\1\0\0205\1\255*2\1\0\21\195\1\255(\191\1\0\22$\1\234\1\255&\234\1#\1\0\23%\1\193\1\255$\191\1#\1\0\0263\1{\1\164\1\187\1\202\1\204\1\207\1\228\1\254\1\255\18\254\1\227\1\207\1\204\1\201\1\187\1\163\1z\0011\1\0$\23\1\145\1\254\1\255\14\254\1\143\1\22\1\0.Z\1\249\1\255\12\249\1Y\1\0001J\1\246\1\255\n\246\1J\1\0003?\1\239\1\255\8\238\1=\1\0005&\1\207\1\255\6\205\1%\1\0007\4\1d\1\197\1\248\1\247\1\196\1b\1\4\1\0\255\0\29",
+	}
+
+	glyphs.wildcard = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\153\1\1/\1k\1\156\1\196\1\228\1\245\1\255\2\244\1\225\1\195\1\155\1i\1,\1\0/5\1\148\1\229\1\255\14\226\1\145\0011\1\0)\1\1T\1\202\1\255\20\198\1N\1\1\1\0%<\1\205\1\255\24\200\0016\1\0\"\11\1\151\1\254\1\255\26\253\1\144\1\t\1\0\31)\1\214\1\255\30\209\1$\1\0\29C\1\241\1\255 \237\1=\1\0\27L\1\248\1\255\"\246\1G\1\0\25C\1\248\1\255\16\173\1\20\1\21\1\175\1\255\16\246\1>\1\0\23)\1\241\1\255\17\20\1\0\2\23\1\255\17\237\1$\1\0\21\11\1\214\1\255\18\0\4\255\18\209\1\8\1\0\20\151\1\255\19\0\4\255\19\143\1\0\19<\1\254\1\255\19\0\4\255\19\253\0015\1\0\17\1\1\205\1\255\20\0\4\255\20\198\1\1\1\0\16T\1\255\21\0\4\255\21L\1\0\16\202\1\255\21\0\4\255\21\196\1\0\0155\1\255\8\198\1\31\1\12\1y\1\243\1\255\t\0\4\255\t\243\1y\1\12\1 \1\200\1\255\0080\1\0\14\148\1\255\0089\1\0\3\25\1\160\1\254\1\255\7\0\4\255\7\254\1\161\1\26\1\0\3;\1\255\8\142\1\0\r\1\1\229\1\255\8:\1\0\0056\1\199\1\255\6\0\4\255\6\199\0016\1\0\5=\1\255\8\225\1\0\r/\1\255\t\200\1\27\1\0\5\1\1\\\1\228\1\255\4\0\4\255\4\228\1\\\1\1\1\0\5\27\1\202\1\255\t)\1\0\12k\1\255\n\244\1{\1\8\1\0\5\11\1\131\1\246\1\255\2\0\4\255\2\247\1\132\1\11\1\0\5\8\1{\1\244\1\255\nf\1\0\12\157\1\255\12\222\1T\1\0\6 \1\171\1\255\1\0\4\255\1\171\1 \1\0\6T\1\222\1\255\12\152\1\0\12\197\1\255\14\191\1/\1\0\6?\1\0\4?\1\0\6/\1\191\1\255\14\192\1\0\12\226\1\255\15\252\1\152\1\21\1\0\14\21\1\152\1\252\1\255\15\222\1\0\12\245\1\255\17\239\1q\1\5\1\0\n\5\1q\1\239\1\255\17\242\1\0\12\254\1\255\19\216\1I\1\0\8I\1\216\1\255\19\252\1\0\12\254\1\255\19\216\1I\1\0\8I\1\216\1\255\19\252\1\0\12\245\1\255\17\239\1q\1\5\1\0\n\5\1q\1\239\1\255\17\242\1\0\12\225\1\255\15\252\1\152\1\21\1\0\14\21\1\152\1\252\1\255\15\223\1\0\12\196\1\255\14\191\1/\1\0\6?\1\0\4?\1\0\6/\1\191\1\255\14\193\1\0\12\156\1\255\12\222\1T\1\0\6 \1\171\1\255\1\0\4\255\1\171\1 \1\0\6T\1\222\1\255\12\152\1\0\12j\1\255\n\244\1{\1\8\1\0\5\11\1\131\1\246\1\255\2\0\4\255\2\246\1\131\1\11\1\0\5\8\1{\1\244\1\255\nf\1\0\12.\1\255\t\198\1\26\1\0\5\1\1\\\1\228\1\255\4\0\4\255\4\228\1\\\1\1\1\0\5\27\1\200\1\255\t)\1\0\12\1\1\228\1\255\0089\1\0\0056\1\199\1\255\6\0\4\255\6\199\0016\1\0\5<\1\255\8\225\1\0\14\147\1\255\8:\1\0\3\25\1\160\1\254\1\255\7\0\4\255\7\254\1\160\1\25\1\0\3<\1\255\8\142\1\0\0144\1\255\8\200\1\"\1\14\1y\1\243\1\255\t\0\4\255\t\243\1y\1\14\1#\1\202\1\255\0081\1\0\15\201\1\255\21\0\4\255\21\197\1\0\16R\1\255\21\0\4\255\21M\1\0\16\1\1\203\1\255\20\0\4\255\20\199\1\1\1\0\17:\1\253\1\255\19\0\4\255\19\253\0015\1\0\19\148\1\255\19\0\4\255\19\145\1\0\20\n\1\212\1\255\18\0\4\255\18\209\1\t\1\0\21'\1\239\1\255\17\21\1\0\2\24\1\255\17\238\1%\1\0\23@\1\247\1\255\16\175\1\22\1\23\1\177\1\255\16\247\1?\1\0\25K\1\248\1\255\"\247\1J\1\0\27A\1\239\1\255 \238\1?\1\0\29'\1\212\1\255\30\209\1%\1\0\31\t\1\147\1\253\1\255\26\253\1\145\1\t\1\0\"7\1\201\1\255\24\199\0015\1\0%\1\1O\1\199\1\255\20\197\1M\1\1\1\0)2\1\144\1\226\1\255\14\225\1\142\0011\1\0/*\1g\1\153\1\193\1\223\1\242\1\255\2\242\1\223\1\192\1\152\1f\1)\1\0\255\0\154",
+	}
+
+	glyphs.wind = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\1564\1\153\1\220\1\252\2\218\1\152\0010\1\0006\11\1\159\1\254\1\255\6\254\1\153\1\t\1\0003\11\1\198\1\255\n\191\1\8\1\0002\160\1\255\12\151\1\00015\1\254\1\255\12\253\1.\1\0000\156\1\255\14\147\1\0000\221\1\255\14\213\1\0000\185\1\255\14\245\1\0006\23\1\178\1\255\7\245\1\0\n4\1\154\1\221\1\253\1\251\1\219\1\153\0012\1\0%\23\1\255\7\213\1\0\8\n\1\157\1\254\1\255\6\254\1\155\1\n\1\0#\23\1\255\7\146\1\0\7\n\1\196\1\255\n\194\1\t\1\0!\23\1\176\1\255\6\253\1-\1\0\7\158\1\255\12\154\1\0\tO\1\233\1\255\30\149\1\0\0073\1\254\1\255\12\254\0010\1\0\8\234\1\255\30\188\1\8\1\0\7\154\1\255\14\150\1\0\8\235\1\255\28\253\1\150\1\8\1\0\8\219\1\255\14\216\1\0\8Q\1\232\1\255\24\249\1\214\1\147\1-\1\0\n\182\1\255\14\249\1\0006\23\1\177\1\255\7\248\1\0007\23\1\255\7\215\1\0007\22\1\255\7\149\1\0006\23\1\175\1\255\6\253\1.\1\0\nO\1\233\1\2552\152\1\0\11\234\1\2552\192\1\8\1\0\11\235\1\2550\253\1\149\1\8\1\0\12Q\1\232\1\255,\249\1\216\1\149\1.\1\0\255\0\17O\1\233\1\255\28\251\1\219\1\152\0011\1\0\30\234\1\255 \254\1\153\1\t\1\0\28\235\1\255\"\192\1\8\1\0\27Q\1\232\1\255\"\151\1\0007\23\1\178\1\255\6\253\1.\1\0007\24\1\255\7\147\1\0007\24\1\255\7\213\1\0006\24\1\177\1\255\7\245\1\0000\186\1\255\14\245\1\0000\220\1\255\14\213\1\0000\155\1\255\14\146\1\00003\1\254\1\255\12\253\1-\1\0001\156\1\255\12\148\1\0002\n\1\194\1\255\n\189\1\8\1\0003\n\1\155\1\254\1\255\6\253\1\149\1\8\1\00061\1\151\1\216\1\249\1\248\1\214\1\148\1-\1\0\255\0\255\0\152",
+	}
+
+	glyphs.badRing = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0[\23\1C\1j\1\137\1\153\1\165\2\153\1\137\1j\1C\1\23\1\0000\2\1E\1\150\1\215\1\255\12\214\1\149\1C\1\2\1\0*\21\1\130\1\227\1\255\18\226\1\129\1\20\1\0&\17\1\142\1\244\1\255\22\244\1\140\1\16\1\0\"\1\1_\1\233\1\255\26\232\1]\1\0 \16\1\174\1\255\11\247\1\210\1\187\1\176\2\187\1\211\1\247\1\255\11\172\1\15\1\0\29+\1\222\1\255\8\248\1\174\1g\1'\1\2\1\0\6\2\1'\1h\1\175\1\249\1\255\8\221\1)\1\0\27:\1\237\1\255\7\226\1p\1\18\1\0\14\18\1q\1\227\1\255\7\236\0018\1\0\25:\1\245\1\255\6\240\1o\1\6\1\0\18\6\1q\1\241\1\255\6\244\0018\1\0\23+\1\237\1\255\6\184\1\25\1\0\22\26\1\186\1\255\6\236\1)\1\0\21\16\1\222\1\255\5\254\1}\1\2\1\0\24\2\1\128\1\254\1\255\5\220\1\15\1\0\19\1\1\174\1\255\5\252\1a\1\0\28c\1\252\1\255\5\170\1\0\19_\1\255\5\254\1a\1\0\30c\1\254\1\255\5[\1\0\17\17\1\233\1\255\5}\1\0\r9\1U\0049\1\0\r\129\1\255\5\231\1\15\1\0\16\142\1\255\5\184\1\2\1\0\r\170\1\255\4\170\1\0\r\2\1\187\1\255\5\138\1\0\15\21\1\244\1\255\4\241\1\25\1\0\14\170\1\255\4\170\1\0\14\27\1\242\1\255\4\243\1\19\1\0\14\130\1\255\5o\1\0\15\170\1\255\4\170\1\0\15r\1\255\5\128\1\0\r\2\1\226\1\255\4\227\1\6\1\0\15\170\1\255\4\170\1\0\15\7\1\228\1\255\4\225\1\2\1\0\12E\1\255\5o\1\0\16\170\1\255\4\170\1\0\16r\1\255\5A\1\0\12\150\1\255\4\248\1\18\1\0\16\170\1\255\4\170\1\0\16\19\1\249\1\255\4\146\1\0\12\215\1\255\4\174\1\0\17\170\1\255\4\170\1\0\17\177\1\255\4\212\1\0\11\24\1\255\5g\1\0\17\170\1\255\4\170\1\0\17i\1\255\4\254\1\22\1\0\nC\1\255\5'\1\0\17\170\1\255\4\170\1\0\17)\1\255\5A\1\0\nk\1\255\4\246\1\2\1\0\17\170\1\255\4\170\1\0\17\3\1\247\1\255\4h\1\0\n\138\1\255\4\210\1\0\18\170\1\255\4\170\1\0\18\212\1\255\4\137\1\0\n\152\1\255\4\188\1\0\18\170\1\255\4\170\1\0\18\191\1\255\4\150\1\0\n\164\1\255\4\176\1\0\18\170\1\255\4\170\1\0\18\177\1\255\4\163\1\0\n\164\1\255\4\176\1\0\18\170\1\255\4\170\1\0\18\177\1\255\4\163\1\0\n\152\1\255\4\188\1\0\18\170\1\255\4\170\1\0\18\191\1\255\4\150\1\0\n\138\1\255\4\210\1\0\18r\1\170\4r\1\0\18\212\1\255\4\136\1\0\nk\1\255\4\247\1\3\1\0(\3\1\247\1\255\4h\1\0\nC\1\255\5'\1\0(*\1\255\5A\1\0\n\23\1\254\1\255\4h\1\0(j\1\255\4\254\1\21\1\0\11\214\1\255\4\175\1\0(\178\1\255\4\211\1\0\12\149\1\255\4\249\1\18\1\0&\20\1\249\1\255\4\145\1\0\12C\1\255\5p\1\0\16\170\1\255\4\170\1\0\16s\1\255\5@\1\0\12\2\1\226\1\255\4\227\1\7\1\0\15\170\1\255\4\170\1\0\15\7\1\228\1\255\4\225\1\2\1\0\r\129\1\255\5q\1\0\15\170\1\255\4\170\1\0\15u\1\255\5\127\1\0\14\20\1\244\1\255\4\241\1\26\1\0\14\170\1\255\4\170\1\0\14\28\1\243\1\255\4\242\1\18\1\0\15\140\1\255\5\186\1\2\1\0\r\170\1\255\4\170\1\0\r\3\1\189\1\255\5\136\1\0\16\16\1\232\1\255\5\128\1\0\r9\1U\0049\1\0\r\131\1\255\5\230\1\14\1\0\17]\1\255\5\254\1c\1\0\30e\1\255\6Y\1\0\19\171\1\255\5\252\1c\1\0\28e\1\252\1\255\5\168\1\0\20\15\1\221\1\255\5\254\1\129\1\2\1\0\24\3\1\131\1\255\6\218\1\14\1\0\21)\1\236\1\255\6\187\1\27\1\0\22\28\1\189\1\255\6\235\1'\1\0\0238\1\244\1\255\6\242\1s\1\7\1\0\18\8\1u\1\243\1\255\6\243\0017\1\0\0258\1\236\1\255\7\228\1r\1\19\1\0\14\20\1s\1\229\1\255\7\235\0017\1\0\27)\1\220\1\255\8\249\1\177\1j\1)\1\3\1\0\6\3\1)\1j\1\178\1\249\1\255\8\218\1'\1\0\29\15\1\170\1\255\11\248\1\213\1\189\1\177\2\189\1\213\1\248\1\255\11\168\1\14\1\0 [\1\231\1\255\26\230\1Y\1\0#\15\1\138\1\243\1\255\22\242\1\136\1\14\1\0&\19\1\128\1\225\1\255\18\225\1\127\1\18\1\0*\2\1A\1\146\1\212\1\255\11\254\1\212\1\145\1?\1\2\1\0000\21\1B\1h\1\134\1\152\1\164\2\152\1\134\1h\1A\1\21\1\0\255\0[",
+	}
+
+	glyphs.chevron = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\255\0\255\0W\1\1\0\26\1\1\0#\t\1\186\1h\1\0\24a\1\191\1\12\1\0!\t\1\187\1\255\1\254\1h\1\0\22a\1\253\1\255\1\193\1\12\1\0\31\t\1\187\1\255\3\254\1h\1\0\20a\1\253\1\255\3\193\1\12\1\0\30\174\1\255\5\253\1b\1\0\18b\1\253\1\255\5\174\1\0\0303\1\238\1\255\5\254\1h\1\0\16a\1\253\1\255\5\241\0018\1\0\0313\1\238\1\255\5\254\1h\1\0\14a\1\253\1\255\5\241\0018\1\0!3\1\238\1\255\5\254\1h\1\0\12a\1\253\1\255\5\241\0018\1\0#3\1\238\1\255\5\254\1h\1\0\na\1\253\1\255\5\241\0018\1\0%3\1\238\1\255\5\254\1h\1\0\8a\1\253\1\255\5\241\0018\1\0'3\1\238\1\255\5\254\1h\1\0\6a\1\253\1\255\5\241\0018\1\0)3\1\238\1\255\5\254\1h\1\0\4a\1\253\1\255\5\241\0018\1\0+3\1\238\1\255\5\254\1h\1\0\2a\1\253\1\255\5\241\0018\1\0-3\1\238\1\255\5\254\1h\1a\1\253\1\255\5\241\0018\1\0/9\1\241\1\255\5\253\2\255\5\241\0019\1\00013\1\238\1\255\n\241\0018\1\00033\1\238\1\255\8\241\0018\1\00053\1\238\1\255\6\241\0018\1\00073\1\238\1\255\4\241\0018\1\00093\1\238\1\255\2\241\0018\1\0;3\1\238\1\241\0018\1\0=9\2\0\255\0\255\0\255\0\255\0\255\0d",
+	}
+
+	glyphs.close = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\212\3\1\158\1N\1\0\24H\1\162\1\4\1\0!\3\1\163\1\255\1\249\1N\1\0\22H\1\247\1\255\1\170\1\4\1\0\31\3\1\164\1\255\3\249\1N\1\0\20H\1\247\1\255\3\170\1\4\1\0\30\161\1\255\5\248\1K\1\0\18K\1\248\1\255\5\160\1\0\30H\1\247\1\255\5\249\1N\1\0\16H\1\247\1\255\5\249\1N\1\0\31H\1\247\1\255\5\249\1N\1\0\14H\1\247\1\255\5\249\1N\1\0!H\1\247\1\255\5\249\1N\1\0\12H\1\247\1\255\5\249\1N\1\0#H\1\247\1\255\5\249\1N\1\0\nH\1\247\1\255\5\249\1N\1\0%H\1\247\1\255\5\249\1N\1\0\8H\1\247\1\255\5\249\1N\1\0'H\1\247\1\255\5\249\1N\1\0\6H\1\247\1\255\5\249\1N\1\0)H\1\247\1\255\5\249\1N\1\0\4H\1\247\1\255\5\249\1N\1\0+H\1\247\1\255\5\249\1N\1\0\2H\1\247\1\255\5\249\1N\1\0-H\1\247\1\255\5\249\1N\1H\1\247\1\255\5\249\1N\1\0/L\1\249\1\255\5\248\2\255\5\248\1K\1\0001H\1\247\1\255\n\249\1N\1\0003H\1\247\1\255\8\249\1N\1\0005H\1\247\1\255\6\249\1N\1\0006I\1\247\1\255\6\249\1N\1\0005I\1\247\1\255\8\249\1N\1\0003I\1\247\1\255\n\249\1N\1\0001L\1\249\1\255\5\249\2\255\5\248\1K\1\0/I\1\247\1\255\5\249\1N\1H\1\247\1\255\5\249\1N\1\0-I\1\247\1\255\5\249\1N\1\0\2H\1\247\1\255\5\249\1N\1\0+I\1\247\1\255\5\249\1N\1\0\4H\1\247\1\255\5\249\1N\1\0)I\1\247\1\255\5\249\1N\1\0\6H\1\247\1\255\5\249\1N\1\0'I\1\247\1\255\5\249\1N\1\0\8H\1\247\1\255\5\249\1N\1\0%I\1\247\1\255\5\249\1N\1\0\nH\1\247\1\255\5\249\1N\1\0#I\1\247\1\255\5\249\1N\1\0\12H\1\247\1\255\5\249\1N\1\0!I\1\247\1\255\5\249\1N\1\0\14H\1\247\1\255\5\249\1N\1\0\31I\1\247\1\255\5\249\1N\1\0\16H\1\247\1\255\5\249\1N\1\0\30\161\1\255\5\249\1L\1\0\18L\1\249\1\255\5\160\1\0\30\3\1\163\1\255\3\249\1N\1\0\20H\1\247\1\255\3\170\1\4\1\0\31\3\1\163\1\255\1\249\1N\1\0\22H\1\247\1\255\1\170\1\4\1\0!\4\1\161\1L\1\0\24L\1\161\1\4\1\0\255\0\255\0\255\0\212",
+	}
+
+	glyphs.okRing = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0[\23\1C\1j\1\137\1\153\1\165\2\153\1\137\1j\1C\1\23\1\0000\2\1E\1\150\1\215\1\255\12\214\1\149\1C\1\2\1\0*\21\1\130\1\227\1\255\18\226\1\129\1\20\1\0&\17\1\142\1\244\1\255\22\244\1\140\1\16\1\0\"\1\1_\1\233\1\255\26\232\1]\1\0 \16\1\174\1\255\11\247\1\210\1\187\1\176\2\187\1\211\1\247\1\255\11\172\1\15\1\0\29+\1\222\1\255\8\248\1\174\1g\1'\1\2\1\0\6\2\1'\1h\1\175\1\249\1\255\8\221\1)\1\0\27:\1\237\1\255\7\226\1p\1\18\1\0\14\18\1q\1\227\1\255\7\236\0018\1\0\25:\1\245\1\255\6\240\1o\1\6\1\0\18\6\1q\1\241\1\255\6\244\0018\1\0\23+\1\237\1\255\6\184\1\25\1\0\22\26\1\186\1\255\6\236\1)\1\0\21\16\1\222\1\255\5\254\1}\1\2\1\0\24\2\1\128\1\254\1\255\5\220\1\15\1\0\19\1\1\174\1\255\5\252\1a\1\0\28c\1\252\1\255\5\170\1\0\19_\1\255\5\254\1a\1\0\30c\1\254\1\255\5[\1\0\17\17\1\233\1\255\5}\1\0 \129\1\255\5\231\1\15\1\0\16\142\1\255\5\184\1\2\1\0 \2\1\187\1\255\5\138\1\0\15\21\1\244\1\255\4\241\1\25\1\0\"\27\1\242\1\255\4\243\1\19\1\0\14\130\1\255\5o\1\0\28?\1\14\1\0\6r\1\255\5\128\1\0\r\2\1\226\1\255\4\227\1\6\1\0\27H\1\247\1\204\1\17\1\0\5\7\1\228\1\255\4\225\1\2\1\0\12E\1\255\5o\1\0\27L\1\248\1\255\2\198\1\14\1\0\5r\1\255\5A\1\0\12\150\1\255\4\248\1\18\1\0\26L\1\248\1\255\4\198\1\14\1\0\4\19\1\249\1\255\4\146\1\0\12\215\1\255\4\174\1\0\26L\1\248\1\255\5\248\1?\1\0\5\177\1\255\4\212\1\0\11\24\1\255\5g\1\0\25L\1\248\1\255\5\248\1K\1\0\6i\1\255\4\254\1\22\1\0\nC\1\255\5'\1\0\t5\1\24\1\0\rL\1\248\1\255\5\248\1K\1\0\7)\1\255\5A\1\0\nk\1\255\4\246\1\2\1\0\0089\1\241\1\217\1\26\1\0\11I\1\247\1\255\5\249\1N\1\0\8\3\1\247\1\255\4h\1\0\n\138\1\255\4\210\1\0\0089\1\241\1\255\2\215\1\24\1\0\tL\1\248\1\255\5\248\1K\1\0\n\212\1\255\4\137\1\0\n\152\1\255\4\188\1\0\0079\1\241\1\255\4\217\1\26\1\0\7I\1\247\1\255\5\249\1N\1\0\11\191\1\255\4\150\1\0\n\164\1\255\4\176\1\0\7\142\1\255\6\215\1\24\1\0\5L\1\248\1\255\5\248\1K\1\0\12\177\1\255\4\164\1\0\n\164\1\255\4\176\1\0\7\1\1\149\1\255\6\217\1\26\1\0\3I\1\247\1\255\5\249\1N\1\0\r\177\1\255\4\163\1\0\n\152\1\255\4\188\1\0\8\1\1\149\1\255\6\217\1\26\1\0\1I\1\247\1\255\5\249\1N\1\0\14\191\1\255\4\150\1\0\n\138\1\255\4\210\1\0\t\1\1\153\1\255\6\215\1b\1\249\1\255\5\248\1K\1\0\15\212\1\255\4\136\1\0\nk\1\255\4\247\1\3\1\0\t\1\1\149\1\255\12\249\1N\1\0\15\3\1\247\1\255\4h\1\0\nC\1\255\5'\1\0\n\1\1\153\1\255\n\248\1K\1\0\16*\1\255\5A\1\0\n\23\1\254\1\255\4h\1\0\11\1\1\153\1\255\8\248\1K\1\0\17j\1\255\4\254\1\21\1\0\11\214\1\255\4\175\1\0\12\1\1\153\1\255\6\248\1K\1\0\18\178\1\255\4\211\1\0\12\149\1\255\4\249\1\18\1\0\12\1\1\153\1\255\4\248\1K\1\0\18\20\1\249\1\255\4\145\1\0\12C\1\255\5p\1\0\r\1\1\153\1\255\2\248\1K\1\0\19s\1\255\5@\1\0\12\2\1\226\1\255\4\227\1\7\1\0\r\1\1\149\1\249\1N\1\0\19\7\1\228\1\255\4\225\1\2\1\0\r\129\1\255\5q\1\0\14\1\1/\1\0\20u\1\255\5\127\1\0\14\20\1\244\1\255\4\241\1\26\1\0\"\28\1\243\1\255\4\242\1\18\1\0\15\140\1\255\5\186\1\2\1\0 \3\1\189\1\255\5\136\1\0\16\16\1\232\1\255\5\128\1\0 \131\1\255\5\230\1\14\1\0\17]\1\255\5\254\1c\1\0\30e\1\255\6Y\1\0\19\171\1\255\5\252\1c\1\0\28e\1\252\1\255\5\168\1\0\20\15\1\221\1\255\5\254\1\129\1\2\1\0\24\3\1\131\1\255\6\218\1\14\1\0\21)\1\236\1\255\6\187\1\27\1\0\22\28\1\189\1\255\6\235\1'\1\0\0238\1\244\1\255\6\242\1s\1\7\1\0\18\8\1u\1\243\1\255\6\243\0017\1\0\0258\1\236\1\255\7\228\1r\1\19\1\0\14\20\1s\1\229\1\255\7\235\0017\1\0\27)\1\220\1\255\8\249\1\177\1j\1)\1\3\1\0\6\3\1)\1j\1\178\1\249\1\255\8\218\1'\1\0\29\15\1\170\1\255\11\248\1\213\1\189\1\177\2\189\1\213\1\248\1\255\11\168\1\14\1\0 [\1\231\1\255\26\230\1Y\1\0#\15\1\138\1\243\1\255\22\242\1\136\1\14\1\0&\19\1\128\1\225\1\255\18\225\1\127\1\18\1\0*\2\1A\1\146\1\212\1\255\11\254\1\212\1\145\1?\1\2\1\0000\21\1B\1h\1\134\1\152\1\164\2\152\1\134\1h\1A\1\21\1\0\255\0[",
+	}
+
+	glyphs.airborne = {
+		w = 64,
+		h = 64,
+		data = "O\1\0?\174\1^\1\0>\174\1\244\1)\1\0=\173\1\255\1\208\1\8\1\0<\173\1\255\2\149\1\0<\173\1\255\3[\1\0;\172\1\255\3\247\0018\1\0:\162\1\255\4\231\1\31\1\0009}\1\255\5\219\1\24\1\0008U\1\255\6\208\1\17\1\0007/\1\255\7\209\1\25\1\0006\8\1\244\1\255\7\221\1'\1\0006\177\1\255\8\242\1X\1\0005e\1\255\n\161\1\21\1\0003\26\1\254\1\255\n\237\1g\1\4\1\0002\179\1\255\12\222\1f\1\3\1\00009\1\255\14\214\1e\1\t\1\0/\192\1\255\15\236\1\135\1!\1\0-<\1\253\1\255\16\254\1\194\1e\1\16\1\0+\142\1\255\19\248\1\186\1o\1$\1\0(\t\1\214\1\255\22\223\1\165\1n\0016\1\12\1\0\31n\1\t\1\0\0032\1\243\1\255\26\228\1\190\1\157\1\140\1{\1j\1f\1a\1U\2S\1D\3C\0013\1&\1\24\1\t\1\0\12p\1\213\1.\1\0\3B\1\247\1\255,\233\1\203\1\156\1h\1\"\1\0\7\17\1\246\1\247\1n\1\1\1\0\2P\1\251\1\2550\208\1f\1\8\1\0\5\160\1\255\2\192\0010\1\0\2N\1\241\1\2551\222\1C\1\0\0048\1\255\3\253\1\174\1=\1\1\1)\1\216\1\2551\252\1e\1\0\4\207\1\255\5\221\1\145\1b\1\210\1\2551\253\1E\1\0\3`\1\255;\224\1\4\1\0\2\2\1\197\1\255;T\1\0\3-\1\250\1\255:\151\1\0\4\127\1\255:\190\1\0\4\1\1\169\1\2559\192\1\0\5\t\1\200\1\2558\161\1\0\6\15\1\187\1\2557h\1\0\7\5\1\158\1\2555\246\1\17\1\0\t_\1\235\1\2553\137\1\0\11\20\1\159\1\253\1\2550\218\1\t\1\0\t\t\1\0\3#\1\143\1\241\1\255-\251\1=\1\0\n@\1\205\1\144\1N\1\15\1\0\1\14\1[\1\164\1\234\1\255)\254\1a\1\0\12d\1\255\2\252\1\201\1\143\1s\1k\1~\1\209\1\255(y\1\0\14\139\1\255/\137\1\0\15\2\1\177\1\255,\254\1w\1\0\17\12\1\188\1\255*\252\1c\1\0\19\4\1\139\1\254\1\255'\248\1Q\1\0\22J\1\217\1\255%\243\1A\1\0\24\5\1q\1\231\1\255\"\250\1G\1\0\27\5\1U\1\190\1\253\1\255\31]\1\0\31\20\1X\1\158\1\216\1\251\1\255\26\176\1\0$\7\1/\1X\1o\1\130\1\150\1\179\1\250\1\255\19`\1\0&\17\0010\1V\1\160\1\237\1\255\20y\1\0#\20\1\175\1\241\1\255\25\215\1\6\1\0#\n\1\138\1\251\1\255\25\134\1\0%2\1\205\1\255\24\254\1o\1\0%\3\1Q\1\190\1\254\1\255\22\254\1o\1\0'\27\1f\1\168\1\216\1\252\1\255\7\248\1\213\1\170\1\156\1\250\1\255\7\254\1G\1\0*\8\1\30\0011\1D\1B\0013\1+\1\19\1\0\4-\1\193\1\255\7\158\1\0008;\1\171\1\243\1\255\3\254\1V\1\0:\6\1?\1_\1s\1>\1\0\255\0\138",
+	}
+
+	glyphs.ammo = {
+		w = 64,
+		h = 64,
+		data = "\0\r?\1\128\1\0\16\7\1\183\1\2\1\0\16\145\1.\1\0\25\162\1\231\1\1\1\0\15O\1\255\1<\1\0\15\8\1\244\1\141\1\0\25\223\1\255\1%\1\0\15\140\1\255\1x\1\0\15:\1\255\1\202\1\0\24\22\1\255\2]\1\0\15\196\1\255\1\175\1\0\15r\1\255\1\250\1\t\1\0\23P\1\255\2\148\1\0\14\5\1\246\1\255\1\233\1\0\15\169\1\255\2;\1\0\23\130\1\255\2\200\1\0\14/\1\255\3\27\1\0\14\219\1\255\2n\1\0\23\171\1\255\2\239\1\0\14X\1\255\3C\1\0\r\8\1\252\1\255\2\149\1\0\23\211\1\255\3\24\1\0\r\128\1\255\3k\1\0\r.\1\255\3\189\1\0\22\3\1\247\1\255\3@\1\0\r\168\1\255\3\147\1\0\rV\1\255\3\230\1\0\22$\1\255\4i\1\0\r\209\1\255\3\187\1\0\r~\1\255\4\16\1\0\21I\1\255\4\141\1\0\r\244\1\255\3\224\1\0\r\162\1\255\0043\1\0\21i\1\255\4\174\1\0\12\22\1\255\4\252\1\5\1\0\12\195\1\255\4T\1\0\21\137\1\255\4\207\1\0\0126\1\255\5\"\1\0\12\227\1\255\4t\1\0\21\169\1\255\4\240\1\0\12W\1\255\5C\1\0\11\6\1\253\1\255\4\149\1\0\21\172\1\221\5\r\1\0\11e\1\221\5U\1\0\11\30\1\221\5\156\1\0\147\1\1\169\1\187\7#\1\0\tm\1\187\7_\1\0\t1\1\187\7\156\1\0\18=\1\255\8\130\1\0\8\3\1\229\1\255\7\216\1\0\t\150\1\255\8)\1\0\17\157\1\255\8\227\1\3\1\0\7J\1\255\t6\1\0\7\8\1\238\1\255\8\137\1\0\16\11\1\242\1\255\tD\1\0\7\171\1\255\t\151\1\0\7X\1\255\t\232\1\4\1\0\15^\1\255\n\164\1\0\6\18\1\248\1\255\t\240\1\t\1\0\6\184\1\255\nJ\1\0\15t\1\170\n\161\1\3\1\0\5=\1\170\0111\1\0\5\t\1\167\1\170\ng\1\0\143\196\1\242\11\22\1\0\5w\1\242\11e\1\0\5(\1\242\11\178\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15h\1\128\11\12\1\0\5?\1\128\0115\1\0\5\21\1\128\11^\1\0\143\203\1\250\11\23\1\0\5{\1\250\11h\1\0\5)\1\250\11\184\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\15\208\1\255\11\24\1\0\5~\1\255\11k\1\0\5+\1\255\11\189\1\0\7",
+	}
+
+	glyphs.armorFull = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\235\25\1H\1\27\1\0\t/\1\177\1\171\1\135\1d\0014\1\5\1\0)\8\1S\1\154\1\223\1\255\1\219\1\229\1\137\1\21\1\0\5 \1\135\1\236\1\255\5\246\1\192\1)\1\0&8\1\215\1\255\3\233\1\31\1\17\1\138\1\237\1\153\1D\1\"\1\23\1E\1\237\1\255\5\254\1\159\1D\1\156\1\220\1\12\1\0#\11\1\129\1\251\1\255\4B\1\0\3\24\1s\1\184\1\219\1\238\1\255\6\239\1D\1\0\3\175\1\128\1\0\"\8\1\201\1\255\4\187\1k\1\169\1\0\6B\1\236\1\255\5\254\1C\1\0\0049\1\236\1\7\1\0!\152\1\255\4\196\1\4\1\0\1\155\1M\1\0\4l\1\251\1\255\6\184\1\0\5\1\1\224\1P\1\0 C\1\254\1\255\4m\1\0\2\21\1\186\1\0\2\6\1\154\1\255\8P\1\0\6\150\1\142\1\0\n!\1d\1\129\1\153\1\169\1\153\1y\1B\1\4\1\0\12\n\1\222\1\255\5K\1\0\3\170\1*\0018\1\212\1\255\8\227\1\4\1\0\6[\1\195\1\0\7\8\1o\1\213\1\255\8\232\1t\1\6\1\0\nz\1\255\6L\1\0\3\135\1\223\1\254\1\255\t\132\1\0\7-\1\221\1\0\6J\1\227\1\255\12\200\1\23\1\0\8\12\1\239\1\255\6\225\1\138\1\152\1\212\1\255\0128\1\0\7\21\1\243\1\0\5o\1\252\1\255\14\207\1\7\1\0\7h\1\255\22\235\1\2\1\0\7\17\1\250\1\0\4U\1\254\1\255\16\129\1\0\7\189\1\255\22\192\1\0\8'\1\243\1\0\3\17\1\236\1\255\17\249\1\24\1\0\5\2\1\248\1\255\22\154\1\0\8;\1\233\1\0\3x\1\255\19r\1\0\5\21\1\255\23\130\1\0\8P\1\205\1\0\3\209\1\255\19\191\1\0\5\n\1\255\23z\1\0\8v\1\174\1\0\2!\1\255\20\242\1\1\1\0\5\238\1\255\22q\1\0\8\165\1\127\1\0\2L\1\255\21\r\1\0\5\210\1\255\22i\1\0\8\211\1L\1\0\1\27\1\141\1\255\21\\\1\0\5\160\1\255\22q\1\0\7\8\1\250\1\25\1\194\1\255\23\241\1\n\1\0\4g\1\255\22\149\1\0\0075\1\230\1\0\1\22\1@\1T\1f\1\176\1\255\0207\1\0\4+\1\255\22\236\1\15\1\0\6d\1\192\1\0\5\200\1\255\20Q\1\0\5\225\1\255\22\191\1\6\1\0\5\129\1\155\1\0\5\217\1\255\20l\1\0\5\152\1\255\23\155\1\0\5\140\1\129\1\0\5\190\1\255\1\235\1\221\1\220\1\204\2\189\1\170\1\147\1{\1\204\1\255\2\181\1f\2\205\1\255\3\136\1\0\5O\1\255\24i\1\0\4u\1\141\1\0\5\150\1\255\1\132\1\0\6\20\1u\1\223\1\255\2\238\1\221\2\224\1\255\2\195\1;\1\0\5\22\1\255\24\238\1\1\1\0\2\24\1\216\1\142\1\0\5\\\1\255\1c\1\0\0063\1\255\ne\1\0\6\n\1\238\1\255\24\19\1\0\2\150\1\165\1\4\1\0\5\22\1\254\1E\1\0\6\14\1\255\nR\1\0\6\187\1\255\25\159\1\140\1\136\1\215\1\127\1\2\1\0\6\217\0018\1\0\7\234\1\255\2\131\1f\1q\1\159\1\218\1\255\1\242\1\15\1\0\6\198\1\255\29\230\1\1\1\0\6\158\0010\1\0\4*\1\145\1\223\1\255\2\250\1\29\1\0\3E\1\239\1[\1\0\7\189\1\255\29\176\1\0\7d\1G\1\0\3c\1\248\1\172\1\220\1\255\2]\1\0\3R\1\206\1\20\1\0\8\165\1\255\29{\1\0\7W\1\191\1\r\1\0\1[\1\249\1W\1\0\1\228\1\255\1\185\1\0\0026\1\176\1\235\1%\1\0\t5\1\157\1\255\28F\1\0\7\141\1\255\1\230\1\200\1\251\1Y\1\0\1\22\1\253\1\255\1\150\1x\1\213\1\255\1\237\0011\1\0\11h\1\255\24h\1P\1z\1\220\1\16\1\0\7a\1\255\12\202\1(\1\0\12q\1\255\24\23\1\0\1\134\1u\1\0\8\14\1\242\1\255\6\229\1\193\1\155\1n\1/\1\1\1\0\0125\1\249\1\255\24\17\1\2\1\227\1\128\1\0\tT\1\184\1\213\1\255\2\249\1\131\1\2\1\0\17R\1\255\25\148\1\189\1\255\1\167\1\0\n,\1\135\1\167\1\129\1\30\1\0\19E\1\255\28\131\1\0\"8\1\255\28\128\1\0\"+\1\186\1\255\27\135\1\0\"\2\1\30\1\255\27\135\1\0#)\1\255\23\239\1\142\1\213\1\255\1J\1\0#{\1\255\23\189\1\0\1\164\1\255\1f\1\0#\11\1~\1\207\1\252\1\255\20\151\1\0\1K\1\144\1\8\1\0&\8\0011\1M\1e\1{\1\136\1\149\1\159\1\170\4\186\1\187\4\198\1\184\1\165\1\134\1\19\1\0\255\0\255\0\201",
+	}
+
+	glyphs.back = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\2323\1\176\1\12\1\0<3\1\238\1\255\1\193\1\12\1\0:3\1\238\1\255\3\193\1\12\1\00088\1\241\1\255\5\186\1\1\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00069\1\241\1\255\5\254\1h\1\00073\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00083\1\238\1\255\5\254\1h\1\00089\1\241\1\255\5\186\1\1\1\00083\1\238\1\255\3\193\1\11\1\0:3\1\238\1\255\1\193\1\11\1\0<9\1\175\1\n\1\0\255\0\255\0\255\0\219",
+	}
+
+	glyphs.bullet = {
+		w = 64,
+		h = 64,
+		data = "\0\130D\1Q\1\2\1\0=Q\1\255\1\211\0019\1\0<\2\1\211\1\255\1\253\1\147\1\r\1\0;9\1\253\1\255\2\226\1H\1\0;\147\1\255\3\254\1\145\1\7\1\0009\11\1\222\1\255\4\211\1,\1\0009H\1\254\1\255\4\243\1_\1\0009\142\1\255\6\161\1\n\1\0007\5\1\201\1\255\6\214\1)\1\0007$\1\242\1\255\6\242\1T\1\0007_\1\255\7\254\1~\1\0007\161\1\255\6\243\1<\1\0007\8\1\205\1\255\4\244\1@\1\0\2\6\1\172\1\170\0016\1\0003$\1\239\1\255\2\244\1@\1\0\2\6\1\177\1\255\3\196\1M\1\1\1\0001M\1\254\1\244\1@\1\0\2\7\1\180\1\255\6\210\1`\1\4\1\0000~\1<\1\0\2\6\1\177\1\255\8\157\1\2\1\0003\6\1\177\1\255\8\157\1\2\1\0003\6\1\177\1\255\8\157\1\2\1\0\2R\1\180\1\t\1\0/\175\1\255\8\156\1\2\1\0\2R\1\250\1\255\1\185\1\t\1\0.\162\1\255\7\157\1\2\1\0\2R\1\250\1\255\3\185\1\t\1\0--\1\254\1\255\5\157\1\2\1\0\2R\1\250\1\255\5\185\1\t\1\0-\186\1\255\4\157\1\2\1\0\2R\1\250\1\255\7\185\1\t\1\0,G\1\255\3\157\1\2\1\0\2R\1\250\1\255\t\185\1\t\1\0,\208\1\255\1\157\1\2\1\0\2R\1\250\1\255\11\185\1\t\1\0+`\1\157\1\2\1\0\2R\1\250\1\255\r\185\1\t\1\0*\4\1\2\1\0\2R\1\250\1\255\15\185\1\t\1\0,R\1\250\1\255\17\185\1\t\1\0+\179\1\255\19\183\1\8\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\6\1\179\1\255\19\185\1\t\1\0*\8\1\183\1\255\19\177\1\0+\6\1\179\1\255\17\249\1O\1\0,\6\1\179\1\255\15\249\1O\1\0\3\1\1\0*\6\1\179\1\255\r\249\1O\1\0\3a\1\183\1\t\1\0*\6\1\179\1\255\11\249\1O\1\0\3a\1\253\1\255\1\185\1\t\1\0*\6\1\179\1\255\t\249\1O\1\0\3b\1\253\1\255\3\128\1\0+\6\1\179\1\255\7\249\1O\1\0\3a\1\253\1\255\3\185\1\8\1\0,\6\1\179\1\255\5\249\1O\1\0\3a\1\253\1\255\3\185\1\8\1\0.\6\1\179\1\255\3\249\1O\1\0\3a\1\253\1\255\3\185\1\8\1\0000\6\1\179\1\255\1\249\1O\1\0\3a\1\253\1\255\3\185\1\8\1\0002\8\1\177\1N\1\0\3a\1\253\1\255\3\185\1\8\1\0008a\1\253\1\255\3\185\1\8\1\0008a\1\253\1\255\3\185\1\8\1\0008\1\1\181\1\255\3\183\1\8\1\0:\6\1\179\1\255\1\185\1\8\1\0<\8\1\128\1\8\1\0J",
+	}
+
+	glyphs.burning = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\233\2\1/\1\0=>\1\215\1~\1\0<N\1\251\1\255\1@\1\0;\8\1\233\1\255\2>\1\0;>\1\255\3z\1\0$q\1\169\1W\1\7\1\0\19O\1\255\3\197\1\0$\7\1\208\1\255\1\227\1o\1\8\1\0\17=\1\255\4.\1\0$+\1\246\1\255\2\223\1R\1\0\16\16\1\255\4\152\1\0\12\16\1\0\24\134\1\255\4\151\1\3\1\0\15\227\1\255\3\244\1\14\1\0\11\151\1L\1\0\23\17\1\239\1\255\4\154\1\0\15\188\1\255\4S\1\0\11\158\1\232\1\r\1\0\23\137\1\255\5R\1\0\14\186\1\255\4\136\1\0\11\187\1\255\1j\1\0\0234\1\255\5\216\1\0\14\207\1\255\4\172\1\0\11\221\1\255\1\184\1\0\23\1\1\230\1\255\5/\1\0\12/\1\254\1\255\4\198\1\0\n\22\1\252\1\255\1\238\1\1\1\0\23\194\1\255\5f\1\0\11)\1\221\1\255\5\199\1\0\ns\1\255\3\27\1\0\23\171\1\255\5\131\1\0\t\22\1\131\1\246\1\255\6\170\1\0\t$\1\239\1\255\3\22\1\0\23\192\1\255\5\161\1\0\0075\1\159\1\247\1\255\8z\1\0\8I\1\228\1\255\3\246\1\6\1\0\22\3\1\230\1\255\5\180\1\0\4\2\1U\1\202\1\255\0113\1\0\5\1\1B\1\177\1\255\5\179\1\0\23R\1\255\6\172\1\0\3B\1\212\1\255\12\214\1\0\4\3\1Z\1\212\1\255\7G\1\0\22 \1\230\1\255\6\143\1\0\1\7\1\152\1\254\1\255\rp\1\0\3)\1\202\1\255\8\177\1\0\0225\1\221\1\255\7a\1\18\1\196\1\255\14\230\1\n\1\0\2a\1\247\1\255\8\215\1\15\1\0\20\2\1x\1\250\1\255\8/\1\197\1\255\15^\1\0\2r\1\254\1\255\8\239\1&\1\0\20\31\1\191\1\255\t\228\1\157\1\255\15\166\1\0\2N\1\254\1\255\8\252\1H\1\0\20_\1\241\1\255\n\220\1\255\15\169\1\6\1\0\1\8\1\226\1\255\tk\1\0\19\2\1\148\1\255\26\231\1\\\1\0\3Z\1\255\t\145\1\0\20\144\1\255\26\198\1\20\1\0\4\161\1\255\8\198\1\3\1\0\19Y\1\255\26\247\1\23\1\0\5\219\1\255\0081\1\0\19\16\1\231\1\255\26\221\1\0\0052\1\255\8\218\1\0\20\138\1\255\27\254\1V\1\0\3\23\1\209\1\255\8\202\1\0\19\12\1\239\1\255\28\254\1\181\1}\1\155\1\238\1\255\t\200\1\0\19i\1\255+\197\1\0\19\179\1\255+\203\1\0\19\232\1\255+\213\1\0\18\21\1\255,\223\1\0\18\27\1\255\11\184\1\172\1\255\31\232\1\0\18\29\1\255\n\149\1\0\1=\1\255\31\231\1\0\18\30\1\255\t\232\1\n\1\0\1%\1\255\31\218\1\0\18\r\1\255\t\138\1\0\2\6\1\249\1\255\30\205\1\0\19\242\1\255\8+\1\0\3\206\1\255\30\170\1\0\19\217\1\255\7\246\1\1\1\0\3\158\1\255\30\127\1\0\19\191\1\255\7\239\1\0\4i\1\255\30A\1\0\19\163\1\255\8\19\1\0\3\25\1\252\1\255\28\230\1\3\1\0\19s\1\255\8=\1\0\4\189\1\255\28u\1\0\20?\1\255\8{\1\0\4a\1\255\27\211\1\6\1\0\20\t\1\237\1\255\7\199\1\0\4\4\1\213\1\255\25\235\1\"\1\0\22\141\1\255\7\253\1\22\1\0\0046\1\245\1\255\23\242\0019\1\0\23\30\1\239\1\255\7X\1\0\5I\1\242\1\255\21\239\1<\1\0\25V\1\254\1\255\6\138\1\0\6&\1\200\1\255\19\212\1&\1\0\27T\1\242\1\255\5\129\1\0\7\1\1N\1\192\1\253\1\255\14\232\1z\1\7\1\0\29\29\1\136\1\207\1\238\1\231\1\166\1\20\1\0\n\27\1b\1\156\1\205\1\236\1\255\6\239\1\205\1\147\1O\1\6\1\0005\n\1\23\1\"\2\28\1\14\1\0\255\0\219",
+	}
+
+	glyphs.c4 = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0b1\1\233\1\213\1\24\1\0<\136\1\255\2\\\1\0<\142\1\255\2g\1\0/\4\1v\1f\1\0\n\148\1\255\2i\1\0\t\n\1\127\1O\1\0#b\1\255\2^\1\0\t\158\1\255\2p\1\0\t\154\1\255\1\254\0012\1\0\"J\1\255\2\235\1\19\1\0\8\162\1\255\2x\1\0\0086\1\253\1\255\0020\1\0\"\1\1\204\1\255\2\154\1\0\8\169\1\255\2\128\1\0\7\6\1\210\1\255\2\178\1\0$R\1\255\2\253\0019\1\0\7\176\1\255\2\135\1\0\7\127\1\255\2\252\1(\1\0$\1\1\209\1\255\2\206\1\3\1\0\6\191\1\255\2\144\1\0\6(\1\248\1\255\2\160\1\0&K\1\255\3n\1\0\6\199\1\255\2\152\1\0\5\1\1\192\1\255\2\246\1\29\1\0=\t\1'\1\0\148\11\1@\1D\t:\0013\29/\1\t\1\0\tD\1\198\1\247\1q\1\0\7/\1\229\1\255)\236\1;\1\0\6A\1\194\1\255\3\187\1\0\7\193\1\255+\184\1\0\4=\1\191\1\255\4\245\1X\1\0\7\234\1\255\21\253\1\193\1\187\16\214\1\255\3\219\1\0\3\129\1\255\5\170\1\30\1\0\8\235\1\255\21\173\1\0\17\5\1\253\1\255\2\221\1\0\3\156\1\255\3\214\1C\1\0\n\229\1\255\21\152\1\0\18\237\1\255\2\224\1\0\3\156\1\255\1\243\1u\1\5\1\0\11\226\1\255\21\157\1\0\18\236\1\255\2\224\1\0\3\156\1\166\1\27\1\0\r\226\1\255\21\159\1\0\18\237\1\255\2\224\1\0\3\20\1\0\15\226\1\255\21\159\1\0\18\237\1\255\2\224\1\0\19\226\1\255\21\159\1\0\0029\1\178\1T\1\6\1\164\1\149\1\7\1W\1\179\1/\1\0\6\237\1\255\2\224\1\0\19\226\1\255\21\159\1\0\2>\1\201\1p\1\8\1\182\1\174\1\t\1k\1\201\1:\1\0\6\237\1\255\2\224\1\0\19\226\1\255\21\159\1\0\3\"\1\0\2\20\1\18\1\0\2#\1\0\7\237\1\255\2\224\1\0\19\226\1\255\21\159\1\0\18\237\1\255\2\224\1\0\3?\1Y\1U\1K\1D\1@\0013\2)\1\"\1\28\1\5\1\0\4\226\1\255\21\156\1\0\18\237\1\255\2\224\1\0\3\156\1\255\n\221\1\23\1\0\3\226\1\255\r\231\1\136\3\236\1\255\3\154\1\0\18\237\1\255\2\224\1\0\3\156\1\255\11Q\1\0\3\226\1\255\rV\1\0\3\214\1\255\3\195\1\6\1\0\16\16\1\246\1\255\2\224\1\0\3\156\1\251\1\237\1\221\3\211\1\204\2\191\1\187\1\135\1\8\1\0\3\226\1\255\12\183\1\0\1\23\1\0\2\214\1\255\4\247\1\238\16\249\1\255\3\224\1\0\19\226\1\255\3\253\1\165\1S\0018\0014\1n\1\255\2\248\1%\1\0\1w\1\0\2\214\1\255\3\252\1\140\1w\1z\1\225\1\235\1z\1w\1\129\1\244\1\209\1w\2\147\1\255\1\181\1w\2\183\1\255\3\224\1\0\19\226\1\255\2\249\1J\1\0\4K\1\255\2\131\1\0\1=\1\174\1\0\2\214\1\255\3\212\1\0\3\145\1\169\1\0\3\198\1p\1\0\2\1\1\253\0015\1\0\0028\1\255\3\224\1\0\19\226\1\255\2\135\1\0\2C\1\186\1\195\1\204\1\255\1\223\1\n\1\4\1\213\1\174\1\0\2\214\1\255\3\213\1\0\3\143\1\170\1\0\3\195\1p\1\0\3\250\1.\1\0\0027\1\255\3\224\1\0\19\226\1\255\2%\1\0\1\23\1\243\1\255\4L\1\0\1c\1\255\1\174\1\0\2\214\1\255\3\233\1\11\1\0\2\174\1\195\1\4\1\0\1\5\1\220\1\142\1\0\2\27\1\254\1N\1\0\2N\1\255\3\224\1\0\19\226\1\255\1\253\1\0\2R\1\255\4\187\1\0\0023\1D\1.\1\0\0029\1{\1\255\3\245\1\238\1\244\1\255\2\246\1\238\1\242\1\255\2\243\1\238\1\246\1\255\1\251\1\238\1\242\1\255\4\224\1\0\3N\1\19\1\0\14\226\1\255\2\12\1\0\1,\1\254\1\255\3\166\1\0\8J\1\255\2\253\1\151\1|\1\134\1\231\1\240\1\134\1w\1\146\1\247\1\218\1\136\2\164\1\255\1\192\1\136\2\192\1\255\3\224\1\0\3\156\1\235\1b\1\1\1\0\12\226\1\255\2J\1\0\2d\1\223\1\237\1\222\1\234\1\187\4\129\1\0\2\158\1\210\1\255\2\211\1\0\3\149\1\171\1\0\3\197\1q\1\0\2\3\1\252\1:\1\0\0028\1\255\3\224\1\0\3\156\1\255\2\195\1,\1\0\11\226\1\255\2\201\1\8\1\0\4F\1\255\5\176\1\0\2\215\1\255\3\210\1\0\3\145\1\170\1\0\3\193\1j\1\0\3\252\0016\1\0\0026\1\255\3\224\1\0\3\156\1\255\3\250\1\138\1\11\1\0\t\226\1\255\3\200\1A\1\5\1\0\1\4\1S\1\255\5\187\1\"\2\220\1\255\3\226\1\11\1\0\2\166\1\194\1\1\1\0\1\3\1\215\1\140\1\0\2\16\1\254\1Q\1\0\2M\1\255\3\223\1\0\0031\1\191\1\255\4\225\1T\1\0\8\219\1\255\5\249\1\238\1\248\1\255\14\244\1\238\1\236\1\255\2\240\1\230\1\237\1\255\2\237\1\234\1\253\1\255\1\250\1\238\1\223\1\250\1\255\3\208\1\0\5L\1\213\1\255\4}\1\0\7u\1\255+\129\1\0\6\3\1e\1\231\1\255\2\185\1\0\8c\1\173\1\187&\173\1\170\1n\1\2\1\0\8\r\1\130\1\178\1I\1\0ۂ\1\204\2\202\1%\1\0\6\152\1\204\2z\1\0\6X\1\204\1\205\1\238\1R\1\0%\24\1\248\1\255\2\162\1\0\7\183\1\255\2\145\1\0\6\t\1\214\1\255\2\211\1\2\1\0$\132\1\255\2\241\1\27\1\0\7\174\1\255\2\137\1\0\7=\1\254\1\255\2X\1\0#\r\1\237\1\255\2n\1\0\8\167\1\255\2\129\1\0\8\162\1\255\2\215\1\3\1\0\"i\1\255\2\204\1\3\1\0\8\160\1\255\2y\1\0\8\23\1\239\1\255\2D\1\0\"J\1\254\1\246\1.\1\0\t\155\1\255\2p\1\0\tc\1\255\1\244\1\"\1\0#6\1+\1\0\n\145\1\255\2i\1\0\n<\1&\1\0000\139\1\255\2i\1\0<{\1\255\2V\1\0<\20\1\172\1\153\1\5\1\0\255\0\28",
+	}
+
+	glyphs.carrier = {
+		w = 64,
+		h = 64,
+		data = "\0\22!\1\148\1\222\1\252\1\229\1\178\1e\1\23\1\0\7\t\1\n\1\0.O\1\250\1\174\1G\1'\1R\1\144\1\223\1\252\1\184\1[\1\n\1\0\2\1\1\156\1\253\1\255\1\197\1+\1\0\3?\1\199\1\203\1n\1\0$\19\1\241\1e\1\0\0068\1\154\1\240\1\243\1\169\1Z\1_\1\241\1-\1!\1\156\1\237\0016\1\0\1\16\1\237\1p\1.\1\201\1z\1\0\27\26\1l\1\136\1f\1\8\1\0\3u\1\200\1\0\t\7\1L\1\153\1\218\1\255\1\247\1\199\1\178\1\157\1\230\1\242\1U\1w\1\230\1\1\1\0\1\23\1\232\1#\1\0\25B\1\231\1x\1_\1\194\1\193\1\1\1\0\2\191\1\136\1\0\12\12\1\246\1~\1J\1^\1t\1\141\1\186\1\255\2\238\1\128\0016\1\2\1\143\1\149\1\0\25\205\1X\1\0\2\n\1\236\1J\1\0\1\8\1\247\1t\1\0\12\\\1\255\1!\1\0\4\1\1\151\1\255\1\240\1\129\1\198\1\230\1\190\1\236\1\6\1\0\24\238\1\26\1\4\1<\1D\1\176\1\197\1D\1_\1\255\1\131\1D\3B\1\11\1%\1D\6\172\1\244\1D\0029\1\0\2\11\1E\1\213\1\255\1^\1U\1f\1\201\1\255\1\137\0014\1\6\1\0\22\232\1\"\1q\1\255\12\185\1\250\1\255\11r\1V\1\235\1\255\n\229\0013\1\0\21\213\1;\1\134\1\255\25\245\1\248\1\255\12k\1\0\0180\1\170\2\235\1\195\1\215\1\255'a\1\0\18u\1\255,V\1\0\18\167\1\255\r\251\1\192\1\187\22\193\1\253\1\255\5L\1\0\18\202\1\255\r\145\1\0\24\153\1\255\5B\1\0\18\236\1\255\r~\1\0\24\132\1\255\0058\1\0\18\249\1\255\r~\1\0\24\132\1\255\5.\1\0\18\240\1\255\r~\1\0\24\132\1\255\5$\1\0\18\230\1\255\r~\1\0\24\132\1\255\5\26\1\0\18\210\1\255\r~\1\0\24\132\1\255\5\16\1\0\18\186\1\255\r\147\1\0\24\155\1\255\5\6\1\0\18k\1\255\r\253\1\195\1\187\22\197\1\254\1\255\4\251\1\0\0196\1\255+\242\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\0196\1\255+\241\1\0\23*\1\255\n\253\1\223\1\221\15\226\1\255\11\241\1\0\23*\1\255\ny\1\0\17\158\1\255\n\241\1\0\23*\1\255\nX\1\0\17|\1\255\n\241\1\0\23*\1\255\nX\1\0\2\167\1\204\2\5\1\0\1\202\1\204\1\174\1\0\2\179\1\204\1\196\1\0\2|\1\255\n\241\1\0\23*\1\255\nX\1\0\2\208\1\255\2\6\1\0\1\252\1\255\1\217\1\0\2\224\1\255\1\245\1\0\2|\1\255\n\241\1\0\22\3\1\162\1\255\nX\1\0\2\167\1\204\2\5\1\0\1\202\1\204\1\174\1\0\2\179\1\204\1\196\1\0\2|\1\255\n\241\1\0\21\1\1\161\1\255\11X\1\0\17|\1\255\n\241\1\0\21z\1\255\12X\1\0\0028\1D\2\2\1\0\1C\1D\1:\1\0\2<\1D\1A\1\0\2|\1\255\n\241\1\0\21\226\1\255\1\230\1\255\nX\1\0\2\208\1\255\2\6\1\0\1\252\1\255\1\217\1\0\2\224\1\255\1\245\1\0\2|\1\255\n\247\1\18\1\0\20\177\1\212\1:\1\255\nX\1\0\2\208\1\255\2\6\1\0\1\252\1\255\1\217\1\0\2\224\1\255\1\245\1\0\2|\1\255\11\199\1\8\1\0\19m\1g\1*\1\255\nX\1\0\2E\1U\2\2\1\0\1T\1U\1H\1\0\2K\1U\1R\1\0\2|\1\255\n\250\1\253\1v\1\0\19&\1\203\0014\1\255\nX\1\0\17|\1\255\n\213\1D\1\231\1\t\1\0\19\160\1\211\1\255\nX\1\0\2\194\1\238\2\6\1\0\1\235\1\238\1\203\1\0\2\209\1\238\1\229\1\0\2|\1\255\n\199\1\0\1t\1[\1\0\19\n\1\209\1\255\nX\1\0\2\208\1\255\2\6\1\0\1\252\1\255\1\217\1\0\2\224\1\255\1\245\1\0\2|\1\255\n\185\1\0\1\5\1\171\1\0\0209\1\255\nX\1\0\2\139\1\170\2\4\1\0\1\168\1\170\1\145\1\0\2\149\1\170\1\163\1\0\2|\1\255\n\171\1\0\2\196\1\0\20*\1\255\nX\1\0\17|\1\255\n\157\1\0\1\t\1\219\1\0\20*\1\255\nX\1\0\2S\1f\2\2\1\0\1e\1f\1W\1\0\2Z\1f\1b\1\0\2|\1\255\n\143\1\0\1|\1\145\1\0\20*\1\255\nX\1\0\2\208\1\255\2\6\1\0\1\252\1\255\1\217\1\0\2\224\1\255\1\245\1\0\2|\1\255\n\161\1\137\1\187\1\16\1\0\20*\1\255\nX\1\0\2\208\1\255\2\6\1\0\1\252\1\255\1\217\1\0\2\224\1\255\1\245\1\0\2|\1\255\n\251\1\131\1\5\1\0\21*\1\255\nX\1\0\2*\0013\2\1\1\0\0012\0013\1+\1\0\2-\0013\0011\1\0\2|\1\255\n{\1\0\23*\1\255\nl\1\0\17\145\1\255\nr\1\0\0233\1\255\n\246\1\190\1\187\15\193\1\252\1\255\nr\1\0\23E\1\255'r\1\0\23W\1\255'r\1\0\23i\1\255'r\1\0\23z\1\255'r\1\0\23\139\1\255'r\1\0\23\157\1\255'r\1\0\23\178\1\255's\1\0\23\207\1\255'r\1\0\23\221\1\255'r\1\0\23\150\1\253\1\255\11\226\1\254\1\255\11\210\1\188\1\255\12S\1\0\24\n\1#\1;\1V\1p\1\141\1\166\1\195\1\215\1\233\1\248\1\227\1#\1\25\1\"\11\16\1\26\1\179\1\235\1\238\8\234\1\162\1\4\1\0\11",
+	}
+
+	glyphs.defuser = {
+		w = 64,
+		h = 64,
+		data = "\0\198\30\1q\1\15\1\0=$\1\247\1\225\1@\1\0=i\1\255\1\254\1\145\1\7\1\0<\163\1\255\2\212\0010\1\0;\12\1\214\1\255\2\248\1w\1\2\1\0:,\1\245\1\255\3\197\1\"\1\0:b\1\255\4\240\1f\1\0:\160\1\255\5\167\1&\1\0-U\1j\1\16\1\0\8\n\1\211\1\255\5\233\1\24\1\0,\204\1\255\1\247\1\165\1D\1\2\1\0\6)\1\243\1\255\5\184\1\1\1\0+\23\1\196\1\255\3\223\1\127\1\31\1\0\5[\1\255\6q\1\0,\7\1\156\1\255\4\253\1\187\1Z\1\8\1\0\3\148\1\228\1\232\1\255\3\248\0010\1\0-n\1\251\1\255\5\239\1\149\0014\1\0\3t\1\255\4\216\1\20\1\0-C\1\236\1\255\7L\1\0\1'\1\242\1\255\5\214\1t\1&\1\0,#\1\212\1\255\6|\1\3\1\195\1\255\t\217\1\145\1Q\1\22\1\0\1\3\1\23\1,\1@\1R\1d\1u\1\134\1\136\2\148\1\153\2\143\1\136\1y\1u\1f\1G\1\22\1\0\20\r\1\176\1\255\5\249\1\233\1\255\14\240\1\255\20\211\1\127\1 \1\0\18\2\1\131\1\254\1\255*\250\1\158\1\"\1\0\18U\1\244\1\255+\250\1\145\1\14\1\0\0170\1\225\1\255,\228\1I\1\0\17\14\1f\1\196\1\254\1\255\n\243\1\255\31\254\1\153\1\r\1\0\18-\1\156\1\246\1\255\7\199\1\5\1D\1\155\1\243\1\255\4\250\1\226\1\190\1\153\1t\1N\0013\1\31\1\17\3\23\1B\1o\1\159\1\231\1\255\n\221\1>\1\0\19\18\1\207\1\255\5\236\1\18\1\0\3\15\0013\2#\1\24\1\1\1\0\14\2\0019\1\137\1\224\1\255\8\253\1\140\1\8\1\0\18'\1\243\1\255\5Y\1\0\4l\1\178\1\135\1V\1\6\1\0\17\4\1[\1\209\1\255\8\213\1,\1\0\18N\1\253\1\255\4\232\1\21\1\0\0026\1M\1^\1~\1\151\1$\1\0\19\1\1I\1\203\1\255\7\189\1\0\19\141\1\255\5\182\1\1\1\7\1~\1\234\1\200\1d\1\2\1\0\22\2\1h\1\237\1\255\5\191\1\0\19\r\1\228\1\255\5o\1\136\1\169\1\"\1+\1q\1\r\1\0\24\20\1\156\1\254\1\255\3|\1\0\20J\1\251\1\255\4\243\1Z\1F\1\208\1\133\1\0\0287\1\174\1\179\1`\1\1\1\0\21\162\1\255\5\253\1\131\1\11\0013\1\0006~\1\255\5\143\1\174\1\31\1\0007T\1\255\5\183\1\0009$\1\255\5\239\1\1\1\0008\3\1\252\1\255\5\31\1\0009\233\1\255\5B\1\0009\211\1\255\5c\1\0009\188\1\255\5\131\1\0009\162\1\255\5\163\1\0009\135\1\255\5\211\1\0009l\1\255\5\254\1\22\1\0008B\1\255\6X\1\0008\6\1\242\1\255\5\175\1\0009\173\1\255\5\249\1\18\1\0008U\1\255\6y\1\0008\5\1\230\1\255\5\232\1\8\1\0008\133\1\255\6t\1\0008\19\1\242\1\255\5\242\1\25\1\0008\135\1\255\6\172\1\0008\16\1\231\1\255\6h\1\0008X\1\255\6\247\1>\1\0008\177\1\255\6\240\0010\1\0007\r\1\213\1\255\6\238\1>\1\0007)\1\239\1\255\6\247\1X\1\00072\1\238\1\255\7\162\1\12\1\00068\1\240\1\255\7\214\1\23\1\0006*\1\220\1\255\7\158\1\0007\19\1\188\1\255\6\167\1\0008\2\1t\1\248\1\255\4]\1\0:,\1\200\1\255\2\207\1\0=E\1F\1\r\1\0\216",
+	}
+
+	glyphs.domination = {
+		w = 64,
+		h = 64,
+		data = "\0\217\24\1J\1}\1\166\1\185\1\201\1\217\1\220\1\202\1\184\1\166\1\129\1L\1\22\1\0.\3\1?\1\144\1\223\1\255\14\222\1\149\1>\1\2\1\0(\20\1|\1\228\1\255\20\228\1w\1\16\1\0$\t\1{\1\243\1\255\24\242\1\134\1\12\1\0!X\1\224\1\255\28\229\1\\\1\0\30\20\1\175\1\255 \175\1\18\1\0\0272\1\228\1\255\n\253\1\202\1\153\1m\1\195\1\255\4\197\1x\1\168\1\219\1\255\11\225\0013\1\0\25M\1\244\1\255\t\189\1b\1\23\1\0\3\167\1\255\4\166\1\0\3(\1~\1\213\1\255\t\243\1H\1\0\23Q\1\250\1\255\7\254\1\169\0013\1\0\6\167\1\255\4\166\1\0\5\1\1M\1\202\1\255\8\250\1T\1\0\21F\1\250\1\255\7\216\1>\1\0\8\167\1\255\4\166\1\0\8R\1\231\1\255\7\249\1E\1\0\19+\1\240\1\255\7\148\1\7\1\0\t\167\1\255\4\166\1\0\t\19\1\166\1\255\7\244\1/\1\0\17\11\1\215\1\255\6\251\1m\1\0\11\167\1\255\4\165\1\0\11o\1\253\1\255\6\219\1\15\1\0\16\161\1\255\6\250\1N\1\0\12\167\1\255\4\165\1\0\12V\1\248\1\255\6\169\1\0\15H\1\255\6\253\1Y\1\0\r\167\1\255\4\165\1\0\rT\1\253\1\255\6O\1\0\r\t\1\222\1\255\6y\1\0\14\167\1\255\4\165\1\0\14w\1\255\6\225\1\12\1\0\12u\1\255\6\179\1\1\1\0\14\167\1\255\4\165\1\0\15\167\1\255\6z\1\0\11\14\1\236\1\255\5\235\1\19\1\0\15\166\1\255\4\164\1\0\15\21\1\235\1\255\5\236\1\r\1\0\nq\1\255\6d\1\0\16\128\1\255\4}\1\0\16\\\1\255\6s\1\0\t\2\1\220\1\255\5\204\1\2\1\0\16\19\1\219\1\255\2\217\1\18\1\0\17\205\1\255\5\214\1\0\t?\1\255\6Q\1\0\18\11\1T\1S\1\n\1\0\18Y\1\255\0069\1\0\8\143\1\255\5\214\1\2\1\0(\4\1\222\1\255\5\140\1\0\8\222\1\255\5r\1\0*\130\1\255\5\210\1\0\7'\1\255\5\253\1\28\1\0*4\1\255\5\254\1\25\1\0\6X\1\255\5\200\1\0+\1\1\230\1\255\5J\1\0\6\135\1\255\5\152\1\0,\179\1\255\5w\1\0\6\168\1\255\5n\1\0,\134\1\255\5\159\1\0\6\188\1\255\5\197\1\170\t\162\1h\1\4\1\0\20\r\1z\1\167\1\170\t\205\1\255\5\179\1\0\6\207\1\255\17\164\1\0\19\5\1\204\1\255\17\197\1\0\6\207\1\255\17\254\1\19\1\0\18>\1\255\18\209\1\0\6\203\1\255\17\254\1\19\1\0\18>\1\255\18\203\1\0\6\199\1\255\17\162\1\0\19\5\1\203\1\255\17\197\1\0\6\177\1\255\5\208\1\170\t\162\1f\1\3\1\0\20\r\1x\1\166\1\170\t\205\1\255\5\181\1\0\6\143\1\255\5\146\1\0,\138\1\255\5\148\1\0\6l\1\255\5\193\1\0,\184\1\255\5t\1\0\6@\1\255\5\247\1\n\1\0*\2\1\234\1\255\5F\1\0\6\8\1\247\1\255\5H\1\0*8\1\255\5\252\1\14\1\0\7\192\1\255\5\159\1\0*\134\1\255\5\208\1\0\8z\1\255\5\242\1\12\1\0(\4\1\224\1\255\5\129\1\0\8\31\1\253\1\255\5n\1\0\19\16\1\17\1\0\19V\1\255\6%\1\0\t\190\1\255\5\224\1\6\1\0\16\4\1\161\1\255\2\162\1\4\1\0\16\1\1\202\1\255\5\200\1\0\n[\1\255\6q\1\0\16g\1\255\4g\1\0\16\\\1\255\6g\1\0\n\4\1\219\1\255\5\238\1\24\1\0\15\159\1\255\4\161\1\0\15\15\1\231\1\255\5\225\1\7\1\0\11_\1\255\6\176\1\0\15\165\1\255\4\167\1\0\15\160\1\255\6c\1\0\12\4\1\213\1\255\6k\1\0\14\165\1\255\4\167\1\0\14e\1\255\6\217\1\4\1\0\r;\1\253\1\255\5\250\1@\1\0\r\165\1\255\4\167\1\0\rL\1\249\1\255\5\253\1@\1\0\15\147\1\255\6\241\0014\1\0\12\165\1\255\4\167\1\0\12G\1\248\1\255\6\137\1\0\16\r\1\216\1\255\6\238\1N\1\0\11\165\1\255\4\167\1\0\11j\1\249\1\255\6\207\1\6\1\0\17'\1\240\1\255\6\254\1\139\1\5\1\0\t\165\1\255\4\167\1\0\t\11\1\161\1\255\7\228\1 \1\0\19K\1\253\1\255\7\203\1?\1\0\8\165\1\255\4\167\1\0\8Q\1\225\1\255\7\238\1,\1\0\21b\1\253\1\255\8\181\1/\1\0\6\165\1\255\4\167\1\0\6I\1\195\1\255\8\244\1;\1\0\23a\1\253\1\255\t\204\1q\1\26\1\0\3\165\1\255\4\167\1\0\3#\1{\1\214\1\255\t\234\0019\1\0\25I\1\224\1\255\n\252\1\212\1\162\1q\1\193\1\255\4\197\1j\1\157\1\224\1\255\11\208\1#\1\0\27\16\1\167\1\255\31\254\1\151\1\t\1\0\30\\\1\229\1\255\28\210\1<\1\0!\n\1y\1\240\1\255\24\231\1q\1\4\1\0$\19\1v\1\216\1\255\20\213\1c\1\7\1\0);\1\150\1\215\1\255\14\206\1\130\0016\1\1\1\0.\23\1V\1\129\1\159\1\186\1\213\1\219\1\204\2\195\1\156\1u\1L\1\27\1\0\217",
+	}
+
+	glyphs.flashed = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0K(\1\16\1\0=(\1\231\1\206\1\18\1\0;(\1\231\1\255\2\206\1\18\1\0009(\1\231\1\255\4\206\1\18\1\0007(\1\230\1\255\6\206\1\18\1\0005*\1\233\1\255\8\203\1\17\1\0004\23\1\212\1\255\t\206\1\18\1\0004\23\1\212\1\255\t\206\1\18\1\0004\23\1\212\1\255\t\206\1\19\1\0004\23\1\212\1\255\t\206\1\19\1\0004\23\1\212\1\255\t\206\1\19\1\0004\23\1\212\1\255\t\206\1\19\1\0\2\23\1D\1o\1\148\1\161\1\175\1\187\1\178\1\167\1\153\1}\1V\0010\1\7\1\0$\23\1\212\1\255\t\206\1\19\1\0\1W\1\251\1\255\11\246\1\187\1z\1+\1\0\"\23\1\212\1\255\t\206\1\19\1\0\1X\1\252\1\255\14\205\1n\1\r\1\0 \22\1\212\1\255\t\206\1\19\1\0\1X\1\252\1\255\15\238\1\131\1\19\1\0\31\22\1\212\1\255\t\206\1\19\1\0\1U\1\251\1\255\16\238\1o\1\4\1\0\30\22\1\212\1\255\t\206\1\19\1\0\1Y\1\252\1\255\7\252\1\171\1\190\1\252\1\255\6\204\1*\1\0\26\n\1\149\1.\1\0\1\22\1\212\1\255\t\206\1\19\1\0\1Z\1\227\1\248\1\255\6\250\1T\1\24\1\130\1\235\1\255\5\246\1i\1\0\24&\1\211\1\255\1\234\1+\1\0\1\22\1\212\1\255\t\206\1\19\1\0\3!\1n\1\220\1\255\4\250\1>\1\0\1\n\1u\1\241\1\255\5\155\1\6\1\0\21<\1\237\1\255\3\231\1(\1\0\1\22\1\212\1\255\t\206\1\19\1\0\4\6\1\127\1\253\1\255\3\230\1\16\1\0\2\24\1\164\1\255\5\180\1\8\1\0\19N\1\247\1\255\4\218\0010\1\0\2\22\1\212\1\255\t\206\1\19\1\0\5Y\1\254\1\255\3\143\1\0\4W\1\239\1\255\4\184\1\t\1\0\17F\1\248\1\255\4\168\1\r\1\0\4\22\1\212\1\255\t\206\1\19\1\0\5\130\1\255\3\245\1\20\1\0\4$\1\215\1\255\4\189\1\8\1\0\15?\1\245\1\255\4\130\1\1\1\0\6\22\1\212\1\255\t\206\1\19\1\0\4\8\1\225\1\255\3h\1\0\5\17\1\194\1\255\4\163\1\0\0141\1\242\1\255\3\254\1g\1\0\6i\0010\1\0\1\22\1\212\1\255\t\206\1\19\1\0\4y\1\255\3\177\1\0\6\11\1\192\1\255\4w\1\0\12\20\1\224\1\255\4o\1\0\7\178\1\239\1;\1\0\1\22\1\212\1\255\t\207\1\19\1\0\3-\1\255\3\226\1\0\7\14\1\212\1\255\3\253\1<\1\0\n\3\1\189\1\255\4|\1\0\8\202\1\255\1\245\1H\1\0\1\22\1\212\1\255\t\207\1\19\1\0\2\t\1\255\3\251\1\1\1\0\7!\1\234\1\255\3\217\1\t\1\0\tL\1\255\4\205\1\1\1\0\8\212\1\255\2\249\1\28\1\0\1\22\1\212\1\255\t\207\1\19\1\0\2\245\1\255\3\6\1\0\8x\1\255\4g\1\0\t\2\1\182\1\255\4\142\1\0\8\199\1\255\3B\1\0\2\22\1\212\1\255\t\207\1\19\1\0\1n\1\254\1\255\1\242\1\0\0084\1\245\1\255\3\219\1\r\1\0\n\18\1\221\1\255\4\133\1\0\7\163\1\255\3r\1\0\3\22\1\212\1\255\t\207\1\19\1\0\1m\1\254\1\213\1\0\7,\1\235\1\255\3\246\1/\1\0\12&\1\232\1\255\4\154\1\5\1\0\5m\1\255\3\200\1\0\4\22\1\212\1\255\t\207\1\19\1\0\1m\1\152\1\0\6-\1\232\1\255\3\254\1^\1\0\0140\1\239\1\255\4\189\1\17\1\0\4 \1\254\1\255\3G\1\0\4\22\1\212\1\255\t\207\1\19\1\0\1\16\1\0\5E\1\241\1\255\4t\1\0\0166\1\235\1\255\4\217\1*\1\0\4\180\1\255\3\221\1\20\1\0\4\22\1\212\1\255\t\207\1\19\1\0\4\1\1p\1\250\1\255\4\127\1\0\18'\1\222\1\255\4\246\1o\1\1\1\0\0022\1\253\1\255\3\199\1\21\1\0\4\22\1\212\1\255\t\207\1\19\1\0\2\23\1\182\1\255\5\137\1\0\20\24\1\206\1\255\5\199\0014\1\0\2\141\1\255\4\224\1O\1\0\4\22\1\212\1\255\t\207\1\19\1\0\1C\1\247\1\255\3\253\1q\1\0\22\11\1\162\1\255\5\253\1\163\1*\1\5\1\189\1\255\5\210\1\127\1P\1\23\1\0\1\22\1\212\1\255\t\207\1\19\1\0\1M\1\250\1\255\1\238\1N\1\0\25`\1\240\1\255\5\253\1\176\1Z\1\192\1\255\7\226\1$\1\0\1\22\1\212\1\255\t\207\1\19\1\0\1T\1\195\1 \1\0\27\28\1\179\1\255\7\238\1\254\1\255\7\228\1'\1\0\1\22\1\212\1\255\t\207\1\19\1\0 G\1\212\1\255\15\231\1*\1\0\1\22\1\212\1\255\t\207\1\19\1\0 \2\1M\1\201\1\255\14\233\1.\1\0\1\22\1\212\1\255\t\207\1\19\1\0\"<\1\153\1\239\1\255\12\235\0010\1\0\1\22\1\212\1\255\t\207\1\19\1\0#\7\1A\1\133\1\197\1\240\1\255\t\235\1&\1\0\1\22\1\212\1\255\t\207\1\19\1\0'\27\1?\1Q\1^\1f\1c\1U\1G\1(\1\7\1\0\3\22\1\212\1\255\t\207\1\19\1\0004\22\1\212\1\255\t\207\1\19\1\0004\22\1\212\1\255\t\207\1\19\1\0004\22\1\211\1\255\t\207\1\19\1\0004\22\1\211\1\255\t\207\1\19\1\0004\24\1\214\1\255\t\203\1\4\1\0004\22\1\211\1\255\7\254\1g\1\0006\22\1\211\1\255\5\254\1g\1\0008\22\1\211\1\255\3\254\1g\1\0:\22\1\211\1\255\1\254\1h\1\0<\22\1\210\1h\1\0>\6\1\0\255\0\141",
+	}
+
+	glyphs.headshot = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\15\14\1;\1Z\1g\1f\1b\1H\1&\1\2\1\0004$\1\131\1\208\1\253\1\255\7\239\1\182\1k\1\27\1\0/%\1\174\1\253\1\255\r\253\1\176\1>\1\0+\2\1y\1\249\1\255\18\177\1\30\1\0(\12\1\184\1\255\21\239\1Q\1\0&\15\1\197\1\255\7\231\1\255\15\253\1m\1\0$\2\1\185\1\255\5\253\1\255\1\250\0017\1\190\1\255\16n\1\0\22D\1\23\1\0\11h\1\255\6=\1p\1l\1\0\1=\1\138\1R\1;\1\255\r\251\1A\1\0\20\26\1\240\1\217\1\2\1\0\0013\1\3\1\0\6\3\1\228\1\255\5\248\1\5\1\0\7\225\1\255\r\234\1\29\1\0\19\174\1\255\1[\1\0\1I\1\248\1\153\1\0\6I\1\255\3\180\1f\2W\1\0\8\141\1\255\14\187\1\1\1\0\17\7\1\167\1\183\1\0\1E\1\247\1\244\1>\1\0\6\170\1\255\3\191\1\0\12_\1\240\1\255\r_\1\0\19\7\1D\1\246\1\244\1?\1\0\6\1\1\238\1\255\3\251\1\18\1\0\12\29\1\186\1\255\12\220\0013\14\28\1\0\5h\1\243\1=\1\0\7#\1\255\3\251\1\146\1\12\1\0\r,\1\248\1\255\26\253\1\186\1V\1\6\1\0\3\24\1\0\8W\1\255\2\231\0013\1\0\14\27\1\226\1\255\30\234\1\141\1 \1\0\1\22\1\180\6\30\1\0\1}\1\255\3\241\1\171\1Z\1\0\12s\1\255\31\202\1Z\1\6\1\0\1 \1\255\6,\1\0\1\142\1\255\5\222\1\0\12\1\1\150\1\255\27\253\1\179\1D\1\0\5\5\6\0\2\157\1\255\5\212\1\15\1\0\n)\1b\1\147\1\250\1\255\14\156\0013\11\25\1\0\6]\1=\1\0\7\172\1\255\7N\1\0\t\192\1\255\17\211\1\0\17\23\1\244\2?\1\0\6\163\1\255\7\166\1\0\6\22\1C\1\5\1\218\1\255\4\243\1\249\1\255\11\240\1\0\15^\1\185\1\3\1?\1\244\1\245\1C\1\0\5\137\1\255\7\243\1\12\1s\1\155\1\12\1\0\1\n\1\201\1\255\1\240\1\251\1\255\1\211\1X\1\r\1\0\1\8\1?\1\184\1\255\t\222\1\0\15\142\1\255\1Y\1\0\1C\1\245\0022\1\0\4^\1\255\8\223\1\255\2\216\0014\1\178\1\255\4\161\1\5\1\0\6\149\1\255\6\224\1\144\1\164\1\0\15\27\1\248\1\213\1\2\1\0\1A\1\165\1\5\1\0\4,\1\255\12\254\1\255\5'\1\0\7\21\1\255\5\139\1\5\1\2\1H\1\0\16x\1X\1\2\1\0\8\2\1\239\1\255\17Q\1\0\7&\1\255\4\185\1\0\2K\1\21\1\0\28\184\1\255\17\222\1'\1\0\5\t\1\185\1\255\4\143\1\0\2r\1\0\29~\1\255\18\248\1\151\1D\1%\1B\1\133\1\223\1\255\5\221\1\29\1\0\1h\1\0\29D\1\255\31\241\1\134\1\180\1\1\1\0\28\r\1\253\1\255!$\1\0\29\212\1\255!Z\1\0\29\156\1\255!\135\1\0\29e\1\255!\152\1\0\29:\1\255!\142\1\0\29\22\1\255!^\1\0\29\8\1\255 \240\1\11\1\0\29\12\1\255 \146\1\0\30'\1\255\24\245\1\215\1\204\1\195\1\201\1\242\1\255\1\254\1)\1\0\30B\1\255\22\192\1>\1\4\1\0\4\20\1\202\1\190\1\0\31]\1\255\21\155\1\2\1\0\7f\1[\1\0\31x\1\255\21\184\1\6\1\0\7\150\1\17\1\0\31\148\1\255\22\188\1\22\1\0\5\19\1\167\1\0 \186\1\255\23\234\1z\1)\1\17\2A\1\215\1t\1\0 \227\1\255\30+\1\0\31\n\1\254\1\255\29\223\1\0 !\1\255\30v\1\0 \1\1\162\1\255\28\236\1\17\1\0!\5\1\180\1\255\26\252\1S\1\0#\n\1\196\1\255\24\247\1S\1\0%\r\1\193\1\255\22\248\1?\1\0'\n\1\185\1\255\21\177\1\0)\5\1\150\1\255\20\192\1\0+j\1\249\1\255\18\251\1\21\1\0+3\1\219\1\255\18D\1\0,\r\1\157\1\254\1\255\15\236\1\16\1\0.A\1\218\1\255\r\230\0019\1\0000\8\1x\1\236\1\255\t\247\1\140\1\15\1\0003\11\1a\1\181\1\242\1\255\3\245\1\195\1~\1\24\1\0009\17\1\26\1\t\1\0)",
+	}
+
+	glyphs.helmet = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\222\20\1O\1\128\1\165\1\188\1\204\2\191\1\175\1\141\1Z\1\30\1\0001\16\1n\1\198\1\254\1\255\n\254\1\194\1\\\1\2\1\0,\15\1\138\1\242\1\255\16\206\0014\1\0*P\1\233\1\255\19\247\1`\1\0'\1\1\135\1\255\22\254\1_\1\0&\138\1\255\24\250\0016\1\0$[\1\255\26\216\1\5\1\0\"\28\1\244\1\255\27k\1\0\"\163\1\255\28\213\1\0!\31\1\252\1\255\0294\1\0 \135\1\255\30\141\1\0 \217\1\255\30\198\1\0\31\28\1\255\31\246\1\4\1\0\30G\1\255 \27\1\0\30n\1\255 -\1\0\30\133\1\255 x\1\0\26\16\1j\1\169\1\226\1\255!\254\1@\1\0\25P\1\254\1\255$\177\1\0\26$\1O\1e\1{\1\136\1\142\1\215\1\255\30\229\1\0\31\6\1\181\1\255\30\252\1\4\1\0\0305\1\255 \27\1\0\30.\1\255 6\1\0\30'\1\255 Q\1\0\30\18\1\227\1\255\2\217\1\204\5\193\1\174\1\156\1\137\1t\1]\1A\1G\1\255\4\194\1\"\0038\1\235\1\255\5o\1\0\31\202\1\255\2n\1\0\11\25\1n\1\255\4\240\1\192\1\187\2\186\1\211\1\255\3\251\1\223\1A\1\0\31\179\1\255\2o\1\0\n\128\1\254\1\255\14\185\1\0![\1\255\2.\1\0\nr\1\255\15\168\1\0!\26\1\255\2\20\1\0\nM\1\255\15\151\1\0\"\225\1\255\1\7\1\0\n(\1\255\15y\1\0\"\169\1\248\1\0\11\6\1\252\1\255\3\207\1*\0013\1>\1P\1w\1\179\1\245\1\255\2\246\1\29\1\0\"p\1\235\1\0\t-\1\128\1\200\1\254\1\255\3\178\1\0\6-\1\254\1\255\1g\1\0#6\1\245\1\0\7H\1\205\1\255\6\254\1D\1\0\5\16\1\203\1\194\1b\1\0$\4\1\242\1\r\1\0\5r\1\254\1\251\1\174\1\165\1\255\4S\1\0\5*\1\209\1\207\1\r\1\0&\188\1l\1\0\4V\1\254\1\245\1A\1\0\1n\1\255\3\173\1\0\4\14\1{\1\246\1\226\1\27\1\0&+\1\254\1\253\1y\1\3\2j\1\249\1\245\1B\1\0\2\154\1\255\3@\1\0\2)\1\134\1\237\1\255\1\239\1-\1\0'4\1\255\3\239\1\235\1\255\1\246\1D\1\0\3\204\1\255\3-\1n\1\203\1\255\3\238\0013\1\0(\19\1\254\1\255\5\228\1\187\2\204\1\206\1\255\4\252\1\255\4\228\0012\1\0*\202\1\255\17\237\1\153\1\22\1\0+_\1\255\12\235\1\203\1\159\1q\0019\1\3\1\0-\7\1\205\1\174\1\144\1\177\1\249\1\255\4\246\1Y\1\r\1\0004\28\1\197\1\255\6\180\1%\1\0007\2\1U\1\159\1\192\1\198\1\147\0015\1\0\255\0\255\0\228",
+	}
+
+	glyphs.kevlar = {
+		w = 64,
+		h = 64,
+		data = "\0*)\1\145\1\148\1v\1Q\1*\1\6\1\0$\27\1]\1\147\1\200\1\239\1\182\0010\1\0\r;\1\246\1\255\5\251\1\205\1\149\1^\1&\1\0\29A\1\140\1\210\1\255\4\183\1\227\1\253\1\166\1)\1\0\8\2\1s\1\209\1\245\1\255\11\174\1\6\1\0\25\24\1\176\1\255\6\193\1\6\1\t\1v\1\238\1\254\1\178\1C\1\3\1\0\4\11\1\175\1\255\n\244\1\143\1x\1\216\1\255\1\146\1\0\24P\1\236\1\255\6\219\1\21\1\0\3\18\1\138\1\238\1\255\1\236\1\172\1\153\1\138\1\136\1\207\1\255\n\174\1\25\1\0\2\6\1\173\1\255\1;\1\0\21*\1\158\1\254\1\255\0072\1\0\6\8\1X\1\157\1\203\1\221\1\237\1\255\n\254\1r\1\0\5\19\1\242\1\199\1\1\1\0\0192\1\243\1\255\7\143\1\215\1\181\1\1\1\0\t\11\1\170\1\255\nu\1\0\7\138\1\255\1=\1\0\18\21\1\225\1\255\6\249\1b\1\0\1$\1\243\1a\1\0\8\30\1\207\1\255\n\198\1\2\1\0\7.\1\255\1\159\1\0\18\180\1\255\7x\1\0\3a\1\238\1\20\1\0\6<\1\233\1\255\11L\1\0\t\216\1\243\1\6\1\0\16]\1\255\8\27\1\0\4\194\1y\1\0\5d\1\249\1\255\11\216\1\1\1\0\t\136\1\255\0016\1\0\15\23\1\236\1\255\7\235\1\0\5R\1\225\1\4\1\0\2\11\1\150\1\255\rs\1\0\nL\1\255\1o\1\0\15\171\1\255\8\207\1\0\5\8\1\243\1N\1\0\1D\1\222\1\255\r\250\1\22\1\0\n\19\1\254\1\163\1\0\14>\1\255\t\191\1\0\6\183\1\190\1\173\1\254\1\255\14\175\1\0\12\217\1\188\1\0\r\1\1\199\1\255\t\236\1\r\1\0\3\2\1N\1\227\1\255\17_\1\0\12\180\1\210\1\0\rE\1\255\11\217\1\146\1\147\1\186\1\240\1\255\18\253\1\21\1\0\12\158\1\231\1\0\r\178\1\255\"\199\1\0\r\154\1\245\1\0\12\28\1\253\1\255\"\132\1\0\r\173\1\239\1\0\12g\1\255#P\1\0\r\195\1\232\1\0\12\175\1\255#*\1\0\r\215\1\225\1\0\12\213\1\255#\17\1\0\r\237\1\208\1\0\12\238\1\255\"\253\1\1\1\0\12\4\1\254\1\178\1\0\12\241\1\255\"\242\1\0\r\31\1\255\1\147\1\0\12\224\1\255\"\229\1\0\rF\1\255\1q\1\0\12\201\1\255\"\220\1\0\rl\1\255\1@\1\0\12\165\1\255\"\217\1\0\r\157\1\253\1\14\1\0\12}\1\255\"\214\1\0\r\212\1\216\1\0\rF\1\255\"\227\1\0\12\16\1\253\1\164\1\0\r\14\1\252\1\255!\252\1\4\1\0\11J\1\255\1p\1\0\14\211\1\255\")\1\0\11\128\1\255\1@\1\0\14\153\1\255\"\138\1\0\11\164\1\255\1\19\1\0\14R\1\255\"\250\1E\1\0\n\193\1\230\1\0\15\14\1\249\1\255\"\242\1.\1\0\t\219\1\199\1\0\16\190\1\255#\225\1\25\1\0\8\239\1\179\1\0\16t\1\255$\201\1\8\1\0\7\236\1\182\1\0\16+\1\255%\151\1\0\7\182\1\203\1\0\16\1\1\240\1\255$\252\1)\1\0\5;\1\246\1\242\1\0\17\192\1\255%k\1\0\4+\1\243\1\248\1^\1\0\16\2\1\171\1\255%{\1\0\4\134\1\253\1;\1\0\17\197\1\255&\152\1D\1:\0013\2\172\1\223\1\0\18\245\1\255-\196\1\2\1\0\16\239\1\255-\189\1\0\17\233\1\255-\137\1\0\17\215\1\255-V\1\0\17\191\1\255-&\1\0\17u\1\202\1\237\1\255*\243\1\2\1\0\19\218\1\255*\191\1\0\20\218\1\255$\158\0016\1/\0014\1\146\1\245\1Y\1\0\20\218\1\255$v\1\0\3\197\1\169\1\0\20/\1\239\1\255$p\1\0\2#\1\254\1|\1\0\19\"\1\243\1\255%j\1\0\2}\1\255\1\147\1\3\1\0\18H\1\255&d\1\29\1D\1\218\1\255\1\244\1\1\1\0\18?\1\255&\251\1\255\4\206\1\0\0196\1\255+\168\1\0\19*\1\255+\159\1\0\19\25\1\255+\160\1\0\19\8\1\249\1\196\1\255)\167\1\0\0208\1i\1\255)\179\1\0\21i\1\255)\165\1\0\21j\1\255$\211\1\172\1\223\1\255\2E\1\0\20\4\1\208\1\255#\251\1\3\1\0\1\165\1\255\2z\1\0\20\6\1\236\1\255#\228\1\0\2\157\1\255\2\130\1\0\21+\1\175\1\250\1\255!\197\1\0\2I\1\245\1\164\1\8\1\0\23\12\1K\1z\1\166\1\205\1\231\1\252\1\255\26\251\1S\1\0\3\1\1\0\31\2\1\24\1.\1<\1E\1U\1`\1i\1w\2z\1\136\3\152\1\153\2\165\1\170\4\165\1\153\1\143\1\131\1c\1!\1\0\18",
+	}
+
+	glyphs.loader = {
+		w = 64,
+		h = 64,
+		data = "\0\24\23\1T\1\127\1\166\1\204\1\221\1\238\1\249\2\238\1\221\1\204\1\166\1\127\1T\1\22\1\0-5\1\143\1\212\1\254\1\255\14\254\1\212\1\142\0015\1\0'\14\1u\1\214\1\255\22\214\1t\1\r\1\0\"\18\1\130\1\238\1\255\26\238\1\128\1\17\1\0\30\2\1d\1\236\1\255\7\251\1\199\1\140\1d\1=\1!\1\17\1\5\2\17\1!\1=\1d\1\140\1\200\1\251\1\255\7\234\1a\1\1\1\0\27%\1\198\1\255\6\248\1\173\1P\1\r\1\0\5\18\0013\2\17\1\0\5\14\1R\1\174\1\249\1\255\6\196\1#\1\0\25X\1\242\1\255\5\234\1{\1\18\1\0\6?\1\190\1\252\1\255\2\252\1\189\1=\1\0\6\18\1{\1\235\1\255\5\240\1U\1\0\22\2\1\143\1\255\5\243\1w\1\11\1\0\7{\1\254\1\255\6\254\1y\1\0\7\11\1y\1\244\1\255\5\141\1\2\1\0\19\6\1\167\1\255\5\175\1\29\1\0\8d\1\255\na\1\0\8\30\1\177\1\255\5\165\1\5\1\0\17\6\1\182\1\255\4\247\1f\1\0\t\17\1\238\1\255\n\237\1\16\1\0\tj\1\247\1\255\4\180\1\5\1\0\15\2\1\166\1\255\4\227\1/\1\0\ne\1\255\12b\1\0\n2\1\229\1\255\4\165\1\2\1\0\14\144\1\255\4\215\1\31\1\0\1\8\1J\1w\1\128\1`\1\27\1\0\4\158\1\255\12\156\1\0\4\27\1a\1\128\1w\1I\1\8\1\0\1 \1\216\1\255\4\140\1\0\rX\1\255\4\216\1\21\1\0\1e\1\232\1\255\4\252\1\158\1\16\1\0\2\176\1\255\12\176\1\0\2\17\1\160\1\252\1\255\4\232\1d\1\0\1\22\1\217\1\255\4U\1\0\11$\1\241\1\255\3\228\1 \1\0\1\147\1\255\8\217\1\24\1\0\1\155\1\255\12\154\1\0\1\24\1\217\1\255\8\146\1\0\1\28\1\226\1\255\3\242\1'\1\0\t\2\1\198\1\255\3\247\1/\1\0\1e\1\255\n\194\1\1\1^\1\255\12[\1\1\1\195\1\255\nd\1\0\0012\1\247\1\255\3\195\1\1\1\0\8e\1\255\4f\1\0\1\8\1\232\1\255\11P\1\12\1\232\1\255\n\231\1\11\1P\1\255\11\232\1\8\1\0\1k\1\255\4`\1\0\7\18\1\236\1\255\3\174\1\0\2J\1\255\12\168\1\0\1U\1\254\1\255\8\254\1S\1\0\1\169\1\255\12I\1\0\2\177\1\255\3\233\1\16\1\0\6\131\1\255\3\245\1 \1\0\2x\1\255\12\213\1\0\2h\1\251\1\255\6\250\1g\1\0\2\215\1\255\12v\1\0\2\30\1\244\1\255\3~\1\0\5\14\1\239\1\255\3w\1\0\3\127\1\255\12\221\1\0\3-\1\170\1\245\1\255\2\244\1\169\1,\1\0\3\222\1\255\12~\1\0\3{\1\255\3\237\1\r\1\0\4u\1\255\3\234\1\11\1\0\3`\1\255\12\190\1\0\5\6\1 \2\6\1\0\5\191\1\255\12^\1\0\3\12\1\236\1\255\3s\1\0\4\215\1\255\3z\1\0\4\27\1\252\1\255\11v\1\0\14v\1\255\11\252\1\26\1\0\4~\1\255\3\213\1\0\0036\1\255\3\249\1\19\1\0\5\159\1\255\n\237\1\16\1\0\14\16\1\237\1\255\n\157\1\0\5\20\1\249\1\255\0032\1\0\2\144\1\255\3\173\1\0\6\16\1\217\1\255\8\253\1K\1\0\5\n\1:\1R\0029\1\t\1\0\5L\1\253\1\255\8\217\1\16\1\0\6\176\1\255\3\140\1\0\2\212\1\255\3Q\1\0\7\24\1\194\1\255\6\237\1K\1\0\0041\1\172\1\245\1\255\4\245\1\171\1/\1\0\4L\1\237\1\255\6\193\1\24\1\0\7U\1\255\3\209\1\0\1\22\1\254\1\255\2\251\1\14\1\0\8\1\1P\1\168\1\213\1\220\1\190\1v\1\16\1\0\3\4\1\144\1\253\1\255\8\253\1\141\1\3\1\0\3\16\1v\1\190\1\220\1\213\1\168\1O\1\1\1\0\8\15\1\252\1\255\2\254\1\21\1U\1\255\3\200\1\0\4\17\1e\1\158\1\175\1\156\1^\1\12\1\0\8\4\1\179\1\255\12\177\1\3\1\0\8\r\1_\1\156\1\175\1\158\1d\1\16\1\0\4\202\1\255\3S\1\127\1\255\3\140\1\0\3d\1\238\1\255\5\232\1U\1\0\7\144\1\255\14\140\1\0\7W\1\233\1\255\5\237\1b\1\0\3\142\1\255\3}\1\166\1\255\3c\1\0\2{\1\255\8\254\1h\1\0\5/\1\253\1\255\14\253\0011\1\0\5j\1\254\1\255\8y\1\0\2f\1\255\3\164\1\203\1\255\3<\1\0\1?\1\254\1\255\t\251\1.\1\0\4\172\1\255\16\170\1\0\0040\1\251\1\255\t\254\1=\1\0\1?\1\255\3\202\1\223\1\255\3\31\1\0\1\190\1\255\11\170\1\0\3\n\1\245\1\255\16\245\1\n\1\0\3\172\1\255\11\188\1\0\1!\1\255\3\222\1\237\1\255\3\18\2\252\1\255\11\244\1\6\1\0\2:\1\255\0188\1\0\2\7\1\245\1\255\11\252\1\17\1\20\1\255\3\235\1\249\1\255\3\6\0014\1\255\r \1\0\2T\1\255\18S\1\0\2\"\1\255\r2\1\7\1\255\3\248\1\249\1\255\3\6\0013\1\255\r\31\1\0\2S\1\255\18Q\1\0\2!\1\255\r1\1\7\1\255\3\248\1\237\1\255\3\18\2\252\1\255\11\244\1\6\1\0\0029\1\255\0188\1\0\2\7\1\245\1\255\11\252\1\16\1\20\1\255\3\235\1\223\1\255\3 \1\0\1\189\1\255\11\169\1\0\3\t\1\244\1\255\16\243\1\8\1\0\3\171\1\255\11\187\1\0\1!\1\255\3\221\1\203\1\255\3=\1\0\1=\1\253\1\255\t\250\1,\1\0\4\171\1\255\16\169\1\0\4.\1\251\1\255\t\253\1;\1\0\1?\1\255\3\201\1\166\1\255\3c\1\0\2y\1\255\8\254\1g\1\0\5.\1\253\1\255\14\253\0010\1\0\5h\1\254\1\255\8x\1\0\2f\1\255\3\163\1\127\1\255\3\140\1\0\3b\1\237\1\255\5\231\1S\1\0\7\141\1\255\14\138\1\0\7U\1\232\1\255\5\236\1_\1\0\3\142\1\255\3}\1T\1\255\3\200\1\0\4\16\1c\1\157\1\175\1\154\1\\\1\12\1\0\8\3\1\177\1\255\12\175\1\3\1\0\8\12\1]\1\155\1\175\1\157\1b\1\15\1\0\4\203\1\255\3R\1\22\1\254\1\255\2\251\1\14\1\0\8\1\1P\1\169\1\213\1\220\1\191\1v\1\16\1\0\3\3\1\140\1\253\1\255\8\253\1\138\1\3\1\0\3\17\1v\1\191\1\220\1\213\1\169\1P\1\1\1\0\8\16\1\252\1\255\2\254\1\20\1\0\1\211\1\255\3R\1\0\7\24\1\195\1\255\6\237\1K\1\0\4.\1\170\1\244\1\255\4\244\1\169\1-\1\0\4L\1\238\1\255\6\194\1\24\1\0\7U\1\255\3\208\1\0\2\142\1\255\3\174\1\0\6\17\1\217\1\255\8\253\1L\1\0\5\t\0018\1R\0028\1\8\1\0\5M\1\253\1\255\8\217\1\16\1\0\6\177\1\255\3\138\1\0\0025\1\255\3\249\1\19\1\0\5\160\1\255\n\237\1\16\1\0\14\17\1\238\1\255\n\158\1\0\5\20\1\249\1\255\0031\1\0\3\212\1\255\3|\1\0\4\27\1\252\1\255\11v\1\0\14w\1\255\11\252\1\26\1\0\4\127\1\255\3\213\1\0\4u\1\255\3\235\1\11\1\0\3a\1\255\12\191\1\0\5\7\1!\2\7\1\0\5\191\1\255\12_\1\0\3\r\1\237\1\255\3r\1\0\4\14\1\238\1\255\3z\1\0\3\127\1\255\12\222\1\0\0030\1\172\1\246\1\255\2\245\1\171\1.\1\0\3\222\1\255\12~\1\0\3}\1\255\3\236\1\r\1\0\5\129\1\255\3\245\1 \1\0\2w\1\255\12\212\1\0\2j\1\251\1\255\6\251\1h\1\0\2\213\1\255\12t\1\0\2\30\1\244\1\255\3}\1\0\6\17\1\235\1\255\3\177\1\0\2J\1\255\12\167\1\0\1W\1\254\1\255\8\254\1U\1\0\1\168\1\255\12H\1\0\2\180\1\255\3\232\1\15\1\0\7c\1\255\4i\1\0\1\8\1\232\1\255\11O\1\r\1\233\1\255\n\232\1\12\1O\1\255\11\231\1\8\1\0\1n\1\255\4]\1\0\8\1\1\196\1\255\3\247\0012\1\0\1d\1\255\n\193\1\1\1`\1\255\12]\1\1\1\194\1\255\nc\1\0\0015\1\248\1\255\3\193\1\1\1\0\t#\1\240\1\255\3\229\1 \1\0\1\147\1\255\8\217\1\24\1\0\1\156\1\255\12\154\1\0\1\24\1\217\1\255\8\146\1\0\1!\1\230\1\255\3\239\1\"\1\0\11U\1\255\4\216\1\22\1\0\1c\1\232\1\255\4\252\1\157\1\16\1\0\2\176\1\255\12\176\1\0\2\17\1\158\1\252\1\255\4\231\1b\1\0\1\22\1\217\1\255\3\254\1R\1\0\r\141\1\255\4\217\1 \1\0\1\8\1H\1u\1\127\1^\1\26\1\0\4\158\1\255\12\156\1\0\4\26\1_\1\127\1u\1H\1\8\1\0\1!\1\218\1\255\4\137\1\0\14\2\1\165\1\255\4\229\0012\1\0\nd\1\255\12a\1\0\n4\1\230\1\255\4\162\1\1\1\0\15\5\1\181\1\255\4\247\1j\1\0\t\16\1\238\1\255\n\236\1\16\1\0\tm\1\248\1\255\4\179\1\5\1\0\17\5\1\164\1\255\5\177\1\31\1\0\8b\1\255\n_\1\0\8!\1\180\1\255\5\162\1\5\1\0\19\1\1\140\1\255\5\245\1{\1\12\1\0\7y\1\254\1\255\6\253\1x\1\0\7\r\1}\1\246\1\255\4\254\1\137\1\1\1\0\22T\1\240\1\255\5\236\1}\1\20\1\0\6=\1\188\1\252\1\255\2\252\1\187\1;\1\0\6\20\1~\1\237\1\255\5\239\1R\1\0\25#\1\195\1\255\6\249\1\176\1T\1\15\1\0\5\17\0012\2\17\1\0\5\17\1V\1\178\1\250\1\255\6\193\1!\1\0\27\1\1`\1\234\1\255\7\252\1\202\1\142\1e\1?\1\"\1\18\1\6\2\18\1\"\1@\1f\1\142\1\203\1\252\1\255\7\232\1^\1\1\1\0\30\16\1\127\1\237\1\255\26\236\1}\1\15\1\0\"\r\1s\1\212\1\255\22\212\1r\1\r\1\0'2\1\140\1\209\1\254\1\255\14\254\1\208\1\139\0012\1\0-\21\1R\1}\1\165\1\202\1\221\1\236\1\249\2\236\1\221\1\201\1\164\1|\1R\1\20\1\0\24",
+	}
+
+	glyphs.magazine = {
+		w = 64,
+		h = 64,
+		data = "\230\1\255\24\246\1\27\1\0%\171\1\255\25g\1\0%^\1\255\7\251\1\218\1\236\1\255\8\239\1\217\1\249\1\255\4\180\1\0%\20\1\252\1\255\5\154\1\21\1\0\2=\1\215\1\255\4\238\1Z\1\4\1\0\1\8\1t\1\251\1\255\2\246\1\11\1\0%\196\1\255\4\156\1\0\5\24\1\233\1\255\2\253\1=\1\0\5e\1\255\3O\1\0%w\1\255\3\254\1\27\1\0\1\26\1\145\1l\1\0\2{\1\255\2\183\1\0\2M\1\151\0013\1\0\1\2\1\218\1\255\2\156\1\0%*\1\255\3\229\1\0\2\148\1\255\2B\1\0\1%\1\255\2\131\1\0\1\1\1\245\1\255\1\222\1\1\1\0\1\135\1\255\2\231\1\2\1\0%\220\1\255\2\241\1\1\1\0\1\129\1\255\2\146\1\0\2\217\1\255\1\144\1\0\2\227\1\255\0020\1\0\1<\1\255\0036\1\0%\144\1\255\0030\1\0\0017\1\255\2\222\1\0\2\141\1\255\1\206\1\0\2\152\1\255\2{\1\0\1\3\1\235\1\255\2\131\1\0%C\1\255\3|\1\0\1\2\1\231\1\255\2*\1\0\1B\1\255\1\254\1\28\1\0\1M\1\255\2\198\1\0\2\163\1\255\2\208\1\0%\5\1\239\1\255\2\199\1\0\2\158\1\255\2v\1\0\1\5\1\239\1\255\1f\1\0\1\t\1\245\1\255\1\253\1\23\1\0\1X\1\255\3 \1\0%\169\1\255\2\253\1\23\1\0\1S\1\255\2\193\1\0\2\170\1\255\1\177\1\0\2\181\1\255\2_\1\0\1\15\1\250\1\255\2k\1\0%\\\1\255\3_\1\0\1\12\1\248\1\255\1\252\1\19\1\0\1_\1\255\1\246\1\t\1\0\1j\1\255\2\170\1\0\2\192\1\255\2\184\1\0%\18\1\251\1\255\2\170\1\0\2\187\1\255\2Y\1\0\1\21\1\252\1\255\1I\1\0\1\29\1\254\1\255\1\241\1\6\1\0\1u\1\255\2\248\1\r\1\0%\194\1\255\2\241\1\6\1\0\1p\1\255\2\164\1\0\2\198\1\255\1\148\1\0\2\209\1\255\2B\1\0\1)\1\255\3R\1\0%u\1\255\3C\1\0\1\"\1\255\2\237\1\4\1\0\1{\1\255\1\225\1\0\2\134\1\255\2\141\1\0\2\219\1\255\2\159\1\0%(\1\255\3\142\1\0\2\216\1\255\2<\1\0\1/\1\255\2,\1\0\1;\1\255\2\216\1\0\2\145\1\255\2\234\1\3\1\0%\217\1\255\2\220\1\0\2\140\1\255\2\135\1\0\2\224\1\255\1x\1\0\1\3\1\235\1\255\2%\1\0\1F\1\255\3:\1\0%\141\1\255\3&\1\0\1A\1\255\2\211\1\0\2\151\1\255\1\195\1\0\2\162\1\255\2q\1\0\1\6\1\242\1\255\2\135\1\0%@\1\255\3r\1\0\1\4\1\239\1\255\2 \1\0\1L\1\255\1\252\1\20\1\0\1W\1\255\2\188\1\0\2\174\1\255\2\212\1\0%\4\1\238\1\255\2\189\1\0\2\169\1\255\2k\1\0\1\t\1\245\1\255\1[\1\0\1\15\1\250\1\255\1\250\1\15\1\0\1c\1\255\3$\1\0%\166\1\255\2\250\1\16\1\0\1^\1\255\2\182\1\0\2\180\1\255\1\166\1\0\2\191\1\255\2T\1\0\1\22\1\253\1\255\2o\1\0%Y\1\255\3U\1\0\1\19\1\252\1\255\1\248\1\12\1\0\1i\1\255\1\240\1\5\1\0\1t\1\255\2\159\1\0\2\202\1\255\2\188\1\0%\15\1\250\1\255\2\160\1\0\2\197\1\255\2N\1\0\1\29\1\254\1\255\1?\1\0\1(\1\255\2\234\1\2\1\0\1\127\1\255\2\250\1\16\1\0%\191\1\255\2\234\1\3\1\0\1z\1\255\2\153\1\0\2\208\1\255\1\138\1\0\2\219\1\255\0027\1\0\0014\1\255\3V\1\0%r\1\255\0039\1\0\1/\1\255\2\230\1\1\1\0\1\133\1\255\1\213\1\0\2\144\1\255\2\130\1\0\1\1\1\228\1\255\2\163\1\0%#\1\255\3\132\1\0\2\224\1\255\0021\1\0\1:\1\255\2$\1\0\1E\1\255\2\206\1\0\2\155\1\255\2\237\1\4\1\0%\216\1\255\2\207\1\0\2\150\1\255\2}\1\0\1\2\1\233\1\255\1n\1\0\1\6\1\242\1\255\1\254\1\28\1\0\1P\1\255\3>\1\0%\139\1\255\3\31\1\0\1K\1\255\2\200\1\0\2\161\1\255\1\185\1\0\2\173\1\255\2f\1\0\1\11\1\247\1\255\2\139\1\0%>\1\255\3h\1\0\1\t\1\245\1\255\1\253\1\23\1\0\1V\1\255\1\249\1\r\1\0\1b\1\255\2\177\1\0\2\184\1\255\2\216\1\0%\3\1\236\1\255\2\179\1\0\2\179\1\255\2`\1\0\1\14\1\250\1\255\1Q\1\0\1\22\1\253\1\255\1\246\1\t\1\0\1m\1\255\3&\1\0%\164\1\255\2\246\1\n\1\0\1h\1\255\2\171\1\0\2\190\1\255\1\156\1\0\2\201\1\255\2I\1\0\1!\1\255\3r\1\0%W\1\255\3K\1\0\1\28\1\254\1\255\1\241\1\6\1\0\1s\1\255\1\231\1\1\1\0\1~\1\255\2\148\1\0\2\213\1\255\2\191\1\0%\15\1\249\1\255\2\150\1\0\2\208\1\255\2C\1\0\1'\1\255\0024\1\0\0013\1\255\2\225\1\0\2\137\1\255\2\252\1\19\1\0%\189\1\255\2\226\1\1\1\0\1\132\1\255\2\142\1\0\2\218\1\255\1\128\1\0\1\1\1\228\1\255\2,\1\0\1>\1\255\3Z\1\0%p\1\255\3/\1\0\0019\1\255\2\220\1\0\2\143\1\255\1\203\1\0\2\154\1\255\2x\1\0\1\3\1\236\1\255\2\167\1\0%\"\1\255\3z\1\0\1\2\1\233\1\255\2&\1\0\1D\1\255\1\254\1\27\1\0\1O\1\255\2\195\1\0\2\166\1\255\2\240\1\5\1\0%\214\1\255\2\197\1\0\2\161\1\255\2r\1\0\1\5\1\240\1\255\1c\1\0\1\11\1\247\1\255\1\252\1\20\1\0\1[\1\255\3B\1\0%\137\1\255\2\253\1\22\1\0\1V\1\255\2\189\1\0\2\171\1\255\1\174\1\0\2\183\1\255\2[\1\0\1\18\1\251\1\255\2\143\1\0%<\1\255\3^\1\0\1\14\1\249\1\255\1\250\1\16\1\0\1`\1\255\1\244\1\8\1\0\1l\1\255\2\166\1\0\2\194\1\255\2\221\1\0%\3\1\235\1\255\2\169\1\0\2\190\1\255\2U\1\0\1\22\1\253\1\255\1G\1\0\1\30\1\255\2\240\1\5\1\0\1w\1\255\3)\1\0%\161\1\255\2\240\1\5\1\0\1s\1\255\2\160\1\0\2\200\1\255\1\146\1\0\2\212\1\255\2?\1\0\1,\1\255\3v\1\0%T\1\255\3A\1\0\1'\1\255\2\234\1\2\1\0\1}\1\255\1\222\1\0\2\136\1\255\2\138\1\0\2\222\1\255\2\195\1\0%\12\1\248\1\255\2\140\1\0\2\218\1\255\0028\1\0\0011\1\255\2*\1\0\1=\1\255\2\213\1\0\2\147\1\255\2\252\1\20\1\0%\186\1\255\2\216\1\0\2\143\1\255\2\131\1\0\1\1\1\227\1\255\1v\1\0\1\3\1\236\1\255\2$\1\0\1H\1\255\3^\1\0%m\1\255\3%\1\0\1D\1\255\2\207\1\0\2\153\1\255\1\193\1\0\2\165\1\255\2n\1\0\1\7\1\243\1\255\2\171\1\0%\31\1\255\3p\1\0\1\5\1\240\1\255\2\30\1\0\1N\1\255\1\252\1\19\1\0\1Z\1\255\2\185\1\0\2\176\1\255\2\243\1\7\1\0%\211\1\255\2\187\1\0\2\171\1\255\2g\1\0\1\t\1\245\1\255\1Y\1\0\1\17\1\251\1\255\1\248\1\r\1\0\1e\1\255\3E\1\0%\134\1\255\2\250\1\15\1\0\1`\1\255\2\178\1\0\2\182\1\255\1\164\1\0\2\194\1\255\2Q\1\0\1\25\1\254\1\255\2\146\1\0%9\1\255\3T\1\0\1\22\1\253\1\255\1\246\1\n\1\0\1k\1\255\1\237\1\4\1\0\1w\1\255\2\156\1\0\2\205\1\255\2\225\1\0%\2\1\232\1\255\2\159\1\0\2\200\1\255\2J\1\0\1\30\1\255\2<\1\0\1+\1\255\2\230\1\1\1\0\1\129\1\255\3-\1\0%\159\1\255\2\232\1\2\1\0\1}\1\255\2\148\1\0\2\224\1\255\1\136\1\0\2\222\1\255\0023\1\0\1D\1\255\3z\1\0%R\1\255\0037\1\0\1-\1\254\1\255\1\166\1\0\2\211\1\255\1\211\1\0\2\141\1\255\2D\1\0\0017\1\255\3\199\1\0%\12\1\248\1\255\2\140\1\0\2[\1\158\1&\1\0\1\15\1\249\1\255\2*\1\0\1\16\1\140\1~\1\4\1\0\1l\1\255\3\253\1\23\1\0%\184\1\255\2\242\1\"\1\0\5\140\1\255\3\176\1\2\1\0\4\16\1\223\1\255\4b\1\0%k\1\255\3\223\1F\1\0\2\16\1\141\1\255\5\168\1\27\1\0\0022\1\206\1\255\5\174\1\0%\31\1\255\5\237\1\213\1\248\1\255\7\253\1\221\1\225\1\255\7\243\1\8\1\0%\209\1\255\25I\1\0%Y\1\170\25K\1\0d\24\1\"\28\18\1\0!\136\1\255\29\251\1]\1\0 \242\1\255\30\194\1\0 \172\1\255\30~\1\0\17",
+	}
+
+	glyphs.outofview = {
+		w = 64,
+		h = 64,
+		data = "\0\195\16\1\8\1\0>\4\1\179\1o\1\7\1\0=6\1\253\1\223\1f\1\3\1\0<\154\1\255\2\213\1U\1\1\1\0:\18\1\233\1\255\3\200\1C\1\0:^\1\255\5\196\1=\1\0009\189\1\255\6\187\0010\1\0007&\1\248\1\255\6\253\1\170\1$\1\0006\131\1\255\8\250\1\153\1\26\1\0004\7\1\216\1\255\t\249\1\153\1\23\1\0003F\1\255\11\243\1\136\1\15\1\0002\168\1\255\12\236\1w\1\t\1\0000\24\1\239\1\255\r\227\1o\1\7\1\0/l\1\255\15\223\1f\1\3\1\0-\2\1\199\1\255\16\213\1U\1\1\1\0,.\1\251\1\255\17\200\1C\1\0,\145\1\255\19\196\1=\1\0*\r\1\228\1\255\20\187\0010\1\0)U\1\255\21\253\1\170\1$\1\0(\179\1\255\22\250\1\153\1\26\1\0&\31\1\244\1\255\23\249\1\153\1\23\1\0%z\1\255\25\243\1\136\1\15\1\0#\6\1\213\1\255\26\236\1w\1\t\1\0\"=\1\254\1\255\27\227\1o\1\7\1\0!\159\1\255\29\223\1f\1\3\1\0\31\19\1\234\1\255\30\213\1U\1\1\1\0\30c\1\255 \200\1C\1\0\29\1\1\191\1\255!\196\1=\1\0\28+\1\250\1\255\"\187\0010\1\0\26+\1\250\1\255\"\187\0010\1\0\25\1\1\191\1\255!\196\1=\1\0\27c\1\255 \200\1C\1\0\28\19\1\234\1\255\30\213\1U\1\1\1\0\29\159\1\255\29\223\1f\1\3\1\0\30=\1\254\1\255\27\227\1o\1\7\1\0\31\6\1\213\1\255\26\236\1w\1\t\1\0!z\1\255\25\243\1\136\1\15\1\0\"\31\1\244\1\255\23\249\1\153\1\23\1\0$\179\1\255\22\250\1\153\1\26\1\0%U\1\255\21\253\1\170\1$\1\0&\r\1\228\1\255\20\187\0010\1\0(\145\1\255\19\196\1=\1\0).\1\251\1\255\17\200\1C\1\0*\2\1\199\1\255\16\213\1U\1\1\1\0+l\1\255\15\223\1f\1\3\1\0,\24\1\239\1\255\r\227\1o\1\7\1\0.\168\1\255\12\236\1w\1\t\1\0/F\1\255\11\243\1\136\1\15\1\0000\7\1\216\1\255\t\249\1\153\1\23\1\0002\131\1\255\8\250\1\153\1\26\1\0003&\1\248\1\255\6\253\1\170\1$\1\0005\189\1\255\6\187\0010\1\0006^\1\255\5\196\1=\1\0007\18\1\233\1\255\3\200\1C\1\0009\154\1\255\2\213\1U\1\1\1\00096\1\253\1\223\1f\1\3\1\0:\4\1\179\1o\1\7\1\0<\16\1\8\1\0\251",
+	}
+
+	glyphs.outofviewEdge = {
+		w = 64,
+		h = 64,
+		data = "\0A\20\1\172\1\237\1\199\1O\1\1\1\0:\172\1\255\4\200\1C\1\0009\238\1\255\6\189\0018\1\0007\197\1\255\8\177\1-\1\0005A\1\254\1\255\8\253\1\164\1$\1\0004\162\1\255\n\250\1\162\1 \1\0002\20\1\235\1\255\11\249\1\153\1\23\1\0001g\1\255\r\243\1\136\1\16\1\0/\2\1\197\1\255\14\237\1w\1\t\1\0..\1\251\1\255\15\228\1h\1\5\1\0-\139\1\255\17\224\1f\1\3\1\0+\n\1\223\1\255\18\213\1U\1\1\1\0*J\1\255\20\201\1M\1\0*\176\1\255\21\196\1>\1\0(\29\1\243\1\255\22\187\0011\1\0'u\1\255\23\253\1\170\1%\1\0%\4\1\207\1\255\24\250\1\162\1 \1\0$6\1\253\1\255\25\249\1\153\1\23\1\0#\153\1\255\27\243\1\136\1\16\1\0!\17\1\233\1\255\28\237\1w\1\t\1\0 ]\1\255\30\233\1w\1\7\1\0\31\188\1\255\31\224\1f\1\3\1\0\29%\1\247\1\255 \213\1U\1\1\1\0\28\130\1\255\"\201\1M\1\0\27\7\1\216\1\255#\196\1>\1\0\26E\1\255%\187\0011\1\0\25\167\1\255%\253\1\170\1%\1\0\23\24\1\239\1\255&\250\1\162\1 \1\0\22k\1\255(\246\1\140\1\14\1\0\20\2\1\202\1\255)\210\1\8\1\0\0202\1\252\1\255)M\1\0\0202\1\252\1\255)M\1\0\19\2\1\202\1\255)\210\1\8\1\0\19k\1\255(\246\1\140\1\14\1\0\19\24\1\239\1\255&\250\1\162\1 \1\0\21\167\1\255%\253\1\170\1%\1\0\22E\1\255%\187\0011\1\0\23\7\1\216\1\255#\196\1>\1\0\25\130\1\255\"\201\1M\1\0\26%\1\247\1\255 \213\1U\1\1\1\0\27\188\1\255\31\224\1f\1\3\1\0\28]\1\255\30\233\1w\1\7\1\0\29\17\1\233\1\255\28\237\1w\1\t\1\0\31\153\1\255\27\243\1\136\1\16\1\0 6\1\253\1\255\25\249\1\153\1\23\1\0!\4\1\207\1\255\24\250\1\162\1 \1\0#u\1\255\23\253\1\170\1%\1\0$\29\1\243\1\255\22\187\0011\1\0&\176\1\255\21\196\1>\1\0'J\1\255\20\201\1M\1\0(\n\1\223\1\255\18\213\1U\1\1\1\0)\139\1\255\17\224\1f\1\3\1\0*.\1\251\1\255\15\228\1h\1\5\1\0+\2\1\197\1\255\14\237\1w\1\t\1\0-g\1\255\r\243\1\136\1\16\1\0.\20\1\235\1\255\11\249\1\153\1\23\1\0000\162\1\255\n\250\1\162\1 \1\0001A\1\254\1\255\8\253\1\164\1$\1\0003\197\1\255\8\177\1-\1\0005\238\1\255\6\189\0018\1\0007\172\1\255\4\200\1C\1\0009\20\1\172\1\237\1\199\1O\1\1\1\0y",
+	}
+
+	glyphs.pencil = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\175T\1\235\1\234\1T\1\0;U\1\251\1\255\2\252\1\\\1\0\22+\1\180\1\246\1\255\20\234\1P\1\0\nW\1\251\1\255\4\251\1W\1\0\20+\1\241\1\255\23\232\1\0\tW\1\251\1\255\6\251\1W\1\0\19\180\1\255\24\231\1\0\8W\1\251\1\255\3\251\2\255\3\251\1W\1\0\18\246\1\255\23\232\1N\1\0\7W\1\251\1\255\3\251\1W\2\251\1\255\3\251\1W\1\0\17\255\4\0\28U\1\251\1\255\3\252\1[\1\0\2T\1\251\1\255\3\252\1\\\1\0\16\255\4\0\27U\1\251\1\255\3\252\1[\1\0\4U\1\251\1\255\3\252\1\\\1\0\15\255\4\0\26W\1\251\1\255\4\251\1W\1\0\5X\1\252\1\255\3\251\1S\1\0\14\255\4\0\25W\1\251\1\255\6\251\1W\1\0\5Y\1\252\1\255\3\232\1\0\14\255\4\0\24W\1\251\1\255\8\251\1W\1\0\4Y\1\252\1\255\3\231\1\0\14\255\4\0\23W\1\251\1\255\n\251\1W\1\0\2X\1\252\1\255\3\251\1S\1\0\14\255\4\0\22U\1\251\1\255\12\252\1\\\1U\1\251\1\255\3\252\1[\1\0\15\255\4\0\21W\1\251\1\255\14\251\2\255\3\251\1W\1\0\16\255\4\0\20U\1\251\1\255\19\252\1[\1\0\17\255\4\0\19U\1\251\1\255\19\252\1[\1\0\18\255\4\0\18U\1\251\1\255\19\252\1[\1\0\19\255\4\0\17U\1\251\1\255\19\252\1[\1\0\20\255\4\0\16U\1\251\1\255\19\252\1[\1\0\21\255\4\0\15U\1\251\1\255\19\252\1[\1\0\22\255\4\0\14U\1\251\1\255\19\252\1[\1\0\23\255\4\0\rU\1\251\1\255\19\252\1[\1\0\24\255\4\0\12U\1\251\1\255\19\252\1[\1\0\25\255\4\0\11U\1\251\1\255\19\252\1[\1\0\26\255\4\0\nT\1\251\1\255\19\251\1W\1\0\7R\1\235\1\234\1P\1\0\16\255\4\0\n\234\1\255\19\251\1W\1\0\8\235\1\255\2\232\1\0\16\255\4\0\n\255\19\252\1[\1\0\t\255\4\0\16\255\4\0\n\255\18\252\1[\1\0\n\255\4\0\16\255\4\0\n\255\17\252\1[\1\0\11\255\4\0\16\255\4\0\n\255\16\252\1[\1\0\12\255\4\0\16\255\4\0\n\255\15\252\1[\1\0\r\255\4\0\16\255\4\0\n\255\14\252\1[\1\0\14\255\4\0\16\255\4\0\n\255\r\252\1[\1\0\15\255\4\0\16\255\4\0\n\255\12\252\1[\1\0\16\255\4\0\16\255\4\0\n\234\1\255\n\251\1W\1\0\17\255\4\0\16\255\4\0\nP\1\233\1\255\8\232\1S\1\0\18\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0(\255\4\0\16\245\1\255.\243\1\0\16\179\1\255.\175\1\0\16)\1\240\1\255,\239\1'\1\0\17(\1\177\1\244\1\255(\243\1\175\1'\1\0\255\0\255\0\11",
+	}
+
+	glyphs.revolver = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\255\0\159\5\1\0\3\n\2\6\1\11\1\0\2\2\1\16\1\0\1\16\1\3\1\14\1\3\1\0(Y\1\0\5`\1\254\1\155\1\219\1\177\1\198\2\169\1\205\1\148\1\226\1\134\1\247\1w\1\249\1\140\1\227\1\146\1\214\1\160\1\200\1\227\1\138\1\28\1\0\7Z\1w\2`\1\3\1\0\21q\1\253\1\238\1\235\1\151\1\136\2\209\1\255\22\248\1\152\1w\6\222\1\255\3?\1\0\21M\1\255)\236\1B\1\0\18\n\1o\1\179\1\255*\184\1\0\12\1\1U\1|\1\195\1\135\1\19\1\167\1\255,\184\1\0\15\4\1\184\1\251\1\255-\183\1\0\16F\1\255.|\1\0\14<\1\190\1\254\1\255.\31\1\0\11>\1\129\1\172\1\253\1\2550\16\1\0\ns\1\2554\16\1\0\n\175\1\255\28\249\1\161\1f\1U\7%\1\6\1\17\3O\1\153\4C\1\136\3\t\1\0\n\177\1\255\27\243\1=\1\0\"\196\1\255\27\150\1\0\";\1\254\1\255\27~\1\0!\7\1\214\1\255\17\244\1\241\1\255\tw\1\0!\132\1\255\18\134\1\0\1\22\1\153\1\254\1\255\2\230\1\194\1\189\1\204\1^\1\0 0\1\250\1\255\rt\1\131\1\212\1\251\1\253\1:\1\0\3y\1\254\1_\1\2\1\0#\3\1\204\1\255\r\223\1\4\1\0\1\5\1\222\1\127\1\0\4%\1\184\1\0%o\1\255\14\183\1\0\2\2\1\234\0019\1\0\4(\1s\1\0$\27\1\242\1\255\14\223\1\0\3\134\1\132\1\0\4k\1(\1\0$\173\1\255\0165\1\0\2\7\1\147\1\140\1\7\1\0\1J\1w\1\0$?\1\255\11\197\1f\1_\1}\1\154\1\175\1\183\0013\1\2\1\0\2/\1z\1\138\1c\1\0%\170\1\255\n\174\1\2\1\0\5\28\1\161\1\199\1\167\1\170\1\132\1L\1\8\1\0%\26\1\250\1\255\na\1\0003~\1\255\11\165\1\0002\3\1\227\1\255\11\254\1\23\1\0001E\1\255\12e\1\0002\163\1\255\11\226\1\0002\11\1\243\1\255\11\232\1\3\1\0001g\1\255\rW\1\0000\5\1\221\1\255\12\210\0012\1\0000`\1\255\12\184\1\4\1\0001m\1\255\12<\1\0002\1\1^\1\197\1\252\1\255\6\249\1\198\1h\1\0006\8\1-\1E\1U\2E\1(\1\6\1\0\255\0\255\0\255\0\184",
+	}
+
+	glyphs.roblox = {
+		w = 64,
+		h = 64,
+		data = "\0\12\3\1\198\1\145\1O\1\16\1\0;6\1\255\3\253\1\213\1\153\1U\1\15\1\0007x\1\255\7\252\1\204\1\136\1D\1\8\1\0003\185\1\255\11\251\1\204\1\136\1D\1\7\1\0.\6\1\244\1\255\15\245\1\187\1w\1<\1\5\1\0*>\1\255\20\243\1\187\1w\0013\1\1\1\0&~\1\255\24\233\1\168\1g\1&\1\0#\192\1\255\28\231\1\170\1f\1!\1\0\30\n\1\248\1\255 \230\1\170\1f\1\30\1\0\26E\1\255%\221\1\153\1U\1\20\1\0\22\134\1\255)\221\1\153\1U\1\17\1\0\18\199\1\255,\252\1\204\1\145\1U\1\15\1\0\r\r\1\250\1\2550\251\1\204\1\136\1D\1\8\1\0\tK\1\2555\211\1\0\t\141\1\2555\154\1\0\t\207\1\2555Y\1\0\8\18\1\253\1\2554\254\1\24\1\0\8S\1\2555\213\1\0\t\148\1\2555\147\1\0\t\214\1\2555R\1\0\8\23\1\254\1\2554\253\1\20\1\0\8Z\1\2555\205\1\0\t\155\1\2555\139\1\0\t\221\1\2555J\1\0\8\30\1\2555\251\1\14\1\0\8`\1\255\21\241\1\255\31\198\1\0\t\162\1\255\21/\1\25\1U\1\145\1\204\1\254\1\255\26\131\1\0\t\227\1\255\20\235\1\2\1\0\4\26\1^\1\161\1\228\1\255\23B\1\0\8&\1\255\21\171\1\0\t,\1\227\1\255\20\247\1\8\1\0\8h\1\255\21i\1\0\t\n\1\248\1\255\20\189\1\0\t\169\1\255\21'\1\0\tF\1\255\21|\1\0\8\1\1\232\1\255\20\230\1\0\n\135\1\255\21:\1\0\8.\1\255\21\163\1\0\n\201\1\255\20\243\1\5\1\0\8o\1\255\21b\1\0\t\15\1\251\1\255\20\182\1\0\t\176\1\255\21 \1\0\tN\1\255\21t\1\0\8\3\1\239\1\255\20\237\1\28\1\0\t\144\1\255\0213\1\0\0085\1\255\23\221\1\153\1^\1\27\1\0\5\212\1\255\20\239\1\3\1\0\8v\1\255\27\221\1\153\1U\1\17\1\22\1\254\1\255\20\173\1\0\t\183\1\255\30\252\1\220\1\255\21l\1\0\8\5\1\243\1\2555*\1\0\8<\1\2555\232\1\1\1\0\8~\1\2555\165\1\0\t\191\1\2555d\1\0\8\8\1\247\1\2555#\1\0\8C\1\2555\225\1\0\t\132\1\2555\158\1\0\t\198\1\2555]\1\0\8\12\1\250\1\2555\28\1\0\8J\1\2555\216\1\0\t\139\1\2555\150\1\0\t\182\1\2555U\1\0\n-\1u\1\189\1\248\1\2550\254\1\21\1\0\r\t\1D\1\128\1\187\1\250\1\255,\208\1\0\18\12\1D\1\136\1\204\1\254\1\255(\142\1\0\22\21\1U\1\145\1\204\1\255%M\1\0\26\25\1U\1\153\1\225\1\255 \252\1\16\1\0\30\"\1f\1\170\1\236\1\255\28\200\1\0\"\2\0011\1s\1\180\1\242\1\255\24\135\1\0&\3\0013\1w\1\179\1\241\1\255\20E\1\0*\4\0013\1w\1\187\1\247\1\255\15\249\1\11\1\0.\t\1<\1w\1\187\1\249\1\255\11\192\1\0003\11\1D\1\136\1\196\1\250\1\255\7\127\1\0007\12\1D\1\136\1\204\1\253\1\255\3=\1\0;\21\1T\1\150\1\206\1\6\1\0\12",
+	}
+
+	glyphs.smoked = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\255\0\218\1\1'\1Q\1j\1u\1p\1[\0017\1\7\1\0006\25\1g\1\128\7x\0011\1\0004$\1z\1\128\nG\1\0002\22\1y\1\128\0126\1\0001^\1\128\r{\1\14\1\0\18.\1\0\28\27\1\128\15B\1\0\1\23\1(\0010\1$\1\t\1\0\11;\1\253\1O\1\0\1;\1\4\1\0\24C\1\128\15u\1n\1\128\4~\1Z\1\24\1\0\8\4\1\214\1\203\1\3\1S\1\251\1n\1\0\24W\1\128\23~\0018\1\0\8L\1.\1J\1\248\1\173\1\5\1\0\24a\1\128\11\137\1\147\1\159\1\169\1\179\n\134\1f\4$\1\0\3\11\1\232\1\174\1\5\1\0\19\4\0012\1W\1d\1Y\1:\1b\1\128\11\151\1\181\1\211\1\240\1\255\15\253\1\179\0012\1\0\2'\1\6\1\0\19\22\1n\1\128\17\151\1\181\1\211\1\240\1\255\17\254\1\172\1\r\1\0\1\160\1\197\4F\1\0\r\14\1t\1\128\18\151\1\181\1\211\1\240\1\255\17\187\1/\1\0\2\134\1\165\4:\1\0\rR\1\128\19\149\1\176\1\203\1\230\1\255\15\213\1K\1\0\3\3\1\31\1\0\17\6\1|\1\128#'\1\0\7\131\1\233\1,\1\0\16\26\1\128$\30\1\0\5k\1v\1\21\1\210\1\234\1.\1\0\15\23\1\128$O\0010\1\r\1\0\3\141\1\242\1\17\1\21\1\209\1\220\1\4\1\0\14\5\1~\1\128\15}\1\128\21~\1W\1\19\1\0\1\27\1\243\1N\1\0\1\20\0013\1\0\16S\1\128\11\127\1W\1\"\1\t\1\0\1\n\1(\1~\1\128\20|\0013\1\0\1\15\1\0\18\2\1 \1N\1\128\ny\1%\1\0\6s\1\128\22;\1\0\17\2\0017\1q\1\128\11|\1\27\1\0\2\26\1E\1R\1H\1Y\1\128\23\127\1$\1\0\15\r\1c\1\128\r;\1\0\2B\1\127\1\128\28o\1\3\1\0\r\r\1m\1\128\rw\1\5\1\0\1/\1\128\0310\1\0\12\2\1`\1\128\14R\1\0\1\1\1o\1\128\31Y\1\0\0122\1\128\12l\1W\1X\0012\1\0\1\17\1\128 x\1\0\12n\1\128\nk\1\30\1\0\5\23\1\128!\6\1\0\n\24\1\128\np\1\12\1\0\6\7\1\128!\n\1\0\n7\1\128\n%\1\0\1\4\1K\1w\1t\1P\1\22\0011\1\128 }\1\0\11D\1\128\ts\1\1\1\0\1E\1\128&f\1\0\11G\1\128\tW\1\0\2s\1\128&@\1\0\11;\1\128\tK\1\0\1\7\1\128&{\1\r\1\0\11%\1\128\tN\1\0\1\19\1\128&A\1\0\12\4\1y\1\128\8}\1L\1h\1\128%`\1\2\1\0\rF\1\128/^\1\6\1\0\14\n\1v\1\128,z\1;\1\2\1\0\16 \1}\1\128(x\1[\0018\1\8\1\0\19'\1z\1\128\22W\1P\1\128\14^\1\n\1\0\23\22\1^\1\128\8z\1:\1\27\1L\1t\1\128\5s\1L\1\26\1\0\2-\1s\1\128\ny\1=\1\2\1\0\26\31\1I\1i\1w\1}\1s\1[\0017\1\8\1\0\4\15\1\31\1#\1\30\1\16\1\0\6\4\0015\1a\1~\1\128\5g\1@\1\n\1\0007\8\1\27\1'\1(\1\29\1\12\1\0\255\0\255\0\255\0\152",
+	}
+
+	glyphs.trash = {
+		w = 64,
+		h = 64,
+		data = "\0\255\0\23\t\1t\1\206\1\250\1\255\12\250\1\206\1s\1\8\1\0+\30\1\213\1\255\18\212\1\29\1\0)\t\1\213\1\255\20\211\1\8\1\0(t\1\255\22q\1\0(\206\1\255\3\173\1\20\1\0\12\21\1\175\1\255\3\204\1\0(\249\1\255\3\20\1\0\14\23\1\255\3\247\1\0(\255\4\0\16\255\4\0(\255\4\0\16\255\4\0\28R\1\235\1\255,\234\1P\1\0\16\235\1\255.\232\1\0\16\234\1\255.\231\1\0\16P\1\233\1\255,\232\1N\1\0\20\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255\12\173\1\20\1\21\1\175\1\255\8\173\1\20\1\21\1\175\1\255\12\0\24\255\12\20\1\0\2\23\1\255\8\20\1\0\2\23\1\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\0\4\255\8\0\4\255\12\0\24\255\12\21\1\0\2\24\1\255\8\21\1\0\2\24\1\255\12\0\24\255\12\175\1\22\1\23\1\177\1\255\8\175\1\22\1\23\1\177\1\255\12\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\255(\0\24\245\1\255&\243\1\0\24\179\1\255&\175\1\0\24)\1\240\1\255$\239\1'\1\0\25(\1\177\1\244\1\255 \243\1\175\1'\1\0\255\0\255\0\15",
+	}
+
+	glyphs.outofviewGlow = {
+		w = 64,
+		h = 64,
+		data = "\8\1\t\1\11\1\12\1\14\1\16\1\17\1\18\1\17\1\16\1\15\1\r\1\n\1\8\1\7\1\5\1\4\1\2\2\1\2\0+\t\1\11\1\r\1\15\1\18\1\20\1\22\1\23\1\22\2\20\1\18\1\15\1\r\1\11\1\8\1\6\1\4\1\3\1\2\2\1\2\0)\n\1\r\1\15\1\18\1\22\1\25\1\28\1\29\1\30\1\29\1\28\1\26\1\23\1\19\1\16\1\r\1\11\1\8\1\6\1\4\1\3\1\2\1\1\3\0'\12\1\15\1\18\1\22\1\27\1\31\1#\1%\1'\2&\1#\1 \1\28\1\25\1\20\1\17\1\r\1\n\1\8\1\6\1\4\1\3\1\2\1\1\3\0%\r\1\17\1\21\1\26\1 \1&\1+\1/\0011\0012\2/\1,\1(\1#\1\30\1\25\1\21\1\17\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0#\14\1\18\1\23\1\30\1%\1,\0013\0018\1<\1>\1?\1=\1:\0015\0010\1*\1$\1\31\1\25\1\20\1\16\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0!\15\1\20\1\25\1 \1)\0012\1:\1A\1G\1K\1M\1L\1I\1E\1@\0019\0012\1+\1%\1\30\1\25\1\20\1\16\1\12\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\31\15\1\20\1\26\1\"\1,\0016\1@\1I\1Q\1V\1Z\1[\1Y\1V\1Q\1J\1B\1;\0013\1+\1$\1\30\1\24\1\20\1\16\1\12\1\n\1\7\1\5\1\4\1\3\1\2\1\1\3\0\29\14\1\20\1\26\1\"\1-\0018\1D\1O\1X\1`\1f\1i\2g\1b\1\\\1T\1L\1C\1:\0012\1+\1$\1\29\1\24\1\19\1\16\1\12\1\t\1\7\1\5\1\4\1\3\1\2\1\1\3\0\27\r\1\18\1\25\1\"\1-\0019\1F\1R\1^\1h\1p\1u\1x\1w\1t\1n\1g\1_\1V\1L\1C\1:\0012\1*\1#\1\29\1\24\1\19\1\15\1\12\1\t\1\7\1\5\1\3\2\2\1\1\2\0\26\11\1\17\1\23\1 \1+\0018\1E\1S\1a\1m\1w\1\127\1\132\1\134\1\133\1\129\1z\1s\1j\1`\1V\1L\1B\0019\0011\1)\1#\1\29\1\23\1\18\1\15\1\11\1\t\1\6\1\5\1\3\2\2\1\1\2\0\24\n\1\14\1\20\1\29\1(\0015\1C\1R\1a\1o\1{\1\134\1\141\1\146\1\147\1\145\1\141\1\135\1~\1t\1j\1`\1U\1K\1B\0019\0011\1)\1\"\1\28\1\23\1\18\1\14\1\11\1\t\1\6\1\5\1\3\1\2\2\1\2\0\22\8\1\12\1\17\1\25\1$\0010\1>\1N\1^\1m\1|\1\137\1\148\1\155\1\159\1\160\1\158\1\153\1\146\1\137\1\127\1u\1j\1_\1U\1J\1A\0018\0010\1(\1\"\1\27\1\22\1\18\1\14\1\11\1\8\1\6\1\4\1\3\1\2\2\1\2\0\20\6\1\n\1\14\1\21\1\31\1+\0018\1H\1Y\1i\1z\1\137\1\150\1\160\1\168\1\171\1\172\1\169\1\164\1\157\1\148\1\138\1\127\1t\1i\1^\1T\1J\1@\0017\1/\1'\1!\1\27\1\22\1\17\1\14\1\11\1\8\1\6\1\4\1\3\1\2\1\1\3\0\18\4\1\8\1\11\1\18\1\26\1%\0012\1A\1R\1c\1u\1\134\1\149\1\162\1\173\1\179\1\182\1\183\1\180\1\175\1\167\1\159\1\148\1\138\1\127\1s\1i\1]\1S\1H\1@\0016\1.\1'\1 \1\26\1\22\1\17\1\r\1\n\1\8\1\6\1\4\1\3\1\2\1\1\3\0\16\3\1\6\1\t\1\14\1\21\1\31\1+\0019\1I\1[\1m\1\128\1\145\1\160\1\173\1\183\1\190\1\193\2\190\1\185\1\178\1\169\1\159\1\148\1\137\1~\1s\1g\1\\\1R\1H\1>\0016\1-\1&\1 \1\26\1\21\1\17\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\14\2\1\4\1\6\1\11\1\17\1\25\1$\0011\1@\1Q\1d\1w\1\138\1\155\1\171\1\183\1\193\1\199\1\202\2\199\1\194\1\187\1\178\1\169\1\158\1\148\1\136\1}\1q\1g\1[\1Q\1G\1=\0015\1-\1&\1\31\1\25\1\20\1\16\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\12\1\1\3\1\4\1\8\1\r\1\20\1\29\1)\0017\1H\1Z\1m\1\129\1\148\1\165\1\180\1\193\1\202\1\208\1\210\2\208\1\202\1\196\1\188\1\178\1\168\1\158\1\146\1\135\1|\1p\1e\1Z\1P\1F\1=\0014\1,\1%\1\30\1\25\1\20\1\16\1\12\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\n\1\1\2\1\3\1\6\1\n\1\16\1\24\1\"\1/\1>\1O\1b\1v\1\138\1\157\1\174\1\189\1\201\1\210\1\215\1\218\2\215\1\210\1\204\1\196\1\187\1\178\1\167\1\156\1\146\1\134\1{\1o\1d\1Y\1O\1E\1<\0013\1+\1$\1\30\1\24\1\20\1\16\1\12\1\n\1\7\1\5\1\4\1\3\1\2\1\1\3\0\t\1\1\2\1\4\1\7\1\12\1\18\1\27\1&\0014\1E\1W\1k\1\127\1\147\1\165\1\183\1\197\1\209\1\216\1\222\1\224\2\222\1\217\1\211\1\204\1\196\1\186\1\176\1\167\1\155\1\144\1\133\1z\1n\1c\1Y\1N\1D\1;\0012\1+\1$\1\29\1\24\1\19\1\16\1\12\1\t\1\7\1\5\1\4\1\3\1\2\1\1\3\0\7\1\2\3\1\5\1\t\1\14\1\22\1\31\1,\1:\1L\1_\1s\1\136\1\155\1\174\1\191\1\204\1\215\1\223\1\228\1\230\2\228\1\223\1\218\1\211\1\203\1\195\1\186\1\175\1\165\1\154\1\143\1\132\1y\1n\1c\1W\1M\1C\1:\0012\1*\1#\1\29\1\24\1\19\1\15\1\12\1\t\1\7\1\5\1\3\2\2\1\1\2\0\7\1\1\2\1\4\1\6\1\11\1\17\1\25\1$\0011\1A\1S\1g\1|\1\144\1\164\1\182\1\198\1\211\1\221\1\228\1\233\1\235\2\232\1\229\1\224\1\217\1\211\1\203\1\194\1\185\1\175\1\164\1\154\1\142\1\131\1x\1l\1a\1V\1L\1B\1:\0011\1)\1#\1\29\1\23\1\18\1\15\1\11\1\t\1\6\1\5\1\3\2\2\1\1\2\0\6\1\1\3\1\4\1\8\1\r\1\19\1\29\1)\0017\1H\1[\1o\1\131\1\152\1\172\1\189\1\204\1\217\1\226\1\233\1\237\1\239\2\237\1\234\1\229\1\224\1\217\1\210\1\202\1\193\1\184\1\174\1\163\1\153\1\142\1\130\1v\1k\1`\1U\1K\1B\0019\0011\1)\1\"\1\28\1\23\1\18\1\14\1\11\1\8\1\6\1\4\1\3\1\2\1\1\3\0\4\1\1\2\1\3\1\6\1\t\1\15\1\23\1!\1.\1=\1O\1c\1w\1\140\1\160\1\179\1\196\1\211\1\222\1\231\1\237\1\241\1\242\2\241\1\238\1\234\1\229\1\223\1\217\1\209\1\201\1\193\1\183\1\173\1\163\1\151\1\140\1\129\1v\1j\1_\1U\1J\1A\0018\1/\1(\1!\1\27\1\22\1\17\1\r\1\n\1\7\1\5\1\3\1\2\1\1\2\0\5\1\1\2\1\4\1\7\1\11\1\18\1\26\1&\0014\1D\1W\1j\1\127\1\149\1\168\1\187\1\203\1\217\1\228\1\235\1\241\1\244\1\245\2\244\1\241\1\238\1\233\1\229\1\222\1\216\1\209\1\200\1\192\1\183\1\172\1\161\1\150\1\139\1\128\1u\1i\1^\1T\1I\1?\0016\1.\1&\1\31\1\25\1\20\1\15\1\11\1\8\1\5\1\3\1\2\2\1\1\0\4\1\2\3\1\5\1\8\1\r\1\21\1\31\1+\1:\1L\1^\1s\1\137\1\157\1\177\1\195\1\210\1\223\1\232\1\240\1\245\1\247\1\248\2\247\1\244\1\241\1\238\1\233\1\228\1\222\1\215\1\208\1\200\1\191\1\181\1\171\1\161\1\149\1\138\1\127\1s\1h\1\\\1Q\1F\1=\0013\1*\1\"\1\27\1\21\1\16\1\11\1\8\1\5\1\3\1\2\1\1\1\0\5\1\1\2\1\3\1\6\1\n\1\16\1\25\1#\0011\1A\1S\1h\1}\1\146\1\167\1\186\1\203\1\218\1\229\1\238\1\244\1\248\1\250\3\249\1\247\1\244\1\241\1\237\1\233\1\227\1\221\1\215\1\207\1\199\1\190\1\180\1\170\1\159\1\148\1\136\1|\1p\1d\1X\1M\1A\0017\1-\1$\1\28\1\21\1\15\1\11\1\7\1\4\1\3\1\2\1\0\6\1\1\2\1\4\1\7\1\12\1\20\1\29\1)\0018\1I\1]\1s\1\136\1\158\1\178\1\197\1\212\1\225\1\235\1\242\1\247\1\250\1\252\2\251\1\250\1\249\1\246\1\244\1\241\1\237\1\232\1\227\1\221\1\214\1\206\1\198\1\189\1\179\1\168\1\156\1\144\1\132\1w\1j\1]\1P\1C\0018\1-\1#\1\27\1\19\1\14\1\t\1\6\1\4\1\2\1\0\6\1\2\3\1\6\1\t\1\16\1\24\1#\0011\1A\1U\1j\1\127\1\150\1\170\1\190\1\207\1\221\1\232\1\241\1\246\1\250\1\252\1\253\2\252\2\250\1\249\1\246\1\243\1\240\1\236\1\231\1\226\1\220\1\213\1\204\1\195\1\185\1\174\1\162\1\150\1\136\1z\1m\1^\1P\1B\0016\1+\1 \1\24\1\17\1\11\1\7\1\5\1\3\1\0\7\1\1\2\1\4\1\7\1\r\1\20\1\30\1+\1;\1N\1c\1x\1\143\1\164\1\185\1\202\1\218\1\230\1\239\1\246\1\250\1\252\1\254\3\253\1\252\2\250\1\248\1\246\1\243\1\239\1\235\1\230\1\224\1\217\1\209\1\199\1\189\1\177\1\165\1\151\1\136\1z\1i\1Z\1L\1=\0011\1%\1\27\1\20\1\r\1\t\1\6\1\3\1\0\8\2\1\3\1\6\1\11\1\17\1\26\1'\0016\1I\1]\1s\1\138\1\160\1\181\1\199\1\215\1\228\1\238\1\245\1\249\1\252\1\254\5\253\1\252\1\251\1\249\1\247\1\244\1\241\1\237\1\232\1\225\1\218\1\209\1\199\1\188\1\175\1\162\1\146\1\131\1r\1b\1R\1C\0015\1)\1\30\1\22\1\14\1\t\1\6\1\4\1\0\8\1\1\3\1\5\1\n\1\16\1\25\1%\0014\1F\1[\1p\1\136\1\158\1\179\1\198\1\214\1\227\1\237\1\245\1\249\1\252\1\254\2\255\2\254\2\253\1\252\1\251\1\249\1\247\1\244\1\240\1\236\1\230\1\223\1\214\1\204\1\193\1\181\1\167\1\151\1\136\1w\1f\1V\1F\0018\1+\1\31\1\23\1\15\1\n\1\6\1\4\1\0\8\1\1\3\1\5\1\n\1\16\1\25\1%\0014\1F\1[\1p\1\136\1\158\1\179\1\198\1\214\1\227\1\237\1\245\1\249\1\252\1\254\2\255\2\254\2\253\1\252\1\251\1\249\1\247\1\244\1\240\1\236\1\230\1\223\1\214\1\204\1\193\1\181\1\167\1\151\1\136\1w\1f\1V\1F\0018\1+\1\31\1\23\1\15\1\n\1\6\1\4\1\0\8\2\1\3\1\6\1\11\1\17\1\26\1'\0016\1I\1]\1s\1\138\1\160\1\181\1\199\1\215\1\228\1\238\1\245\1\249\1\252\1\254\5\253\1\252\1\251\1\249\1\247\1\244\1\241\1\237\1\232\1\225\1\218\1\209\1\199\1\188\1\175\1\162\1\146\1\131\1r\1b\1R\1C\0015\1)\1\30\1\22\1\14\1\t\1\6\1\4\1\0\7\1\1\2\1\4\1\7\1\r\1\20\1\30\1+\1;\1N\1c\1x\1\143\1\164\1\185\1\202\1\218\1\230\1\239\1\246\1\250\1\252\1\254\3\253\1\252\2\250\1\248\1\246\1\243\1\239\1\235\1\230\1\224\1\217\1\209\1\199\1\189\1\177\1\165\1\151\1\136\1z\1i\1Z\1L\1=\0011\1%\1\27\1\20\1\r\1\t\1\6\1\3\1\0\6\1\2\3\1\6\1\t\1\16\1\24\1#\0011\1A\1U\1j\1\127\1\150\1\170\1\190\1\207\1\221\1\232\1\241\1\246\1\250\1\252\1\253\2\252\2\250\1\249\1\246\1\243\1\240\1\236\1\231\1\226\1\220\1\213\1\204\1\195\1\185\1\174\1\162\1\150\1\136\1z\1m\1^\1P\1B\0016\1+\1 \1\24\1\17\1\11\1\7\1\5\1\3\1\0\6\1\1\2\1\4\1\7\1\12\1\20\1\29\1)\0018\1I\1]\1s\1\136\1\158\1\178\1\197\1\212\1\225\1\235\1\242\1\247\1\250\1\252\2\251\1\250\1\249\1\246\1\244\1\241\1\237\1\232\1\227\1\221\1\214\1\206\1\198\1\189\1\179\1\168\1\156\1\144\1\132\1w\1j\1]\1P\1C\0018\1-\1#\1\27\1\19\1\14\1\t\1\6\1\4\1\2\1\0\5\1\1\2\1\3\1\6\1\n\1\16\1\25\1#\0011\1A\1S\1h\1}\1\146\1\167\1\186\1\203\1\218\1\229\1\238\1\244\1\248\1\250\3\249\1\247\1\244\1\241\1\237\1\233\1\227\1\221\1\215\1\207\1\199\1\190\1\180\1\170\1\159\1\148\1\136\1|\1p\1d\1X\1M\1A\0017\1-\1$\1\28\1\21\1\15\1\11\1\7\1\4\1\3\1\2\1\0\4\1\2\3\1\5\1\8\1\r\1\21\1\31\1+\1:\1L\1^\1s\1\137\1\157\1\177\1\195\1\210\1\223\1\232\1\240\1\245\1\247\1\248\2\247\1\244\1\241\1\238\1\233\1\228\1\222\1\215\1\208\1\200\1\191\1\181\1\171\1\161\1\149\1\138\1\127\1s\1h\1\\\1Q\1F\1=\0013\1*\1\"\1\27\1\21\1\16\1\11\1\8\1\5\1\3\1\2\1\1\1\0\4\1\1\2\1\4\1\7\1\11\1\18\1\26\1&\0014\1D\1W\1j\1\127\1\149\1\168\1\187\1\203\1\217\1\228\1\235\1\241\1\244\1\245\2\244\1\241\1\238\1\233\1\229\1\222\1\216\1\209\1\200\1\192\1\183\1\172\1\161\1\150\1\139\1\128\1u\1i\1^\1T\1I\1?\0016\1.\1&\1\31\1\25\1\20\1\15\1\11\1\8\1\5\1\3\1\2\2\1\1\0\3\1\1\2\1\3\1\6\1\t\1\15\1\23\1!\1.\1=\1O\1c\1w\1\140\1\160\1\179\1\196\1\211\1\222\1\231\1\237\1\241\1\242\2\241\1\238\1\234\1\229\1\223\1\217\1\209\1\201\1\193\1\183\1\173\1\163\1\151\1\140\1\129\1v\1j\1_\1U\1J\1A\0018\1/\1(\1!\1\27\1\22\1\17\1\r\1\n\1\7\1\5\1\3\1\2\1\1\2\0\4\1\1\3\1\4\1\8\1\r\1\19\1\29\1)\0017\1H\1[\1o\1\131\1\152\1\172\1\189\1\204\1\217\1\226\1\233\1\237\1\239\2\237\1\234\1\229\1\224\1\217\1\210\1\202\1\193\1\184\1\174\1\163\1\153\1\142\1\130\1v\1k\1`\1U\1K\1B\0019\0011\1)\1\"\1\28\1\23\1\18\1\14\1\11\1\8\1\6\1\4\1\3\1\2\1\1\3\0\3\1\1\2\1\4\1\6\1\11\1\17\1\25\1$\0011\1A\1S\1g\1|\1\144\1\164\1\182\1\198\1\211\1\221\1\228\1\233\1\235\2\232\1\229\1\224\1\217\1\211\1\203\1\194\1\185\1\175\1\164\1\154\1\142\1\131\1x\1l\1a\1V\1L\1B\1:\0011\1)\1#\1\29\1\23\1\18\1\15\1\11\1\t\1\6\1\5\1\3\2\2\1\1\2\0\4\1\2\3\1\5\1\t\1\14\1\22\1\31\1,\1:\1L\1_\1s\1\136\1\155\1\174\1\191\1\204\1\215\1\223\1\228\1\230\2\228\1\223\1\218\1\211\1\203\1\195\1\186\1\175\1\165\1\154\1\143\1\132\1y\1n\1c\1W\1M\1C\1:\0012\1*\1#\1\29\1\24\1\19\1\15\1\12\1\t\1\7\1\5\1\3\2\2\1\1\2\0\6\1\1\2\1\4\1\7\1\12\1\18\1\27\1&\0014\1E\1W\1k\1\127\1\147\1\165\1\183\1\197\1\209\1\216\1\222\1\224\2\222\1\217\1\211\1\204\1\196\1\186\1\176\1\167\1\155\1\144\1\133\1z\1n\1c\1Y\1N\1D\1;\0012\1+\1$\1\29\1\24\1\19\1\16\1\12\1\t\1\7\1\5\1\4\1\3\1\2\1\1\3\0\6\1\1\2\1\3\1\6\1\n\1\16\1\24\1\"\1/\1>\1O\1b\1v\1\138\1\157\1\174\1\189\1\201\1\210\1\215\1\218\2\215\1\210\1\204\1\196\1\187\1\178\1\167\1\156\1\146\1\134\1{\1o\1d\1Y\1O\1E\1<\0013\1+\1$\1\30\1\24\1\20\1\16\1\12\1\n\1\7\1\5\1\4\1\3\1\2\1\1\3\0\8\1\1\3\1\4\1\8\1\r\1\20\1\29\1)\0017\1H\1Z\1m\1\129\1\148\1\165\1\180\1\193\1\202\1\208\1\210\2\208\1\202\1\196\1\188\1\178\1\168\1\158\1\146\1\135\1|\1p\1e\1Z\1P\1F\1=\0014\1,\1%\1\30\1\25\1\20\1\16\1\12\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\n\2\1\4\1\6\1\11\1\17\1\25\1$\0011\1@\1Q\1d\1w\1\138\1\155\1\171\1\183\1\193\1\199\1\202\2\199\1\194\1\187\1\178\1\169\1\158\1\148\1\136\1}\1q\1g\1[\1Q\1G\1=\0015\1-\1&\1\31\1\25\1\20\1\16\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\12\3\1\6\1\t\1\14\1\21\1\31\1+\0019\1I\1[\1m\1\128\1\145\1\160\1\173\1\183\1\190\1\193\2\190\1\185\1\178\1\169\1\159\1\148\1\137\1~\1s\1g\1\\\1R\1H\1>\0016\1-\1&\1 \1\26\1\21\1\17\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\14\4\1\8\1\11\1\18\1\26\1%\0012\1A\1R\1c\1u\1\134\1\149\1\162\1\173\1\179\1\182\1\183\1\180\1\175\1\167\1\159\1\148\1\138\1\127\1s\1i\1]\1S\1H\1@\0016\1.\1'\1 \1\26\1\22\1\17\1\r\1\n\1\8\1\6\1\4\1\3\1\2\1\1\3\0\16\6\1\n\1\14\1\21\1\31\1+\0018\1H\1Y\1i\1z\1\137\1\150\1\160\1\168\1\171\1\172\1\169\1\164\1\157\1\148\1\138\1\127\1t\1i\1^\1T\1J\1@\0017\1/\1'\1!\1\27\1\22\1\17\1\14\1\11\1\8\1\6\1\4\1\3\1\2\1\1\3\0\18\8\1\12\1\17\1\25\1$\0010\1>\1N\1^\1m\1|\1\137\1\148\1\155\1\159\1\160\1\158\1\153\1\146\1\137\1\127\1u\1j\1_\1U\1J\1A\0018\0010\1(\1\"\1\27\1\22\1\18\1\14\1\11\1\8\1\6\1\4\1\3\1\2\2\1\2\0\20\n\1\14\1\20\1\29\1(\0015\1C\1R\1a\1o\1{\1\134\1\141\1\146\1\147\1\145\1\141\1\135\1~\1t\1j\1`\1U\1K\1B\0019\0011\1)\1\"\1\28\1\23\1\18\1\14\1\11\1\t\1\6\1\5\1\3\1\2\2\1\2\0\22\11\1\17\1\23\1 \1+\0018\1E\1S\1a\1m\1w\1\127\1\132\1\134\1\133\1\129\1z\1s\1j\1`\1V\1L\1B\0019\0011\1)\1#\1\29\1\23\1\18\1\15\1\11\1\t\1\6\1\5\1\3\2\2\1\1\2\0\24\r\1\18\1\25\1\"\1-\0019\1F\1R\1^\1h\1p\1u\1x\1w\1t\1n\1g\1_\1V\1L\1C\1:\0012\1*\1#\1\29\1\24\1\19\1\15\1\12\1\t\1\7\1\5\1\3\2\2\1\1\2\0\26\14\1\20\1\26\1\"\1-\0018\1D\1O\1X\1`\1f\1i\2g\1b\1\\\1T\1L\1C\1:\0012\1+\1$\1\29\1\24\1\19\1\16\1\12\1\t\1\7\1\5\1\4\1\3\1\2\1\1\3\0\27\15\1\20\1\26\1\"\1,\0016\1@\1I\1Q\1V\1Z\1[\1Y\1V\1Q\1J\1B\1;\0013\1+\1$\1\30\1\24\1\20\1\16\1\12\1\n\1\7\1\5\1\4\1\3\1\2\1\1\3\0\29\15\1\20\1\25\1 \1)\0012\1:\1A\1G\1K\1M\1L\1I\1E\1@\0019\0012\1+\1%\1\30\1\25\1\20\1\16\1\12\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0\31\14\1\18\1\23\1\30\1%\1,\0013\0018\1<\1>\1?\1=\1:\0015\0010\1*\1$\1\31\1\25\1\20\1\16\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0!\r\1\17\1\21\1\26\1 \1&\1+\1/\0011\0012\2/\1,\1(\1#\1\30\1\25\1\21\1\17\1\r\1\n\1\7\1\6\1\4\1\3\1\2\1\1\3\0#\12\1\15\1\18\1\22\1\27\1\31\1#\1%\1'\2&\1#\1 \1\28\1\25\1\20\1\17\1\r\1\n\1\8\1\6\1\4\1\3\1\2\1\1\3\0%\n\1\r\1\15\1\18\1\22\1\25\1\28\1\29\1\30\1\29\1\28\1\26\1\23\1\19\1\16\1\r\1\11\1\8\1\6\1\4\1\3\1\2\1\1\3\0'\t\1\11\1\r\1\15\1\18\1\20\1\22\1\23\1\22\2\20\1\18\1\15\1\r\1\11\1\8\1\6\1\4\1\3\1\2\2\1\2\0)\8\1\t\1\11\1\12\1\14\1\16\1\17\1\18\1\17\1\16\1\15\1\r\1\n\1\8\1\7\1\5\1\4\1\2\2\1\2\0+",
+	}
+
+	glyphs.shadow = {
+		w = 80,
+		h = 80,
+		data = "\0\255\0c\8\12\0>\8\24\0004\8 \0.\8$\0*\8(\0&\8\15\16\14\8\15\0#\8\11\16\24\8\11\0!\8\n\16\7\24\14\16\7\8\n\0\30\8\n\16\5\24\22\16\5\8\n\0\27\8\t\16\5\24\6 \14\24\6\16\5\8\t\0\26\8\8\16\3\24\6 \7(\6 \7\24\6\16\3\8\8\0\25\8\7\16\4\24\4 \5(\0060\4(\6 \5\24\4\16\4\8\7\0\23\8\7\16\4\24\3 \4(\0040\14(\4 \4\24\3\16\4\8\7\0\21\8\7\16\3\24\4 \3(\0030\0038\0140\3(\3 \3\24\4\16\3\8\7\0\19\8\7\16\3\24\3 \3(\0020\0038\3@\0148\0030\3(\2 \3\24\3\16\3\8\7\0\18\8\6\16\3\24\3 \3(\0020\0028\2@\3H\4P\6H\4@\0038\0020\2(\2 \3\24\3\16\3\8\6\0\17\8\6\16\3\24\3 \3(\0010\0038\1@\3H\2P\3X\8P\3H\2@\0038\0010\3(\1 \3\24\3\16\3\8\6\0\16\8\6\16\3\24\2 \3(\0010\0028\2@\2H\1P\3X\3`\8X\3P\3H\1@\0028\0020\2(\1 \3\24\2\16\3\8\6\0\15\8\6\16\3\24\2 \3(\0010\0028\1@\2H\1P\2X\3`\1h\5p\2h\5`\1X\3P\2H\1@\0028\0010\2(\1 \3\24\2\16\3\8\6\0\14\8\6\16\2\24\3 \2(\0010\0028\1@\2H\1P\2X\1`\2h\2p\2x\8p\2h\2`\2X\1P\2H\1@\0028\0010\2(\1 \2\24\3\16\2\8\6\0\14\8\5\16\2\24\3 \2(\0010\0028\1@\2H\1P\1X\2`\1h\2p\1x\2\128\nx\2p\1h\2`\1X\2P\1H\1@\0028\0010\2(\1 \2\24\3\16\2\8\5\0\r\8\6\16\2\24\2 \2(\0020\0018\1@\2H\1P\1X\1`\2h\1p\1x\2\128\2\136\2\144\6\136\2\128\2x\2p\1h\1`\2X\1P\1H\1@\0028\0010\1(\2 \2\24\2\16\2\8\6\0\12\8\5\16\3\24\2 \2(\0010\0028\1@\1H\1P\1X\1`\1h\2p\1x\1\128\2\136\1\144\2\152\8\144\2\136\1\128\2x\1p\1h\2`\1X\1P\1H\1@\0018\0010\2(\1 \2\24\2\16\3\8\5\0\12\8\5\16\2\24\2 \2(\0010\0028\1@\1H\1P\1X\1`\1h\2x\2\128\1\136\1\144\2\152\1\160\3\168\4\160\3\152\1\144\2\136\1\128\1x\2h\2`\1X\1P\1H\1@\0018\0010\2(\1 \2\24\2\16\2\8\5\0\11\8\5\16\3\24\2 \2(\0010\0018\1@\2P\2X\1h\2x\2\128\1\136\1\144\1\152\1\160\2\168\1\176\8\168\1\160\2\152\1\144\1\136\1\128\1x\2h\2X\1P\2@\0028\0010\1(\1 \2\24\2\16\3\8\5\0\n\8\5\16\2\24\3 \1(\0020\0018\1@\1H\1P\1X\1`\1h\1p\1x\1\128\1\136\1\144\1\152\1\160\1\168\1\176\2\184\8\176\2\168\1\160\1\152\1\144\1\136\1\128\1x\1p\1h\1`\1X\1P\1H\1@\0018\0010\1(\2 \1\24\3\16\2\8\5\0\n\8\5\16\2\24\2 \2(\0010\2@\2P\1X\1`\1h\1p\1x\1\128\1\136\1\144\1\152\1\160\1\168\1\176\1\184\2\192\2\200\4\192\2\184\2\176\1\168\1\160\1\152\1\144\1\136\1\128\1x\1p\1h\1`\1X\1P\1@\0020\2(\1 \2\24\2\16\2\8\5\0\n\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1P\1X\1`\1h\1x\1\128\1\136\1\144\1\152\1\160\1\176\2\184\1\192\1\200\2\208\6\200\2\192\1\184\1\176\2\160\1\152\1\144\1\136\1\128\1x\1h\1`\1X\1P\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\n\8\4\16\3\24\2 \1(\0010\0028\1@\1H\1P\1`\1h\1p\1x\1\128\1\144\1\152\1\160\1\168\1\176\1\184\1\192\1\200\1\208\2\216\6\208\2\200\1\192\1\184\1\176\1\168\1\160\1\152\1\144\1\128\1x\1p\1h\1`\1P\1H\1@\0018\0010\2(\1 \1\24\2\16\3\8\4\0\n\8\4\16\2\24\3 \1(\0010\2@\1H\1P\1X\1`\1h\1x\1\128\1\136\1\144\1\160\1\168\1\176\1\184\1\192\1\200\1\208\1\216\2\224\2\232\2\224\2\216\2\208\1\200\1\192\1\184\1\176\1\168\1\160\1\144\1\136\1\128\1x\1h\1`\1X\1P\1H\1@\0010\2(\1 \1\24\3\16\2\8\4\0\t\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1P\1X\1h\1p\1x\1\128\1\144\1\152\1\160\1\176\1\184\1\192\1\200\1\208\1\216\1\224\2\232\6\224\2\216\1\208\1\200\1\192\1\184\1\176\1\160\1\152\1\144\1\128\1x\1p\1h\1X\1P\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1P\1X\1h\1p\1\128\1\136\1\144\1\160\1\168\1\176\1\184\1\200\1\208\1\216\1\224\1\232\2\240\6\232\2\224\1\216\1\208\1\200\1\184\1\176\1\168\1\160\1\144\1\136\1\128\1p\1h\1X\1P\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1X\1`\1h\1x\1\128\1\136\1\152\1\160\1\176\1\184\1\192\1\200\1\208\1\216\1\224\1\232\1\240\2\248\4\240\2\232\1\224\1\216\1\208\1\200\1\192\1\184\1\176\1\160\1\152\1\136\1\128\1x\1h\1`\1X\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \1(\0020\0018\1@\1P\1X\1`\1h\1x\1\128\1\144\1\152\1\160\1\176\1\184\1\192\1\208\1\216\1\224\1\232\1\240\2\248\6\240\2\232\1\224\1\216\1\208\1\192\1\184\1\176\1\160\1\152\1\144\1\128\1x\1h\1`\1X\1P\1@\0018\0010\1(\2 \1\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \1(\0020\0018\1@\1P\1X\1`\1h\1x\1\128\1\144\1\152\1\168\1\176\1\184\1\200\1\208\1\216\1\224\1\232\1\240\2\248\1\255\4\248\1\240\2\232\1\224\1\216\1\208\1\200\1\184\1\176\1\168\1\152\1\144\1\128\1x\1h\1`\1X\1P\1@\0018\0010\1(\2 \1\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \1(\0010\0028\1@\1P\1X\1`\1p\1x\1\128\1\144\1\152\1\168\1\176\1\192\1\200\1\208\1\216\1\232\2\240\1\248\2\255\4\248\2\240\1\232\2\216\1\208\1\200\1\192\1\176\1\168\1\152\1\144\1\128\1x\1p\1`\1X\1P\1@\0018\0010\2(\1 \1\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \1(\0010\0028\1@\1P\1X\1`\1p\1x\1\128\1\144\1\152\1\168\1\176\1\192\1\200\1\208\1\216\1\232\2\240\1\248\2\255\4\248\2\240\1\232\2\216\1\208\1\200\1\192\1\176\1\168\1\152\1\144\1\128\1x\1p\1`\1X\1P\1@\0018\0010\2(\1 \1\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \1(\0020\0018\1@\1P\1X\1`\1h\1x\1\128\1\144\1\152\1\168\1\176\1\184\1\200\1\208\1\216\1\224\1\232\1\240\2\248\1\255\4\248\1\240\2\232\1\224\1\216\1\208\1\200\1\184\1\176\1\168\1\152\1\144\1\128\1x\1h\1`\1X\1P\1@\0018\0010\1(\2 \1\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \1(\0020\0018\1@\1P\1X\1`\1h\1x\1\128\1\144\1\152\1\160\1\176\1\184\1\192\1\208\1\216\1\224\1\232\1\240\2\248\6\240\2\232\1\224\1\216\1\208\1\192\1\184\1\176\1\160\1\152\1\144\1\128\1x\1h\1`\1X\1P\1@\0018\0010\1(\2 \1\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1X\1`\1h\1x\1\128\1\136\1\152\1\160\1\176\1\184\1\192\1\200\1\208\1\216\1\224\1\232\1\240\2\248\4\240\2\232\1\224\1\216\1\208\1\200\1\192\1\184\1\176\1\160\1\152\1\136\1\128\1x\1h\1`\1X\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1P\1X\1h\1p\1\128\1\136\1\144\1\160\1\168\1\176\1\184\1\200\1\208\1\216\1\224\1\232\2\240\6\232\2\224\1\216\1\208\1\200\1\184\1\176\1\168\1\160\1\144\1\136\1\128\1p\1h\1X\1P\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\8\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1P\1X\1h\1p\1x\1\128\1\144\1\152\1\160\1\176\1\184\1\192\1\200\1\208\1\216\1\224\2\232\6\224\2\216\1\208\1\200\1\192\1\184\1\176\1\160\1\152\1\144\1\128\1x\1p\1h\1X\1P\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\t\8\4\16\2\24\3 \1(\0010\2@\1H\1P\1X\1`\1h\1x\1\128\1\136\1\144\1\160\1\168\1\176\1\184\1\192\1\200\1\208\1\216\2\224\2\232\2\224\2\216\2\208\1\200\1\192\1\184\1\176\1\168\1\160\1\144\1\136\1\128\1x\1h\1`\1X\1P\1H\1@\0010\2(\1 \1\24\3\16\2\8\4\0\n\8\4\16\3\24\2 \1(\0010\0028\1@\1H\1P\1`\1h\1p\1x\1\128\1\144\1\152\1\160\1\168\1\176\1\184\1\192\1\200\1\208\2\216\6\208\2\200\1\192\1\184\1\176\1\168\1\160\1\152\1\144\1\128\1x\1p\1h\1`\1P\1H\1@\0018\0010\2(\1 \1\24\2\16\3\8\4\0\n\8\5\16\2\24\2 \2(\0010\0018\1@\1H\1P\1X\1`\1h\1x\1\128\1\136\1\144\1\152\1\160\1\176\2\184\1\192\1\200\2\208\6\200\2\192\1\184\1\176\2\160\1\152\1\144\1\136\1\128\1x\1h\1`\1X\1P\1H\1@\0018\0010\1(\1 \2\24\2\16\2\8\5\0\n\8\5\16\2\24\2 \2(\0010\2@\2P\1X\1`\1h\1p\1x\1\128\1\136\1\144\1\152\1\160\1\168\1\176\1\184\2\192\2\200\4\192\2\184\2\176\1\168\1\160\1\152\1\144\1\136\1\128\1x\1p\1h\1`\1X\1P\1@\0020\2(\1 \2\24\2\16\2\8\5\0\n\8\5\16\2\24\3 \1(\0020\0018\1@\1H\1P\1X\1`\1h\1p\1x\1\128\1\136\1\144\1\152\1\160\1\168\1\176\2\184\8\176\2\168\1\160\1\152\1\144\1\136\1\128\1x\1p\1h\1`\1X\1P\1H\1@\0018\0010\1(\2 \1\24\3\16\2\8\5\0\n\8\5\16\3\24\2 \2(\0010\0018\1@\2P\2X\1h\2x\2\128\1\136\1\144\1\152\1\160\2\168\1\176\8\168\1\160\2\152\1\144\1\136\1\128\1x\2h\2X\1P\2@\0028\0010\1(\1 \2\24\2\16\3\8\5\0\11\8\5\16\2\24\2 \2(\0010\0028\1@\1H\1P\1X\1`\1h\2x\2\128\1\136\1\144\2\152\1\160\3\168\4\160\3\152\1\144\2\136\1\128\1x\2h\2`\1X\1P\1H\1@\0018\0010\2(\1 \2\24\2\16\2\8\5\0\12\8\5\16\3\24\2 \2(\0010\0028\1@\1H\1P\1X\1`\1h\2p\1x\1\128\2\136\1\144\2\152\8\144\2\136\1\128\2x\1p\1h\2`\1X\1P\1H\1@\0018\0010\2(\1 \2\24\2\16\3\8\5\0\12\8\6\16\2\24\2 \2(\0020\0018\1@\2H\1P\1X\1`\2h\1p\1x\2\128\2\136\2\144\6\136\2\128\2x\2p\1h\1`\2X\1P\1H\1@\0028\0010\1(\2 \2\24\2\16\2\8\6\0\r\8\5\16\2\24\3 \2(\0010\0028\1@\2H\1P\1X\2`\1h\2p\1x\2\128\nx\2p\1h\2`\1X\2P\1H\1@\0028\0010\2(\1 \2\24\3\16\2\8\5\0\14\8\6\16\2\24\3 \2(\0010\0028\1@\2H\1P\2X\1`\2h\2p\2x\8p\2h\2`\2X\1P\2H\1@\0028\0010\2(\1 \2\24\3\16\2\8\6\0\14\8\6\16\3\24\2 \3(\0010\0028\1@\2H\1P\2X\3`\1h\5p\2h\5`\1X\3P\2H\1@\0028\0010\2(\1 \3\24\2\16\3\8\6\0\15\8\6\16\3\24\2 \3(\0010\0028\2@\2H\1P\3X\3`\8X\3P\3H\1@\0028\0020\2(\1 \3\24\2\16\3\8\6\0\16\8\6\16\3\24\3 \3(\0010\0038\1@\3H\2P\3X\8P\3H\2@\0038\0010\3(\1 \3\24\3\16\3\8\6\0\17\8\6\16\3\24\3 \3(\0020\0028\2@\3H\4P\6H\4@\0038\0020\2(\2 \3\24\3\16\3\8\6\0\18\8\7\16\3\24\3 \3(\0020\0038\3@\0148\0030\3(\2 \3\24\3\16\3\8\7\0\19\8\7\16\3\24\4 \3(\0030\0038\0140\3(\3 \3\24\4\16\3\8\7\0\21\8\7\16\4\24\3 \4(\0040\14(\4 \4\24\3\16\4\8\7\0\23\8\7\16\4\24\4 \5(\0060\4(\6 \5\24\4\16\4\8\7\0\25\8\8\16\3\24\6 \7(\6 \7\24\6\16\3\8\8\0\26\8\t\16\5\24\6 \14\24\6\16\5\8\t\0\27\8\n\16\5\24\22\16\5\8\n\0\30\8\n\16\7\24\14\16\7\8\n\0!\8\11\16\24\8\11\0#\8\15\16\14\8\15\0&\8(\0*\8$\0.\8 \0004\8\24\0>\8\12\0\255\0c",
+	}
+
+	glyphs.soundtip = {
+		w = 13,
+		h = 26,
+		data = "\142\1\0\1\3\1\1\1\0\t\255\1\140\1\0\1\3\1\1\1\0\8\251\1\255\1\141\1\0\1\4\1\1\1\0\7\255\1\251\1\255\1\141\1\0\1\4\1\1\1\0\6\255\2\251\1\255\1\141\1\0\1\3\1\1\1\0\5\255\3\251\1\255\1\141\1\0\1\4\1\1\1\0\4\255\4\250\1\255\1\127\1\0\1\5\1\0\4\255\4\254\1\251\1\255\1r\1\0\1\4\1\0\3\255\5\254\1\252\1\255\1r\1\0\1\4\1\0\2\255\6\254\1\251\1\255\1r\1\0\1\4\1\0\1\255\7\254\1\251\1\255\1s\1\0\1\5\1\255\8\254\1\251\1\255\1p\1\0\1\255\t\254\1\252\1\255\1\134\1\255\n\251\1\255\1\159\1\255\t\251\1\255\1\138\1\0\1\255\8\251\1\255\1\141\1\0\1\3\1\255\7\251\1\255\1\141\1\0\1\3\1\1\1\255\6\251\1\255\1\141\1\0\1\4\1\1\1\0\1\255\5\251\1\255\1\141\1\0\1\4\1\1\1\0\2\255\4\251\1\255\1\141\1\0\1\4\1\1\1\0\3\255\3\251\1\255\1\141\1\0\1\4\1\1\1\0\4\255\2\251\1\255\1\141\1\0\1\4\1\1\1\0\5\255\1\251\1\255\1\141\1\0\1\4\1\1\1\0\6\251\1\255\1\141\1\0\1\4\1\1\1\0\7\255\1\140\1\0\1\3\1\1\1\0\8\142\1\0\1\3\1\1\1\0\t",
+	}
+
+	glyphs.soundtipGlow = {
+		w = 18,
+		h = 35,
+		data = "\1\5\0\r\2\1\3\4\2\1\1\1\0\11\6\1\7\1\t\2\8\1\6\1\3\1\2\1\1\1\0\t\12\1\15\1\19\1\20\1\18\1\14\1\8\1\4\1\2\1\1\1\0\8\21\1\27\1#\1&\1$\1\28\1\19\1\n\1\5\1\2\1\1\1\0\7\31\1*\0017\1>\1<\0012\1#\1\21\1\11\1\5\1\2\1\1\1\0\6)\0019\1L\1Z\1[\1O\1;\1'\1\22\1\11\1\5\1\2\1\0\0061\1E\1`\1t\1{\1p\1Z\1?\1'\1\22\1\11\1\5\1\2\1\0\0056\1N\1n\1\138\1\152\1\146\1|\1_\1@\1'\1\21\1\11\1\4\1\2\1\0\0048\1S\1x\1\155\1\176\1\177\1\158\1\129\1_\1?\1&\1\21\1\n\1\4\1\2\1\0\3:\1W\1~\1\165\1\193\1\200\1\189\1\162\1\129\1_\1>\1&\1\21\1\n\1\4\1\2\1\0\2:\1X\1\128\1\172\1\203\1\217\1\212\1\193\1\162\1\128\1]\1>\1&\1\20\1\n\1\4\1\2\1\1\1:\1X\1\130\1\174\1\209\1\228\1\229\1\217\1\193\1\162\1\127\1]\1>\1%\1\20\1\n\1\4\1\2\1:\1X\1\130\1\176\1\211\1\233\1\240\1\234\1\217\1\193\1\161\1~\1\\\1=\1$\1\20\1\t\1\4\1:\1X\1\130\1\176\1\213\1\236\1\246\1\244\1\235\1\217\1\192\1\160\1}\1Y\0019\1!\1\17\1\8\1:\1X\1\130\1\176\1\213\1\237\1\248\1\250\1\246\1\235\1\216\1\189\1\155\1u\1O\1/\1\25\1\r\1:\1X\1\130\1\176\1\213\1\238\1\250\1\253\1\252\1\245\1\231\1\209\1\177\1\137\1a\1;\1 \1\17\1:\1X\1\130\1\176\1\213\1\238\1\250\1\255\2\248\1\236\1\216\1\185\1\145\1g\1@\1#\1\19\1:\1X\1\130\1\176\1\213\1\238\1\250\1\253\1\252\1\245\1\232\1\210\1\179\1\139\1b\1<\1!\1\17\1:\1X\1\130\1\176\1\213\1\238\1\248\1\251\1\247\1\236\1\218\1\192\1\158\1w\1Q\0011\1\26\1\r\1:\1X\1\130\1\176\1\213\1\236\1\246\1\245\1\236\1\219\1\195\1\163\1\128\1]\1;\1\"\1\17\1\t\1:\1X\1\130\1\176\1\211\1\234\1\240\1\235\1\219\1\195\1\164\1\130\1`\1?\1&\1\20\1\n\1\5\1:\1X\1\130\1\174\1\209\1\228\1\230\1\218\1\195\1\164\1\131\1`\1@\1'\1\22\1\11\1\5\1\2\1:\1X\1\128\1\172\1\203\1\217\1\213\1\194\1\164\1\131\1`\1A\1(\1\22\1\11\1\5\1\2\1\1\1:\1W\1~\1\165\1\193\1\200\1\189\1\163\1\131\1`\1A\1(\1\22\1\11\1\5\1\2\1\1\1\0\0018\1S\1x\1\155\1\176\1\177\1\158\1\129\1`\1A\1(\1\22\1\11\1\5\1\2\1\1\1\0\0026\1N\1n\1\138\1\152\1\146\1|\1_\1A\1(\1\22\1\11\1\5\1\2\1\1\1\0\0031\1E\1`\1t\1{\1p\1Z\1?\1(\1\22\1\11\1\5\1\2\1\1\1\0\4)\0019\1L\1Z\1[\1O\1;\1'\1\22\1\11\1\5\1\2\1\1\1\0\5\31\1*\0017\1>\1<\0012\1#\1\21\1\11\1\5\1\2\1\1\1\0\6\21\1\27\1#\1&\1$\1\28\1\19\1\n\1\5\1\2\1\1\1\0\7\12\1\15\1\19\1\20\1\18\1\14\1\8\1\4\1\2\1\1\1\0\8\6\1\7\1\t\2\8\1\6\1\3\1\2\1\1\1\0\t\2\1\3\4\2\1\1\1\0\11\1\5\0\r",
+	}
+
+	local spin = {}
+	spin.w = 31
+	spin.h = 60
+	spin.data = "\0\8\6\15\0\14\6\19\0\n\6\8\12\7\6\8\0\7\6\5\12\15\6\5\0\5\6\5\12\3\19\11\12\3\6\5\0\3\6\4\12\3\19\3\25\t\19\3\12\3\6\4\0\1\6\4\12\3\19\2\25\2\31\t\25\2\19\2\12\3\6\7\12\2\19\2\25\2\31\2&\t\31\2\25\2\19\2\12\2\6\5\12\2\19\2\25\1\31\2&\1,\0023\7,\2&\1\31\2\25\1\19\2\12\2\6\3\12\2\19\2\25\1\31\1&\2,\0013\0019\4?\0019\0043\1,\1&\2\31\1\25\1\19\2\12\2\6\2\12\1\19\2\25\1\31\1&\1,\0013\0019\1?\2F\3L\1F\3?\0029\0013\1,\1&\1\31\1\25\1\19\2\12\1\6\1\12\2\19\1\25\1\31\1&\1,\0013\0019\1?\1F\1L\1R\3Y\1R\3L\1F\1?\0019\0013\1,\1&\1\31\1\25\1\19\1\12\3\19\2\25\1\31\1,\0013\0019\1?\1L\1R\1Y\1_\3f\1_\3Y\1R\1L\1?\0019\0013\1,\1\31\1\25\1\19\2\12\2\19\1\25\1\31\1&\1,\0019\1F\1L\1Y\1_\1f\1l\3r\1l\3f\1_\1Y\1L\1F\0019\1,\1&\1\31\1\25\1\19\1\12\2\19\1\25\1\31\1,\0013\1?\1L\1R\1_\1l\1r\1y\3\127\1y\3r\1l\1_\1R\1L\1?\0013\1,\1\31\1\25\1\19\1\12\1\19\1\25\1\31\1&\0013\0019\1F\1R\1_\1l\1r\1\127\1\133\1\140\5\133\1\127\1r\1l\1_\1R\1F\0019\0013\1&\1\31\1\25\1\19\2\25\1\31\1,\0019\1?\1L\1Y\1f\1r\1\127\1\133\1\146\1\153\2\159\1\153\2\146\1\133\1\127\1r\1f\1Y\1L\1?\0019\1,\1\31\1\25\1\19\2\25\1&\1,\0019\1F\1R\1f\1l\1\127\1\140\1\146\1\159\1\165\2\172\1\165\2\159\1\146\1\140\1\127\1l\1f\1R\1F\0019\1,\1&\1\25\1\19\1\25\1\31\1&\0013\1?\1L\1Y\1l\1y\1\140\1\153\1\159\1\172\1\178\2\184\1\178\2\172\1\159\1\153\1\140\1y\1l\1Y\1L\1?\0013\1&\1\31\1\25\2\31\1,\0013\1F\1R\1_\1r\1\127\1\146\1\159\1\172\1\178\1\191\2\197\1\191\2\178\1\172\1\159\1\146\1\127\1r\1_\1R\1F\0013\1,\1\31\1\25\2\31\1,\0019\1F\1Y\1f\1y\1\133\1\153\1\172\1\178\1\191\1\197\2\204\1\197\2\191\1\178\1\172\1\153\1\133\1y\1f\1Y\1F\0019\1,\1\31\1\25\2&\1,\0019\1L\1Y\1l\1\127\1\140\1\165\1\178\1\191\1\197\1\210\2\216\1\210\2\197\1\191\1\178\1\165\1\140\1\127\1l\1Y\1L\0019\1,\1&\1\25\2&\0013\1?\1L\1_\1l\1\133\1\146\1\172\1\184\1\197\1\210\1\216\2\223\1\216\2\210\1\197\1\184\1\172\1\146\1\133\1l\1_\1L\1?\0013\1&\1\25\1\31\1&\0013\1?\1R\1_\1r\1\133\1\153\1\178\1\191\1\204\1\216\1\229\2\235\1\229\2\216\1\204\1\191\1\178\1\153\1\133\1r\1_\1R\1?\0013\1&\1\31\2&\0013\1?\1R\1f\1r\1\140\1\159\1\178\1\197\1\210\1\223\1\235\2\242\1\235\2\223\1\210\1\197\1\178\1\159\1\140\1r\1f\1R\1?\0013\1&\1\31\2,\0013\1?\1R\1f\1y\1\146\1\159\1\184\1\204\1\216\1\229\1\235\2\242\1\235\2\229\1\216\1\204\1\184\1\159\1\146\1y\1f\1R\1?\0013\1,\1\31\2,\0019\1F\1R\1f\1y\1\146\1\165\1\191\1\204\1\216\1\229\1\242\2\248\1\242\2\229\1\216\1\204\1\191\1\165\1\146\1y\1f\1R\1F\0019\1,\1\31\2,\0019\1F\1Y\1f\1y\1\146\1\165\1\191\1\210\1\223\1\235\1\248\2\255\1\248\2\235\1\223\1\210\1\191\1\165\1\146\1y\1f\1Y\1F\0019\1,\1\31\2,\0019\1F\1Y\1l\1\127\1\146\1\165\1\191\1\210\1\223\1\235\1\248\2\255\1\248\2\235\1\223\1\210\1\191\1\165\1\146\1\127\1l\1Y\1F\0019\1,\1\31\2,\0019\1F\1Y\1l\1\127\1\146\1\165\1\191\1\210\1\223\1\235\1\248\2\255\1\248\2\235\1\223\1\210\1\191\1\165\1\146\1\127\1l\1Y\1F\0019\1,\1\31\2,\0019\1F\1Y\1l\1\127\1\146\1\165\1\191\1\210\1\223\1\235\1\248\2\255\1\248\2\235\1\223\1\210\1\191\1\165\1\146\1\127\1l\1Y\1F\0019\1,\1\31\2,\0019\1F\1Y\1l\1\127\1\146\1\165\1\191\1\210\1\223\1\235\1\248\2\255\1\248\2\235\1\223\1\210\1\191\1\165\1\146\1\127\1l\1Y\1F\0019\1,\1\31\2,\0019\1F\1Y\1f\1y\1\146\1\165\1\191\1\210\1\223\1\235\1\248\2\255\1\248\2\235\1\223\1\210\1\191\1\165\1\146\1y\1f\1Y\1F\0019\1,\1\31\2,\0019\1F\1R\1f\1y\1\146\1\165\1\191\1\204\1\216\1\229\1\242\2\248\1\242\2\229\1\216\1\204\1\191\1\165\1\146\1y\1f\1R\1F\0019\1,\1\31\2,\0013\1?\1R\1f\1y\1\146\1\159\1\184\1\204\1\216\1\229\1\235\2\242\1\235\2\229\1\216\1\204\1\184\1\159\1\146\1y\1f\1R\1?\0013\1,\1\31\2&\0013\1?\1R\1f\1r\1\140\1\159\1\178\1\197\1\210\1\223\1\235\2\242\1\235\2\223\1\210\1\197\1\178\1\159\1\140\1r\1f\1R\1?\0013\1&\1\31\2&\0013\1?\1R\1_\1r\1\133\1\153\1\178\1\191\1\204\1\216\1\229\2\235\1\229\2\216\1\204\1\191\1\178\1\153\1\133\1r\1_\1R\1?\0013\1&\1\31\1\25\1&\0013\1?\1L\1_\1l\1\133\1\146\1\172\1\184\1\197\1\210\1\216\2\223\1\216\2\210\1\197\1\184\1\172\1\146\1\133\1l\1_\1L\1?\0013\1&\1\25\2&\1,\0019\1L\1Y\1l\1\127\1\140\1\165\1\178\1\191\1\197\1\210\2\216\1\210\2\197\1\191\1\178\1\165\1\140\1\127\1l\1Y\1L\0019\1,\1&\1\25\2\31\1,\0019\1F\1Y\1f\1y\1\133\1\153\1\172\1\178\1\191\1\197\2\204\1\197\2\191\1\178\1\172\1\153\1\133\1y\1f\1Y\1F\0019\1,\1\31\1\25\2\31\1,\0013\1F\1R\1_\1r\1\127\1\146\1\159\1\172\1\178\1\191\2\197\1\191\2\178\1\172\1\159\1\146\1\127\1r\1_\1R\1F\0013\1,\1\31\1\25\2\31\1&\0013\1?\1L\1Y\1l\1y\1\140\1\153\1\159\1\172\1\178\2\184\1\178\2\172\1\159\1\153\1\140\1y\1l\1Y\1L\1?\0013\1&\1\31\1\25\1\19\1\25\1&\1,\0019\1F\1R\1f\1l\1\127\1\140\1\146\1\159\1\165\2\172\1\165\2\159\1\146\1\140\1\127\1l\1f\1R\1F\0019\1,\1&\1\25\1\19\2\25\1\31\1,\0019\1?\1L\1Y\1f\1r\1\127\1\133\1\146\1\153\2\159\1\153\2\146\1\133\1\127\1r\1f\1Y\1L\1?\0019\1,\1\31\1\25\1\19\2\25\1\31\1&\0013\0019\1F\1R\1_\1l\1r\1\127\1\133\1\140\5\133\1\127\1r\1l\1_\1R\1F\0019\0013\1&\1\31\1\25\1\19\1\12\1\19\1\25\1\31\1,\0013\1?\1L\1R\1_\1l\1r\1y\3\127\1y\3r\1l\1_\1R\1L\1?\0013\1,\1\31\1\25\1\19\1\12\2\19\1\25\1\31\1&\1,\0019\1F\1L\1Y\1_\1f\1l\3r\1l\3f\1_\1Y\1L\1F\0019\1,\1&\1\31\1\25\1\19\1\12\2\19\2\25\1\31\1,\0013\0019\1?\1L\1R\1Y\1_\3f\1_\3Y\1R\1L\1?\0019\0013\1,\1\31\1\25\1\19\2\12\3\19\1\25\1\31\1&\1,\0013\0019\1?\1F\1L\1R\3Y\1R\3L\1F\1?\0019\0013\1,\1&\1\31\1\25\1\19\1\12\2\6\1\12\1\19\2\25\1\31\1&\1,\0013\0019\1?\2F\3L\1F\3?\0029\0013\1,\1&\1\31\1\25\1\19\2\12\1\6\2\12\2\19\2\25\1\31\1&\2,\0013\0019\4?\0019\0043\1,\1&\2\31\1\25\1\19\2\12\2\6\3\12\2\19\2\25\1\31\2&\1,\0023\7,\2&\1\31\2\25\1\19\2\12\2\6\5\12\2\19\2\25\2\31\2&\t\31\2\25\2\19\2\12\2\6\7\12\3\19\2\25\2\31\t\25\2\19\2\12\3\6\4\0\1\6\4\12\3\19\3\25\t\19\3\12\3\6\4\0\3\6\5\12\3\19\11\12\3\6\5\0\5\6\5\12\15\6\5\0\7\6\8\12\7\6\8\0\n\6\19\0\14\6\15\0\8"
+	glyphs.spinGlow = spin
+
+	glyphs.tickGlow = {
+		w = 11,
+		h = 78,
+		data = "\0\1\1\2\3\2\5\1\3\2\1\2\0\1\1\1\3\1\7\1\11\1\r\1\16\1\r\1\11\1\7\1\3\1\1\1\3\1\7\1\16\1\26\1#\1'\1#\1\26\1\16\1\7\1\3\1\5\1\14\1\31\0012\1C\1J\1C\0012\1\31\1\14\1\5\1\t\1\24\0012\1Q\1m\1x\1m\1Q\0012\1\24\1\t\1\r\1!\1D\1q\1\150\1\167\1\150\1q\1D\1!\1\r\1\16\1*\1U\1\139\1\186\1\206\1\186\1\139\1U\1*\1\16\1\18\0010\1`\1\158\1\210\1\232\1\210\1\158\1`\0010\1\18\1\20\0012\1f\1\167\1\223\1\247\1\223\1\167\1f\0012\1\20\0024\1j\1\171\1\228\1\253\1\228\1\171\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\173\1\230\1\255\1\230\1\173\1j\0014\1\20\0024\1j\1\171\1\228\1\253\1\228\1\171\1j\0014\1\20\0022\1f\1\167\1\223\1\247\1\223\1\167\1f\0012\1\20\1\18\0010\1`\1\158\1\210\1\232\1\210\1\158\1`\0010\1\18\1\16\1*\1U\1\139\1\186\1\206\1\186\1\139\1U\1*\1\16\1\r\1!\1D\1q\1\150\1\167\1\150\1q\1D\1!\1\r\1\t\1\24\0012\1Q\1m\1x\1m\1Q\0012\1\24\1\t\1\5\1\14\1\31\0012\1C\1J\1C\0012\1\31\1\14\1\5\1\3\1\7\1\16\1\26\1#\1'\1#\1\26\1\16\1\7\1\3\1\1\1\3\1\7\1\11\1\r\1\16\1\r\1\11\1\7\1\3\1\1\1\0\1\1\2\3\2\5\1\3\2\1\2\0\1",
+	}
+
+	glyphs.tooltipArrow = {
+		w = 7,
+		h = 12,
+		data = "\0\3\2\1\3\1\0\1d\1\0\2\2\1\0\2\151\1\255\1\0\1\3\1\0\1\17\1\169\1\255\1\253\1\4\1\0\1\25\1\202\1\255\1\251\1\255\1\0\0013\1\230\1\255\1\251\1\255\2k\1\235\1\255\1\252\1\255\3\161\1\255\1\252\1\253\1\255\3\0\1b\1\255\2\253\1\255\2\4\1\0\1G\1\238\1\255\1\252\1\255\1\0\1\4\1\0\0015\1\219\1\255\1\252\1\0\2\4\1\0\1\18\1\200\1\255\1\0\3\3\1\0\1\15\1\160\1",
+	}
+
+	return glyphs
+end)()
+Art.shadow = { pad = 28, slice = 38 }
+Art.font = {
+	regular = "AAEAAAARAQAABAAQT1MvMkNSmCYAAAGYAAAAVlZETVh08XxtAAAD4AAABeBjbWFwDsKNaQAAGUgAAADSY3Z0IEyiQQIAAB74AAABmGZwZ203UdEpAAAaHAAAAfZnYXNwABcACQAAmsQAAAAQZ2x5Zi9CU3wAACGMAABtpGhkbXjh7wrBAAAJwAAAD4hoZWFk+5n0ywAAARwAAAA2aGhlYRNjCrgAAAFUAAAAJGhtdHh3p0vAAAAB8AAAAfBrZXJuO14/KQAAjzAAAAn8bG9jYegYzcIAACCQAAAA+m1heHAC7wN2AAABeAAAACBuYW1lHjI2tgAAmSwAAAF4cG9zdP9PAHgAAJqkAAAAIHByZXB5Zdj/AAAcFAAAAuMAAQAAAAJuFJlbEYdfDzz1ABsIAAAAAACqfkQpAAAAAOaV+Kv/wv5ZC5MGjAAAAAkAAgAAAAAAAAABAAAIC/5SAAAMLP/C/70LkwABAAAAAAAAAAAAAAAAAAAAfAABAAAAfABiAAcAAAAAAAIAEAAvAFYAAAIFAuMAAAAAAAEEEQGQAAUAAAWaBTMAAAElBZoFMwAAA6AAeAKnCAACCwYEAwUEBAIEAAAAAwAAAAAAAAAAAAAAAE1TICAAQAAgImUGHv5ZAMoICwGuAAAAAQAAAAAAAAgAAQAC0AAAAyYBIwOsAKgGjADDBRYAmwicAJUF0ABzAiYApAOiALUDogCTBRYApwaMANIC6QCTA6IAmQLpAP0Dov/iBRYAiQUWARYFFgChBRYApwUWAE0FFgC7BRYAiQUWAJoFFgB6BRYAcQOiAVoDogDmBowA/gaMAPUGjAEMBF0AoAgAALAFeAAaBXwAyAWWAHMGKgDIBQ8AyASZAMgGNABzBgMAyANeAIkDowAsBYsAzQR0AMgGvgDIBfwAyAZMAHME0wDIBkwAcwWQAMgFeACGBO4AAAXbALIFeAAaB+kAXAV7AEQE7AAGBXsAfgOiAO8DogBGA6IAqwaMALoFFv/8BRYBVATOAGgE/AC5BCsAaQT8AGwExABqAtAARAT8AGwFEAC5AjIArwLB/8IEvADBAjIAuwfIALkFEAC5BNsAagT8ALkE/ABsA2oAuQQrAG4DJwA+BRAAsQS8AD0GjABWBLwAPAS8AD0ENABdBRQArQOiAXoFFAC7BowAuwUWALsEVgCaBRYArARdALkFFgCJCAAAnwgAAJ8H0ACqBowA9QaMANcGjAD+BowBDAaMAPMFKACmBSgArgaMALIFFgCZCAAAmQOs/+0DrACWAib/7QImAKADogC6A6IAwgUWALsMLACVBowBIwLpAP0AAAABAAEBAQEBAAwA+Aj/AAgACP/+AAkACv/+AAoACv/+AAsAC//+AAwADP/+AA0ADf/9AA4ADv/9AA8AD//9ABAAD//9ABEAEf/9ABIAEv/8ABMAE//8ABQAFf/8ABUAFf/8ABYAFv/8ABcAF//7ABgAGP/7ABkAGv/7ABoAG//7ABsAG//7ABwAHP/6AB0AHf/6AB4AHv/6AB8AIP/6ACAAIP/6ACEAIf/5ACIAIv/5ACMAI//5ACQAJf/5ACUAJv/5ACYAJv/4ACcAJ//4ACgAKP/4ACkAKf/4ACoAK//4ACsAK//3ACwALP/3AC0ALf/3AC4ALv/3AC8AMP/3ADAAMf/2ADEAMf/2ADIAMv/2ADMAM//2ADQANP/2ADUANv/1ADYANv/1ADcAN//1ADgAOP/1ADkAOf/1ADoAO//0ADsAPP/0ADwAPf/0AD0APf/0AD4APv/0AD8AP//zAEAAQf/zAEEAQf/zAEIAQv/zAEMAQ//zAEQARP/yAEUARv/yAEYAR//yAEcAR//yAEgASP/yAEkASf/xAEoASv/xAEsATP/xAEwATf/xAE0ATf/xAE4ATv/wAE8AT//wAFAAUf/wAFEAUv/wAFIAUv/vAFMAU//vAFQAVP/vAFUAVf/vAFYAV//vAFcAWP/uAFgAWP/uAFkAWf/uAFoAWv/uAFsAXP/uAFwAXf/sAF0AXf/sAF4AXv/sAF8AX//sAGAAYP/sAGEAYv/rAGIAYv/rAGMAY//rAGQAZP/rAGUAZf/rAGYAZ//qAGcAaP/qAGgAaP/qAGkAaf/qAGoAav/qAGsAa//pAGwAbf/pAG0Abf/pAG4Abv/pAG8Ab//pAHAAcP/oAHEAcv/oAHIAcv/oAHMAc//oAHQAdP/oAHUAdf/nAHYAdv/nAHcAeP/nAHgAeP/nAHkAef/nAHoAev/mAHsAe//mAHwAff/mAH0Aff/mAH4Afv/mAH8Af//lAIAAgP/lAIEAgv/lAIIAg//lAIMAg//lAIQAhP/kAIUAhf/kAIYAhv/kAIcAiP/kAIgAiP/kAIkAif/jAIoAiv/jAIsAi//jAIwAjf/jAI0Ajv/jAI4Ajv/iAI8Aj//iAJAAkP/iAJEAkf/iAJIAk//iAJMAk//hAJQAlP/hAJUAlf/hAJYAlv/hAJcAmP/hAJgAmf/gAJkAmf/gAJoAm//gAJsAm//gAJwAnP/gAJ0Anv/fAJ4Anv/fAJ8AoP/fAKAAoP/fAKEAof/fAKIAo//eAKMApP/eAKQApP/eAKUApv/eAKYApv/eAKcAp//dAKgAqf/dAKkAqf/dAKoAq//dAKsAq//dAKwArP/cAK0Arv/cAK4Ar//cAK8AsP/cALAAsP/cALEAsf/bALIAsv/bALMAtP/bALQAtf/bALUAtv/bALYAtv/aALcAt//aALgAuf/aALkAuv/aALoAu//aALsAu//ZALwAvP/ZAL0Avf/ZAL4Av//ZAL8AwP/ZAMAAwf/YAMEAwf/YAMIAwv/YAMMAxP/YAMQAxf/YAMUAxf/XAMYAxv/XAMcAx//XAMgAyP/XAMkAyv/XAMoAy//WAMsAzP/WAMwAzP/WAM0Azf/WAM4Az//WAM8A0P/VANAA0P/VANEA0f/VANIA0v/VANMA0//VANQA1f/UANUA1f/UANYA1//UANcA1//UANgA2P/UANkA2v/TANoA2//TANsA3P/TANwA3P/TAN0A3f/TAN4A3v/SAN8A4P/SAOAA4P/SAOEA4v/SAOIA4v/SAOMA4//RAOQA5f/RAOUA5v/RAOYA5//RAOcA5//RAOgA6P/QAOkA6f/QAOoA6//QAOsA6//QAOwA7P/QAO0A7f/PAO4A7v/PAO8A8P/PAPAA8f/PAPEA8v/PAPIA8v/OAPMA8//OAPQA9P/OAPUA9v/OAPYA9//OAPcA9//NAPgA+P/NAPkA+f/NAPoA+//NAPsA/P/MAPwA/f/MAP0A/v/MAP4A/v/MAP8A///MAAAAHwAAAIAJDgkDBQUHBwsHAwQEBwcDBQMEBwcHBwcHBwcHBwQEBwcHBgoIBwgIBwYICAUFBwYJCAkHCQcHBwgICQcHBwQEBAcGBgYGBgYGAwYGAwMGAwkGBgYGBAYEBgYHBgYFBgUGBwcFBgUHCQkJBwcHBwcGBgcHCQQEAgIEBAcOBwMAAAoPCgQEBQgHCwcDBQUHCAQFBAUHBwcHBwcHBwcHBQUICAgGCgcHCAgGBggIBQUHBgkHCQcJCAcHCAcLBwcHBQUFCAYGBwcFBwcEBwcDAwcDCwcHBwcEBgQHBgcHBgYGBQYIBwUGBQcKCgoICAgICAYGCAcKBQUDAwUFBw8IBAAACxELBAQFCQcMCAMFBQcJBAUEBQcHBwcHBwcHBwcFBQkJCQYKCAgJCQcGCQgFBQgGCQgJBwkICAcICAsIBwgFBQUJBwcHBwYHBwQHBwMEBwMLBwcHBwUGBAcHCQcHBgcFBwkHBgcGBwsLCwkJCQkJBwcJBwsFBQMDBQUHEQkEAAAMEgwEBQYKCA0JAwUFCAkEBQQFCAgICAgICAgICAUFCQkJBwwICAkJCAcJCQUFCAcKCQoICggIBwkIDQgHCAUFBQoICAgIBggIBAgIAwQHAwsICAgIBQcFCAcLBwcHCAUICggHCAcIDAwMCQkJCQoICAoIDAYGAwMFBQgSCgQAAA0UDQUFBQoIDQkDBgYJCQUHBQYICAgICAgICAgIBgYJCQkHDQkICQkICAkJBQYIBwsJCggKCAkJCQkNCQkJBgYGCwgICAgICAgFCAgDBAcDCwgICAgFBwYICAsHCAcIBwgLCAcIBwgNDQ0JCQkJCwgICwgNBgYDAwYGCBQLBQAADhUOBQYGCwkPCgQGBgkLBQcFBgkJCQkJCQkJCQkGBgsLCwgOCgoKCwkICwoFBgoICwoLCAsKCgkKCg8KCQoGBgYLCQkICQcJCAUJCQMFCAMNCQkJCQYIBgkICwkICAkGCQsJCAkICQ4ODgsLCwsLCQkLCQ4GBgQEBgYJFQsFAAAPFw8FBgcMChALBAcHCgwFBwUHCgoKCgoKCgoKCgcHDAwMCA8KCgsLCQkMCwUHCggNCwwJDAoKCQsKDwoJCgcHBwwKCgkJCAkJBQkJAwUJAw8JCgkJBggGCQkNCQkJCgcKDAoICggKDw8PDAwMDAwKCgwKDwcHBAQHBwoXDAUAABAYEAYGBw0KEQwEBwcKDQYHBgcKCgoKCgoKCgoKBwcNDQ0JEAsLCwwKCQwMBwcLCQ0MDQoNCwoKDAsRCwsLBwcHDQoKCgoICgoGCgoFBgkFDwoKCgoGCQcKCQ0JCQkKBwoNCgkKCQoQEBANDQ0NDQoKDQoQBwcEBAcHChgNBgAAERoRBgcIDgsSDAUICAsOBggGCAsLCwsLCwsLCwsICA4ODgkRDAwMDQsKDQ0ICAwJDg0NCg0MDAoMDBEMCgwICAgOCwsKCwkL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/84AIgBY/+IAIgBa/84AIgBw/84AIgBx/84AIgBy/84AIgBz/4gAIgB0/84AIgB1/4gAIwAN/+wAIwAOAAoAIwAP/+wAIwA1/8QAIwBv/+wAIwBwAAoAIwBxAAoAJAAO/84AJABw/84AJABx/84AJQAN/84AJQAP/84AJQA1/84AJQA4/+wAJQA5//YAJQA6/+wAJQA7/+wAJQBv/84AJwAN/tQAJwAP/tQAJwAb/8QAJwAc/8QAJwAgADwAJwAi/5wAJwA1AB4AJwBC/5wAJwBG/84AJwBQ/84AJwBv/tQAKgAO/+IAKgBw/+IAKgBx/+IAKwAN/+wAKwAP/+wAKwAi//YAKwBv/+wALAAO/5IALAAw/+wALABC/8QALABG/7oALABQ/7oALABW/84ALABX/7AALABY/7oALABa/7AALABw/5IALABx/5IALQAI/4gALQAO/2AALQAk/+wALQAo/+wALQArAGQALQAw/+wALQA1/1YALQA3/5IALQA4/5wALQA6/2AALQBX/5IALQBa/5IALQBw/2AALQBx/2AALQBz/2AALQB1/2AAMAAN/+IAMAAP/+IAMAA1/84AMAA5//YAMAA6/+wAMAA7/+wAMABv/+IAMQAN/tQAMQAP/tQAMQAi/84AMQA6ABQAMQBC/84AMQBG/84AMQBQ/84AMQBv/tQAMgAN/+IAMgAP/+IAMgBv/+IAMwAO/5wAMwA1/8QAMwA6/+wAMwBC/9gAMwBG/84AMwBQ/84AMwBW/+wAMwBa/8kAMwBw/5wAMwBx/5wAMwBz/7oAMwB1/7oANAAN/+wANAAP/+wANAAi/+wANAA0/+oANABX/+IANABY/+wANABa/+IANABv/+wANQAN/t4ANQAO/2oANQAP/t4ANQAb/zgANQAc/zgANQAgADwANQAi/4gANQAk/9gANQAo/9gANQAw/84ANQA0//QANQA1/7oANQBC/xAANQBE/yQANQBG/yQANQBI/y4ANQBQ/yQANQBT/zgANQBU/0wANQBW/zgANQBX/zgANQBY/zgANQBa/zgANQBb/1YANQBv/t4ANQBw/2oANQBx/2oANgAN/+wANgAP/+wANgAi//YANgBv/+wANwAN/t4ANwAO/84ANwAP/t4ANwAb/7AANwAc/7AANwAi/8QANwBC/5wANwBG/5wANwBQ/5wANwBW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",
+	bold = "AAEAAAAQAQAABAAAT1MvMkTcmtsAAAGIAAAAVlZETVh08XxtAAAD0AAABeBjbWFwDsKNaQAAFbgAAADSY3Z0IFYhZi0AAB9YAAAB8mZwZ216Re4kAAAWjAAABb9nYXNwABcACQAAeygAAAAQZ2x5Zlj+1IsAACJIAABXKGhkbXiZKvBYAAAJsAAADAhoZWFkAKCWhAAAAQwAAAA2aGhlYRV8DOMAAAFEAAAAJGhtdHjBHkdpAAAB4AAAAfBsb2NhfeNpYQAAIUwAAAD6bWF4cAOPAfgAAAFoAAAAIG5hbWUhmjnyAAB5cAAAAZZwb3N0/3gA0wAAewgAAAAgcHJlcN573dEAABxMAAADCQABAAAAAQAAfkM6XF8PPPUAGwgAAAAAAK1sU/gAAAAA5pX4q//G/lcNqAaMAAEACQACAAAAAAAAAAEAAAgL/lIAAA44/8b/3A2oAAEAAAAAAAAAAAAAAAAAAAB8AAEAAAB8AFMABwAAAAAAAgACAEAAVQAAArQBYwAAAAAAAQSLArwABQAABZoFMwAAASUFmgUzAAADoADTAwUIAAILCAQDBQQEAgQAAAADAAAAAAAAAAAAAAAATVMgIAAgACAiZQYe/lkAyggLAa4AAAABAAAAAAAACAABAAK8AAADOADLBLMApwbwAJUFsACGCi0AjwbmAHkCqACnBFkAwQRZAKYFsADMBvAA2gLkACMD1wBuAuQAtwWEAHsFsABwBbABCgWwALkFsACMBbAAVAWwAKQFsACGBbAAnAWwAGMFsABoAzgA4QM4AE0G8ADMBvAA+QbwAOwE7wCTB7YAkQY2ABgGGAC+BcoAZwakAL4FdwC+BTQAvgZ9AGcGswC+BF4AewRxACoGKwC+BRkAvgeVAL4GxgC+Bs0AZwXdAL4GzQBnBkIAvgWvAG0FdAApBn8AqQYcABgJBwBCBhwAGAXlAAkFiQBaBFkA+AWEAL0EWQDGBvAAxQWw//AFsAF2BVgAVgWYAKoEtQBYBZgAWgVQAFgDYQArBZgAWgWzAKoCvACgAzn/xgVeAKoCvACqCHcAqgWzAKoFfgBYBZgAqgWYAFoD+gCqBL8AXwOlACsFswChBTMAHgfWAC0FWgAaBTUAHgTGAFQFsACYBFkBmwWwAMkG8ACdBbAA8gSzALQFsACXBbAA3QWwAIcHtgB6B7YAege2AI4G8AD6BvAA2gbwANoG8ADaBvAAngbMANkGzAEmCGQAtwWwAJkIAACZBLMACwSzAHsCqAAgAqgAewRZANkEWQEmBbAA8g44AI8G8AEIAuQAtwAAAAEAAQEBAQEADAD4CP8ACAAI//4ACQAK//4ACgAK//4ACwAL//4ADAAM//4ADQAN//0ADgAO//0ADwAP//0AEAAP//0AEQAR//0AEgAS//wAEwAT//wAFAAV//wAFQAV//wAFgAW//wAFwAX//sAGAAY//sAGQAa//sAGgAb//sAGwAb//sAHAAc//oAHQAd//oAHgAe//oAHwAg//oAIAAg//oAIQAh//kAIgAi//kAIwAj//kAJAAl//kAJQAm//kAJgAm//gAJwAn//gAKAAo//gAKQAp//gAKgAr//gAKwAr//cALAAs//cALQAt//cALgAu//cALwAw//cAMAAx//YAMQAx//YAMgAy//YAMwAz//YANAA0//YANQA2//UANgA2//UANwA3//UAOAA4//UAOQA5//UAOgA7//QAOwA8//QAPAA9//QAPQA9//QAPgA+//QAPwA///MAQABB//MAQQBB//MAQgBC//MAQwBD//MARABE//IARQBG//IARgBH//IARwBH//IASABI//IASQBJ//EASgBK//EASwBM//EATABN//EATQBN//EATgBO//AATwBP//AAUABR//AAUQBS//AAUgBS/+8AUwBT/+8AVABU/+8AVQBV/+8AVgBX/+8AVwBY/+4AWABY/+4AWQBZ/+4AWgBa/+4AWwBc/+4AXABd/+wAXQBd/+wAXgBe/+wAXwBf/+wAYABg/+wAYQBi/+sAYgBi/+sAYwBj/+sAZABk/+sAZQBl/+sAZgBn/+oAZwBo/+oAaABo/+oAaQBp/+oAagBq/+oAawBr/+kAbABt/+kAbQBt/+kAbgBu/+kAbwBv/+kAcABw/+gAcQBy/+gAcgBy/+gAcwBz/+gAdAB0/+gAdQB1/+cAdgB2/+cAdwB4/+cAeAB4/+cAeQB5/+cAegB6/+YAewB7/+YAfAB9/+YAfQB9/+YAfgB+/+YAfwB//+UAgACA/+UAgQCC/+UAggCD/+UAgwCD/+UAhACE/+QAhQCF/+QAhgCG/+QAhwCI/+QAiACI/+QAiQCJ/+MAigCK/+MAiwCL/+MAjACN/+MAjQCO/+MAjgCO/+IAjwCP/+IAkACQ/+IAkQCR/+IAkgCT/+IAkwCT/+EAlACU/+EAlQCV/+EAlgCW/+EAlwCY/+EAmACZ/+AAmQCZ/+AAmgCb/+AAmwCb/+AAnACc/+AAnQCe/98AngCe/98AnwCg/98AoACg/98AoQCh/98AogCj/94AowCk/94ApACk/94ApQCm/94ApgCm/94ApwCn/90AqACp/90AqQCp/90AqgCr/90AqwCr/90ArACs/9wArQCu/9wArgCv/9wArwCw/9wAsACw/9wAsQCx/9sAsgCy/9sAswC0/9sAtAC1/9sAtQC2/9sAtgC2/9oAtwC3/9oAuAC5/9oAuQC6/9oAugC7/9oAuwC7/9kAvAC8/9kAvQC9/9kAvgC//9kAvwDA/9kAwADB/9gAwQDB/9gAwgDC/9gAwwDE/9gAxADF/9gAxQDF/9cAxgDG/9cAxwDH/9cAyADI/9cAyQDK/9cAygDL/9YAywDM/9YAzADM/9YAzQDN/9YAzgDP/9YAzwDQ/9UA0ADQ/9UA0QDR/9UA0gDS/9UA0wDT/9UA1ADV/9QA1QDV/9QA1gDX/9QA1wDX/9QA2ADY/9QA2QDa/9MA2gDb/9MA2wDc/9MA3ADc/9MA3QDd/9MA3gDe/9IA3wDg/9IA4ADg/9IA4QDi/9IA4gDi/9IA4wDj/9EA5ADl/9EA5QDm/9EA5gDn/9EA5wDn/9EA6ADo/9AA6QDp/9AA6gDr/9AA6wDr/9AA7ADs/9AA7QDt/88A7gDu/88A7wDw/88A8ADx/88A8QDy/88A8gDy/84A8wDz/84A9AD0/84A9QD2/84A9gD3/84A9wD3/80A+AD4/80A+QD5/80A+gD7/80A+wD8/8wA/AD9/8wA/QD+/8wA/gD+/8wA/wD//8wAAAAYAAAAgAkQCQMEBQgGCwgDBQUGCAMEAwYGBgYGBgYGBgYGBAQICAgGCQgHBgcGBgcHBQUHBggHCAcIBwYGBwcLBwcGBQYFCAYGBgYFBgYFBgYDBAYDCQYGBgYEBQUGBgkGBgUGBQYIBgUGBgYJCQkICAgICAgICQYJBgYDAwUFBhAIAwAAChIKAwQGCQcNCQMFBQcJBAUEBwcHBwcHBwcHBwcEBAkJCQYKCQgHCQcHCAgGBggGCQgJCAkIBwYICAwICAcFBwUJBwcHBwYHBwUHBwMEBwMLBwcHBwUGBQcHCQcHBgcFBwkHBgcHBwoKCgkJCQkJCQkMBwoGBgMDBQUHEgkEAAALFAsEBAcJCA4KBAYGCAkEBgQICAgICAgICAgICAQECQkJBwsJCAgJCAgJCQYGCAcKCQkICQgICAkIDAgICAYIBgoICAgIBwgIBQgIBAUIBAwICAgIBgcFCAgKCAgHCAYICQgGCAcICwsLCQkJCQkJCQwICwcHBAQGBggUCgQAAAwVDAQFBwoJDwoEBwcJCgQGBAgJCQkJCQkJCQkJBQUKCgoHDAkJCQoICAoKBgcJCAsKCwkLCQkICgkOCQoIBggGCgkJCAgHCAgFCAgEBQgEDAgICAgGBwUICAwICAcJBgkKCQcJCQkMDAwKCgoKCgoKDAkMBwcEBAcHCRUKBAAADRgNBAYHCwkRCwQHBwkLBQcFCQkJCQkJCQkJCQkFBQsLCwgNCgoKCgkJCgsGBwkIDAoLCQsJCQgKCg4KCgkGCQYKCQkJCQgJCQUJCQQFCAQOCQkJCQYIBgkJDAkJCAkICQsKBwkKCQwMDQsLCwsLCwsPCQ0ICAQEBwcKGAsFAAAOGQ4FBggMChIMBQgICgwFBwUKCgoKCgoKCgoKCgYGDAwMCQ4LCwsLCgkLCwgICwkNCwwKDAsKCgsLEAsKCggKCAwKCgkKCAoJBgoKBAYJBA4KCgoKBwgGCgkOCQkICggKDAoICgoKDg4ODAwMDAwMDA8KDgkJBQUICAoZDAUAAA8bDwUGCQ0LEw0FCAgLDQUHBQoLCwsLCwsLCwsLBgYNDQ0JDgwLCwwKCgwMCAgMCg4MDQsNDAsKDAsQCwsKCAoIDQsLCgoICgoGCgoEBgoEEAoKCgoHCQcKCg4KCgkLCAsNCwkLCwsODg4NDQ0NDQ0NDwsPCQkFBQgICxsNBQAAEBwQBQYJDQsUDgYJCQsNBggGCwsLCwsLCwsLCwsGBg0NDQoPDAwMDQsKDQ0ICQwKDw0ODA4NCwwNDBIMDAsJCwkNCwsLCwkLCwcLCwQGCgQQCwsLCwgJBwsKEAsKCgsICw0LCQsLCw8PDw0NDQ0NDg4SCxAJCQUFCQkLHA4GAAARHhEGBwoPDBYPBgkJDA8GCAYMDAwMDAwMDAwMDAcHDw8PChANDQwODAsODgkJDQsQDg4MDg0MDA4NEw0NDAkMCQ8MDAsMCgwLBwwMBgcLBhIMDAwMCAoI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",
+}
+Art.backdrop = {
+		tile = 840,
+		sprite = { 335, 198 },
+		levels = 8,
+		blits = {
+			-167,
+			-99,
+			-167,
+			741,
+			673,
+			-99,
+			673,
+			741,
+			-143,
+			-51,
+			-143,
+			789,
+			697,
+			-51,
+			697,
+			789,
+			-119,
+			-3,
+			-119,
+			837,
+			721,
+			-3,
+			721,
+			837,
+			-95,
+			45,
+			745,
+			45,
+			-71,
+			93,
+			769,
+			93,
+			-47,
+			141,
+			793,
+			141,
+			-23,
+			189,
+			817,
+			189,
+			1,
+			237,
+			25,
+			285,
+			49,
+			333,
+			73,
+			381,
+			97,
+			429,
+			121,
+			477,
+			145,
+			525,
+			169,
+			573,
+			193,
+			621,
+			217,
+			-171,
+			217,
+			669,
+			241,
+			-123,
+			241,
+			717,
+			265,
+			-75,
+			265,
+			765,
+			289,
+			-27,
+			289,
+			813,
+			313,
+			21,
+			337,
+			69,
+			361,
+			117,
+			385,
+			165,
+			409,
+			213,
+			433,
+			261,
+			457,
+			309,
+			481,
+			357,
+			505,
+			405,
+			-311,
+			453,
+			529,
+			453,
+			-287,
+			501,
+			553,
+			501,
+			-263,
+			549,
+			577,
+			549,
+			-239,
+			597,
+			601,
+			597,
+			-215,
+			-195,
+			-215,
+			645,
+			625,
+			-195,
+			625,
+			645,
+			-191,
+			-147,
+			-191,
+			693,
+			649,
+			-147,
+			649,
+			693,
+		},
+		alpha = "\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\25\1\1\4\1\6\1\4\1\0\255\0J\2\1\5\1\7\4\1\1\0\255\0G\1\1\4\1\7\6\4\1\0\255\0F\1\1\6\1\7\8\1\1\0\255\0D\1\1\6\1\7\7\5\1\4\1\1\1\0\255\0D\4\1\7\6\5\1\1\1\0\255\0F\1\1\7\6\4\1\0\255\0H\2\1\7\6\1\1\0\3\1\1\2\1\0\255\0C\2\1\7\6\2\1\0\1\1\1\3\1\7\2\0\255\0C\1\1\7\6\5\1\3\1\6\1\7\3\3\1\0\255\0C\6\1\7\12\1\1\0\255\0B\3\1\7\12\2\1\0\255\0005\2\1\5\1\1\1\0\n\1\1\7\n\4\1\1\1\0\255\0004\2\1\5\1\7\2\4\1\0\8\1\1\3\1\6\1\7\8\4\1\1\1\0\255\0004\2\1\5\1\7\5\1\1\0\5\1\1\0\1\2\1\7\n\3\1\0\255\0005\6\1\7\6\4\1\0\3\1\1\3\1\6\1\4\1\0\1\5\1\7\t\6\1\0\255\0005\3\1\7\7\1\1\0\1\3\1\6\1\7\3\1\2\7\n\3\1\0\255\0005\6\1\7\6\5\1\6\1\7\5\4\1\0\1\5\1\4\1\1\1\3\1\7\6\6\1\0\255\0005\3\1\7\r\6\1\0\4\1\1\7\7\3\1\0\255\0005\6\1\7\11\4\1\1\1\0\5\4\1\7\6\6\1\0\255\0005\5\1\7\t\4\1\1\1\0\7\1\1\7\7\3\1\0\255\0002\3\1\6\1\7\8\6\1\1\1\0\n\4\1\7\6\6\1\0\255\0/\1\1\2\1\0\1\4\1\7\t\6\1\1\1\0\n\1\1\7\7\3\1\0\255\0-\3\1\6\2\0\2\6\1\7\t\4\1\0\11\4\1\7\6\6\1\0\255\0+\3\1\6\1\7\2\6\1\1\1\0\1\3\1\7\2\5\1\7\7\1\1\0\n\1\1\7\7\3\1\0\255\0(\2\1\6\1\7\5\1\1\0\1\1\1\4\1\1\1\0\1\6\1\7\6\4\1\0\11\4\1\7\6\6\1\0\255\0(\2\1\7\6\2\1\0\5\3\1\7\7\1\1\0\n\1\1\7\7\3\1\0\255\0'\1\1\7\6\3\1\0\6\6\1\7\6\4\1\0\11\4\1\7\7\1\1\0\255\0'\6\1\7\5\4\1\0\6\3\1\7\7\1\1\0\n\1\1\7\6\5\1\1\1\0\255\0\30\3\1\6\1\1\1\0\6\4\1\7\5\5\1\0\7\6\1\7\6\4\1\0\5\3\1\4\1\0\4\4\1\7\3\5\1\2\1\0\255\0\30\3\1\6\1\7\2\6\1\1\1\0\5\3\1\7\5\6\1\0\7\3\1\7\7\2\1\0\3\3\1\7\2\1\1\0\3\1\1\7\1\5\1\2\1\0\255\0\30\2\1\6\1\7\5\6\1\1\1\0\4\1\1\7\6\1\1\0\7\6\1\7\7\3\2\5\1\7\3\4\1\0\4\1\1\0\255\0 \4\1\7\7\6\1\0\5\6\1\7\5\2\1\0\7\3\1\7\14\1\1\0\255\0$\3\1\7\8\5\1\0\4\5\1\7\5\3\1\0\8\6\1\7\12\6\1\1\1\0\255\0$\2\1\7\t\5\1\0\3\3\1\7\5\4\1\0\8\2\1\7\11\4\1\0\255\0\30\3\2\0\6\1\1\7\n\5\1\0\2\2\1\7\5\5\1\0\t\4\1\7\8\6\1\2\1\0\255\0\29\3\1\6\1\7\2\2\1\0\6\6\1\7\n\4\1\0\1\1\1\7\5\6\1\0\n\4\1\7\5\5\1\2\1\0\255\0\28\1\1\3\1\6\1\7\5\1\1\0\5\5\1\7\3\6\1\2\1\7\6\4\1\0\1\5\1\7\5\1\1\0\n\1\1\2\1\3\1\2\1\1\1\0\255\0\30\5\1\7\7\6\1\1\1\0\4\4\1\7\4\1\1\2\1\7\6\3\2\7\5\2\1\0\255\0\24\3\2\0\19\1\1\6\1\7\7\5\1\0\4\3\1\7\4\2\1\0\1\3\1\7\6\5\1\7\5\3\1\0\255\0\22\3\1\6\1\7\2\1\1\0\19\1\1\7\8\4\1\0\3\2\1\7\4\3\1\0\2\3\1\7\11\4\1\0\255\0\20\3\1\6\1\7\4\4\1\0\20\2\1\7\8\3\1\0\2\1\1\7\4\5\1\0\3\4\1\7\n\5\1\0\255\0\19\2\1\7\7\1\1\0\20\2\1\7\8\3\1\0\2\6\1\7\3\6\1\0\4\4\1\7\t\6\1\0\255\0\20\6\1\7\6\4\1\0\21\2\1\7\8\2\1\0\1\5\1\7\4\1\1\0\4\4\1\7\t\1\1\0\255\0\19\3\1\7\7\1\1\0\21\2\1\7\8\1\1\4\1\7\4\1\1\0\5\4\1\7\6\5\1\2\1\0\255\0\21\6\1\7\6\4\1\0\22\3\1\7\7\5\1\3\1\7\4\2\1\0\6\5\1\7\3\5\1\2\1\0\255\0\23\3\1\7\7\1\1\0\22\3\1\7\12\4\1\0\7\5\1\6\1\2\1\0\255\0\26\6\1\7\6\4\1\0\23\3\1\7\11\5\1\0\255\0$\3\1\7\7\1\1\0\23\3\1\7\n\6\1\0\255\0%\6\1\7\6\4\1\0\24\4\1\7\n\1\1\0\255\0$\3\1\7\7\1\1\0\24\4\1\7\t\2\1\0\255\0%\6\1\7\6\4\1\0\25\4\1\7\6\5\1\2\1\0\255\0&\3\1\7\7\1\1\0\r\2\1\1\1\0\n\4\1\7\3\5\1\2\1\0\255\0)\6\1\7\6\4\1\0\11\2\1\5\1\7\1\5\1\0\11\5\1\6\1\2\1\0\255\0\28\1\1\3\1\5\1\6\1\7\1\6\2\3\1\0\7\3\1\7\7\1\1\0\8\2\1\5\1\7\4\1\1\0\255\0'\2\1\5\1\7\8\5\1\0\7\6\1\7\6\4\1\0\7\5\1\7\6\5\1\0\255\0%\2\1\5\1\7\11\5\1\0\6\3\1\7\7\1\1\0\6\4\1\7\7\1\1\0\255\0\"\1\1\4\1\7\14\3\1\0\6\6\1\7\6\4\1\0\6\1\1\7\7\5\1\0\255\0!\2\1\6\1\7\15\6\1\0\6\3\1\7\7\1\1\0\6\4\1\7\7\1\1\0\255\0\31\4\1\7\7\6\1\5\1\4\1\5\1\7\7\3\1\0\6\6\1\7\6\4\1\0\6\1\1\7\5\6\1\2\1\0\255\0\31\5\1\7\6\6\1\3\1\1\1\0\3\4\1\7\6\6\1\0\6\3\1\7\7\1\1\0\6\4\1\7\2\6\1\2\1\0\255\0!\6\1\7\5\3\1\0\6\4\1\7\7\3\1\0\6\6\1\7\6\4\1\0\6\1\1\5\1\2\1\0\255\0#\2\1\7\3\6\1\1\1\0\5\2\1\6\1\7\8\6\1\0\6\3\1\7\7\1\1\0\255\0#\1\1\2\1\3\2\0\5\5\1\7\1\6\1\1\1\0\4\1\1\5\1\7\11\3\1\0\6\6\1\7\6\4\1\0\255\0 \1\1\4\1\6\1\7\4\2\1\0\4\2\1\6\1\1\1\0\4\3\1\6\1\7\12\6\1\0\6\3\1\7\7\1\1\0\255\0\29\1\1\5\1\7\7\6\1\0\n\4\1\7\6\4\1\1\1\7\7\3\1\0\6\6\1\7\4\6\1\2\1\0\255\0\29\4\1\7\n\2\1\0\8\5\1\7\5\6\1\2\1\0\2\4\1\7\6\6\1\0\6\3\1\7\2\6\1\2\1\0\255\0\29\1\1\5\1\7\11\6\1\0\7\4\1\7\5\5\1\0\4\1\1\7\7\3\1\0\6\5\1\2\1\0\255\0\31\6\1\7\8\6\1\5\3\6\1\1\1\0\5\2\1\7\5\5\1\0\6\3\1\7\6\6\1\0\255\0&\5\1\7\6\6\1\3\1\1\1\0\11\5\1\7\5\2\1\0\6\4\1\7\7\3\1\0\255\0$\3\1\7\6\5\1\0\r\1\1\7\6\2\1\0\5\3\1\7\8\5\1\0\255\0$\6\1\7\5\5\1\0\14\1\1\7\6\5\1\0\4\3\1\7\7\6\1\2\1\0\255\0\30\2\1\1\1\0\4\2\1\7\6\2\1\0\14\1\1\7\7\5\1\3\2\6\1\7\3\4\1\3\1\7\1\6\1\2\1\0\255\0\30\3\1\6\1\7\1\1\1\0\4\4\1\7\6\1\1\0\15\5\1\7\r\1\2\2\1\0\255\0\30\3\1\6\1\7\3\2\1\0\4\5\1\7\5\6\1\0\16\2\1\7\12\3\1\0\255\0\31\1\1\6\1\7\5\2\1\0\4\5\1\7\6\1\1\0\12\2\1\0\3\5\1\7\n\4\1\0\255\0 \1\1\7\6\3\1\0\4\5\1\7\6\3\1\0\11\3\1\7\1\2\1\0\2\1\1\6\1\7\8\3\1\0\255\0\"\6\1\7\5\3\1\0\4\3\1\7\6\5\1\0\11\6\1\7\1\5\1\0\4\4\1\6\1\7\4\5\1\1\1\0\255\0#\5\1\7\5\4\1\0\4\2\1\7\7\2\1\0\t\5\1\7\3\2\1\0\5\2\3\1\1\0\255\0%\4\1\7\5\4\1\0\5\6\1\7\6\6\1\1\1\0\6\1\1\5\1\7\4\5\1\0\255\0#\2\1\6\2\1\1\0\7\3\1\7\5\5\1\0\5\3\1\7\7\6\1\2\1\0\3\1\1\3\1\6\1\7\6\1\1\0\255\0 \2\1\6\1\7\3\6\1\1\1\0\6\3\1\7\5\5\1\0\6\6\1\7\8\6\1\5\2\7\8\3\1\0\255\0\31\3\1\6\1\7\6\6\1\1\1\0\5\2\1\7\5\6\1\0\6\2\1\7\18\3\1\0\255\0\12\1\1\0\19\4\1\7\t\2\1\0\4\1\1\7\5\6\1\0\7\4\1\7\15\6\1\2\1\0\255\0\11\2\1\6\2\0\20\3\1\7\t\2\1\0\4\7\5\6\1\0\8\4\1\7\r\5\1\1\1\0\255\0\n\2\1\5\1\7\3\3\1\0\20\2\1\7\t\2\1\0\3\6\1\7\5\1\1\0\8\2\1\6\1\7\t\5\1\2\1\0\255\0\n\1\1\5\1\7\5\6\1\0\8\1\1\4\1\5\1\6\2\4\1\1\1\0\6\2\1\6\1\7\8\3\1\0\2\5\1\7\5\1\1\0\n\3\1\5\1\6\4\4\1\3\1\1\1\0\255\0\12\1\1\7\7\3\1\0\5\1\1\4\1\7\7\3\1\0\6\1\1\6\1\7\8\3\1\0\1\5\1\7\5\2\1\0\255\0 \4\1\7\6\6\1\0\4\1\1\6\1\7\t\3\1\0\6\1\1\6\1\7\8\3\2\7\5\2\1\0\255\0 \1\1\7\7\3\1\0\2\1\1\6\1\7\11\2\1\0\7\5\1\7\8\6\1\7\5\3\1\0\255\0!\4\1\7\6\6\1\0\2\5\1\7\12\5\1\0\8\4\1\7\r\3\1\0\255\0!\1\1\7\7\2\2\7\14\2\1\0\8\4\1\7\12\4\1\0\255\0\"\4\1\7\6\6\2\7\5\6\2\7\7\6\1\0\t\3\1\7\11\4\1\0\255\0\21\1\1\4\2\0\n\1\1\7\11\4\1\1\1\0\2\5\1\7\7\2\1\0\t\3\1\7\n\5\1\0\255\0\19\1\1\4\1\6\1\7\2\1\1\0\n\4\1\7\t\2\1\0\5\6\1\7\6\6\1\0\n\2\1\7\t\5\1\0\255\0\17\1\1\4\1\7\5\4\1\0\6\1\1\0\3\1\1\7\8\2\1\0\6\2\1\7\7\2\1\0\n\1\1\6\1\7\7\6\1\0\255\0\17\3\1\7\7\1\1\0\3\2\1\6\1\7\1\1\1\0\3\4\1\7\6\6\1\0\8\5\1\7\6\6\1\0\11\1\1\6\1\7\6\6\1\0\255\0\18\6\1\7\6\4\1\0\1\2\1\5\1\7\3\4\1\0\3\1\1\7\7\3\1\0\7\2\1\7\7\2\1\0\11\1\1\6\1\7\6\1\1\0\255\0\17\3\1\7\7\6\1\7\6\1\1\0\3\4\1\7\6\6\1\0\8\5\1\7\6\6\1\0\12\4\1\7\6\1\1\0\255\0\18\6\1\7\r\3\1\0\3\1\1\7\7\3\1\0\7\2\1\7\7\2\1\0\11\4\1\7\6\1\1\0\255\0\18\3\1\7\11\5\1\2\1\0\5\4\1\7\6\6\1\0\8\5\1\7\6\6\1\0\11\3\1\7\6\2\1\0\255\0\18\2\1\7\t\5\1\2\1\0\7\1\1\7\7\3\1\0\7\2\1\7\7\2\1\0\n\3\1\7\6\2\1\0\255\0\16\1\1\6\1\7\t\2\1\0\n\4\1\7\6\6\1\0\8\5\1\7\6\6\1\0\n\2\1\7\6\3\1\0\255\0\16\1\1\7\n\4\1\0\n\1\1\7\7\3\1\0\7\2\1\7\5\6\1\3\1\0\n\2\1\7\5\4\1\1\1\0\255\0\17\4\1\7\n\1\1\0\n\4\1\7\6\6\1\0\8\5\1\7\2\6\1\3\1\0\12\1\1\7\3\4\1\1\1\0\255\0\19\1\1\7\2\5\1\6\1\7\6\4\1\0\n\1\1\7\7\3\1\0\7\2\1\6\1\3\1\0\14\1\1\7\1\4\1\1\1\0\255\0\11\1\1\2\3\1\1\0\6\3\1\2\1\0\1\3\1\7\7\1\1\0\n\4\1\7\6\6\1\0\25\1\1\0\255\0\n\1\1\4\1\6\1\7\5\6\1\3\1\0\8\6\1\7\6\4\1\0\n\1\1\7\7\3\1\0\255\0!\1\1\4\1\7\n\6\1\2\1\0\6\3\1\7\7\1\1\0\n\4\1\7\6\6\1\0\255\0 \3\1\7\14\3\1\0\6\6\1\7\6\4\1\0\n\1\1\7\6\6\1\1\1\0\255\0\30\4\1\7\16\2\1\0\5\3\1\7\7\1\1\0\4\1\1\5\1\1\1\0\3\4\1\7\3\6\1\3\1\0\255\0\31\4\1\7\17\6\1\1\1\0\5\6\1\7\6\5\1\0\3\1\1\6\1\7\1\4\1\0\3\1\1\7\1\6\1\3\1\0\255\0 \2\1\7\6\5\1\2\1\1\2\3\1\7\8\4\1\0\5\3\1\7\7\5\1\3\1\4\1\7\4\1\1\0\3\2\1\0\255\0\"\6\1\7\5\4\1\0\5\1\1\7\8\1\1\0\5\6\1\7\r\4\1\0\255\0%\3\1\7\5\6\1\0\7\2\1\7\7\4\1\0\5\3\1\7\r\3\1\0\255\0\30\2\1\5\1\2\1\0\4\5\1\7\5\4\1\0\8\5\1\7\6\6\1\0\6\6\1\7\n\6\1\2\1\0\255\0\30\4\1\7\2\5\1\0\4\6\1\7\5\4\1\0\8\1\1\7\7\1\1\0\5\1\1\6\1\7\7\6\1\3\1\0\255\0\31\5\1\7\4\2\1\0\3\6\1\7\5\5\1\0\t\5\1\7\6\2\1\0\6\1\1\5\1\7\4\6\1\3\1\1\1\0\255\0\28\1\1\0\2\4\1\7\5\5\1\0\3\6\1\7\5\6\1\0\t\2\1\7\6\3\1\0\8\1\1\2\2\1\1\0\255\0\29\2\1\5\1\6\1\0\1\2\1\7\7\2\1\0\2\5\1\7\6\3\1\0\8\1\1\7\6\2\1\0\255\0'\2\1\5\1\7\3\2\1\5\1\7\7\5\1\0\2\4\1\7\6\6\1\0\8\1\1\7\6\2\1\0\255\0%\1\1\5\1\7\5\6\1\7\6\5\1\3\1\1\1\0\2\2\1\7\7\3\1\0\7\2\1\7\5\6\1\0\255\0&\2\1\7\11\5\1\2\1\0\6\6\1\7\7\1\1\0\6\5\1\7\5\4\1\0\255\0'\4\1\7\t\3\1\0\8\3\1\7\7\6\1\2\1\0\3\1\1\5\1\7\6\1\1\0\255\0 \2\1\0\6\1\1\7\7\6\1\2\1\0\n\6\1\7\8\5\1\4\1\5\1\7\7\3\1\0\255\0\31\2\1\5\1\7\1\3\1\0\6\5\1\7\6\6\1\0\11\2\1\7\17\4\1\0\255\0\30\2\1\5\1\7\3\6\1\0\6\1\1\7\7\2\1\0\11\3\1\7\15\3\1\0\255\0\30\5\1\7\6\3\1\0\6\5\1\7\6\6\1\0\12\3\1\7\12\5\1\1\1\0\255\0\31\5\1\7\6\6\1\0\6\1\1\7\7\2\1\0\12\1\1\5\1\7\8\5\1\2\1\0\255\0!\1\1\7\7\3\1\0\6\5\1\7\6\6\1\0\14\1\1\3\1\5\3\4\1\3\1\1\1\0\255\0$\4\1\7\6\6\1\0\6\1\1\7\7\2\1\0\255\0/\2\1\5\1\4\1\0\7\1\1\7\7\3\1\0\6\5\1\7\6\6\1\0\255\0-\2\1\5\1\7\3\1\1\0\7\4\1\7\6\6\1\0\6\1\1\7\7\2\1\0\255\0*\2\1\5\1\7\5\4\1\0\7\1\1\7\7\3\1\0\6\5\1\7\6\6\1\0\255\0*\4\1\7\7\1\1\0\7\4\1\7\6\6\1\0\6\1\1\7\7\2\1\0\255\0)\1\1\7\7\4\1\0\7\1\1\7\7\3\1\0\6\5\1\7\6\5\1\0\255\0*\4\1\7\7\1\1\0\7\4\1\7\6\6\1\0\6\1\1\7\7\3\1\0\255\0)\1\1\7\7\4\1\0\7\1\1\7\7\3\1\0\6\5\1\7\5\6\1\3\1\0\255\0\29\2\1\3\1\4\3\2\1\0\7\4\1\7\7\1\1\0\7\4\1\7\6\6\1\0\6\1\1\7\3\6\1\3\1\0\255\0\28\1\1\4\1\6\1\7\6\6\1\2\1\0\5\1\1\7\7\4\1\0\7\1\1\7\7\3\1\0\6\5\1\7\1\3\1\0\255\0\29\4\1\7\11\4\1\0\5\4\1\7\7\1\1\0\7\4\1\7\6\6\1\0\6\1\2\0\255\0\28\1\1\6\1\7\r\3\1\0\4\1\1\7\7\4\1\0\6\1\1\6\1\7\7\3\1\0\255\0\18\1\1\4\1\6\1\0\r\2\1\6\1\7\15\2\1\0\4\4\1\7\7\1\1\0\4\1\1\6\1\7\8\6\1\0\255\0\16\1\1\4\1\7\3\3\1\0\11\1\1\6\1\7\5\5\1\3\1\2\1\4\1\7\7\6\1\0\4\1\1\7\7\6\1\1\1\0\2\2\1\6\1\7\8\6\1\3\1\0\255\0\15\4\1\7\5\6\1\0\11\5\1\7\4\6\1\2\1\0\4\3\1\7\7\3\1\0\4\4\1\7\8\5\1\6\1\7\5\5\1\7\2\6\1\3\1\1\1\0\255\0\16\6\1\7\6\3\1\0\t\2\1\7\5\2\1\0\6\4\1\7\6\6\1\1\1\0\3\1\1\7\14\4\1\1\1\6\1\3\1\1\1\0\255\0\18\3\1\7\6\6\1\0\t\5\1\7\4\4\1\0\5\1\1\4\1\6\1\7\6\6\1\1\1\0\4\4\1\7\12\6\1\1\1\0\255\0\23\6\1\7\6\3\1\0\7\1\1\7\5\3\1\0\3\1\1\4\1\7\7\6\1\3\1\0\7\6\1\7\11\2\1\0\255\0\24\3\1\7\6\6\1\0\7\2\1\7\5\4\1\0\1\1\1\4\1\7\7\6\1\3\1\0\t\2\1\7\n\3\1\0\255\0\r\1\1\3\1\2\1\0\n\6\1\7\6\3\1\0\6\2\1\7\5\6\1\4\1\7\7\6\1\3\1\0\5\3\2\0\5\2\1\6\1\7\6\6\1\2\1\0\255\0\12\1\1\4\1\7\3\4\1\1\1\0\8\3\1\7\6\6\1\0\6\2\1\7\12\6\1\3\1\0\6\1\1\7\1\6\1\0\6\1\1\4\1\5\1\6\2\4\1\2\1\0\255\0\12\1\1\4\1\7\6\6\1\3\1\0\8\6\1\7\6\3\1\0\5\1\1\7\n\6\1\3\1\0\8\6\1\7\2\3\1\0\255\0\22\1\1\4\1\7\n\5\1\2\1\0\6\3\1\7\6\6\1\0\6\6\1\7\7\6\1\3\1\0\t\5\1\7\3\6\1\0\255\0\22\5\1\7\r\4\1\1\1\0\5\6\1\7\6\3\1\0\5\4\1\7\6\6\1\0\t\1\1\6\1\7\5\3\1\0\255\0\21\1\1\7\14\6\1\3\1\0\4\3\1\7\6\6\1\0\5\2\1\7\7\4\1\0\6\1\1\3\1\7\6\6\1\1\1\0\255\0\22\5\1\7\15\5\1\2\1\0\3\6\1\7\6\3\1\0\5\5\1\7\7\5\1\2\1\1\2\2\1\4\1\6\1\7\6\6\1\1\1\0\255\0\23\1\1\7\17\4\1\1\1\0\1\3\1\7\6\6\1\0\5\1\1\7\19\6\1\1\1\0\255\0\25\5\1\7\17\6\1\3\1\0\1\6\1\7\6\3\1\0\5\3\1\7\17\4\1\0\255\0\27\1\1\7\7\4\1\6\1\7\n\5\1\4\1\7\6\6\1\0\6\4\1\7\14\6\1\2\1\0\255\0\29\5\1\7\6\4\1\1\1\5\1\7\18\3\1\0\6\3\1\7\11\6\1\2\1\0\255\0\31\1\1\7\7\1\1\0\1\2\1\6\1\7\16\6\1\0\7\1\1\4\1\6\1\7\5\6\1\4\1\2\1\0\255\0\"\5\1\7\6\4\1\0\3\4\1\7\16\3\1\0\t\1\1\2\3\1\1\0\255\0%\1\1\7\7\1\1\0\3\1\1\5\1\7\14\6\1\0\255\0004\5\1\7\6\4\1\0\5\3\1\6\1\7\r\3\1\0\255\0003\1\1\7\7\1\1\0\5\1\1\4\1\7\12\6\1\0\255\0004\5\1\7\6\4\1\0\7\2\1\6\1\7\11\3\1\0\255\0003\1\1\7\7\1\1\0\8\3\1\7\n\6\1\0\255\0004\5\1\7\6\4\1\0\t\1\1\5\1\7\7\4\1\1\1\0\255\0004\1\1\7\7\1\1\0\n\3\1\6\1\7\3\4\1\1\1\0\255\0007\5\1\7\6\4\1\0\11\1\1\4\2\1\1\0\255\0009\2\1\7\7\1\1\0\255\0H\5\1\7\6\4\1\0\255\0H\2\1\7\7\1\1\0\255\0H\5\1\7\6\4\1\0\255\0H\2\1\7\7\1\1\0\255\0H\5\1\7\5\4\1\1\1\0\255\0H\2\1\7\3\4\1\1\1\0\255\0K\5\1\4\1\1\1\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\255\0\156",
+}
+
+local Raster = { images = {}, counter = 0 }
+
+do
+
+	local crcTable = {}
+	for index = 0, 255 do
+		local value = index
+		for _ = 1, 8 do
+			value = value % 2 == 1 and bit32.bxor(0xEDB88320, bit32.rshift(value, 1)) or bit32.rshift(value, 1)
+		end
+		crcTable[index] = value
+	end
+	function Raster.crc32(data)
+		local crc = 0xFFFFFFFF
+		for index = 1, #data do
+			crc = bit32.bxor(crcTable[bit32.band(bit32.bxor(crc, string.byte(data, index)), 255)], bit32.rshift(crc, 8))
+		end
+		return bit32.bxor(crc, 0xFFFFFFFF)
+	end
+	function Raster.adler32(data)
+		local a, b = 1, 0
+		for index = 1, #data, 5552 do
+			for position = index, math.min(index + 5551, #data) do
+				a += string.byte(data, position)
+				b += a
+			end
+			a, b = a % 65521, b % 65521
+		end
+		return b * 65536 + a
+	end
+end
+
+local function zlibStore(data)
+	local parts = { string.char(0x78, 0x01) }
+	local length = #data
+	if length == 0 then
+		table.insert(parts, string.char(1, 0, 0, 0xFF, 0xFF))
+	end
+	local position = 1
+	while position <= length do
+		local last = math.min(position + 65534, length)
+		local block = string.sub(data, position, last)
+		table.insert(parts, string.char(last >= length and 1 or 0))
+		table.insert(parts, string.pack("<I2", #block))
+		table.insert(parts, string.pack("<I2", 65535 - #block))
+		table.insert(parts, block)
+		position = last + 1
+	end
+	table.insert(parts, string.pack(">I4", Raster.adler32(data)))
+	return table.concat(parts)
+end
+
+local function pngChunk(kind, data)
+	return string.pack(">I4", #data) .. kind .. data .. string.pack(">I4", Raster.crc32(kind .. data))
+end
+
+local function encodePng(pixels, width, height)
+	local rows, stride = {}, width * 4
+	for row = 0, height - 1 do
+		table.insert(rows, string.char(0))
+		table.insert(rows, string.sub(pixels, row * stride + 1, (row + 1) * stride))
+	end
+	return string.char(137, 80, 78, 71, 13, 10, 26, 10)
+		.. pngChunk("IHDR", string.pack(">I4I4", width, height) .. string.char(8, 6, 0, 0, 0))
+		.. pngChunk("IDAT", zlibStore(table.concat(rows)))
+		.. pngChunk("IEND", "")
+end
+
+function Raster.editable()
+	if Raster.canEdit == nil then
+		Raster.canEdit = pcall(function()
+			local image = Services.AssetService:CreateEditableImage({ Size = Vector2.new(2, 2) })
+			local _ = Content.fromObject(image)
+			image:Destroy()
+		end)
+	end
+	return Raster.canEdit
+end
+
+local function ensureFolder(path)
+	if not Executor.isfolder or not Executor.makefolder then
+		return
+	end
+	local current
+	for part in string.gmatch(path, "[^/]+") do
+		current = current and current .. "/" .. part or part
+		if not Executor.isfolder(current) then
+			pcall(Executor.makefolder, current)
+		end
+	end
+end
+
+function Raster.image(pixels, width, height, name)
+	if Raster.editable() then
+		local ok, content = pcall(function()
+			local size = Vector2.new(width, height)
+			local image = Services.AssetService:CreateEditableImage({ Size = size })
+			image:WritePixelsBuffer(Vector2.zero, size, pixels)
+			table.insert(Raster.images, image)
+			return Content.fromObject(image)
+		end)
+		if ok then
+			return content
+		end
+	end
+	if not (Executor.writefile and Executor.getcustomasset and buffer.tostring) then
+		return nil
+	end
+	local ok, content = pcall(function()
+		local folder = Config.Folder .. "/storage/raster"
+		ensureFolder(folder)
+		Raster.counter += 1
+		local path = string.format("%s/%s_%d.png", folder, name or "img", Raster.counter)
+		Executor.writefile(path, encodePng(buffer.tostring(pixels), width, height))
+		return Content.fromUri(Executor.getcustomasset(path))
+	end)
+	return ok and content or nil
+end
+
+local Icons = { cache = {}, lucide = nil }
+
+local ICON_ALIASES = {
+	rage = "crosshair",
+	aimbot = "crosshair",
+	legit = "mouseLeft",
+	mouse = "mouseLeft",
+	visuals = "swatches",
+	world = "vector",
+	inventory = "stack",
+	misc = "flask",
+	hotkeys = "keyboard",
+	movement = "wind",
+	settings = "gear",
+	volume = "speaker",
+	sound = "speaker",
+	cart = "money",
+	box = "boxDraw",
+	user = "person",
+	flame = "burning",
+	hud = "gauge",
+	events = "listBullets",
+}
+
+local LUCIDE_NAMES = {
+	crosshair = "crosshair",
+	mouseLeft = "mouse",
+	mouseRight = "mouse-pointer-click",
+	swatches = "palette",
+	vector = "globe",
+	stack = "layers",
+	flask = "flask-conical",
+	keyboard = "keyboard",
+	wind = "wind",
+	gear = "settings",
+	speaker = "volume-2",
+	money = "dollar-sign",
+	boxDraw = "box",
+	person = "user",
+	users = "users",
+	search = "search",
+	sun = "sun",
+	moon = "moon",
+	check = "check",
+	close = "x",
+	code = "code",
+	gauge = "gauge",
+	timer = "timer",
+	pulse = "activity",
+	signal = "signal",
+	clock = "clock",
+	star = "star",
+}
+
+local function decodeMask(data, count)
+	local pixels = buffer.create(count * 4)
+	local position, written = 1, 0
+	while position < #data and written < count do
+		local alpha, run = string.byte(data, position, position + 1)
+		position += 2
+		for _ = 1, run do
+			if written >= count then
+				break
+			end
+			local offset = written * 4
+			buffer.writeu8(pixels, offset, 255)
+			buffer.writeu8(pixels, offset + 1, 255)
+			buffer.writeu8(pixels, offset + 2, 255)
+			buffer.writeu8(pixels, offset + 3, alpha)
+			written += 1
+		end
+	end
+	return pixels
+end
+
+function Icons.resolve(name)
+	name = tostring(name or "")
+	return ICON_ALIASES[name] or name
+end
+
+function Icons.dimensions(name)
+	local glyph = Art.glyphs[Icons.resolve(name)]
+	if glyph then
+		return glyph.w, glyph.h
+	end
+	return nil
+end
+
+function Icons.get(name)
+	name = Icons.resolve(name)
+	local cached = Icons.cache[name]
+	if cached ~= nil then
+		return cached or nil
+	end
+	local result = false
+	local glyph = Art.glyphs[name]
+	if glyph then
+		local content = Raster.image(decodeMask(glyph.data, glyph.w * glyph.h), glyph.w, glyph.h, "icon")
+		if content then
+			result = { content = content }
+		end
+	end
+	if not result then
+		if Icons.lucide == nil then
+			local ok, module = pcall(function()
+				return loadstring(game:HttpGet(Config.LucideUrl))()
+			end)
+			Icons.lucide = ok and type(module) == "table" and module or false
+		end
+		local lucideName = LUCIDE_NAMES[name] or name
+		if Icons.lucide then
+			local ok, asset = pcall(Icons.lucide.GetAsset, lucideName, 48)
+			if ok and asset then
+				result = { image = asset.Url, rectSize = asset.ImageRectSize, rectOffset = asset.ImageRectOffset }
+			end
+		end
+	end
+	Icons.cache[name] = result
+	return result or nil
+end
+
+function Icons.apply(target, name)
+	local icon = Icons.get(name)
+	if not target or not icon then
+		return false
+	end
+	pcall(function()
+		if icon.content then
+			target.Image = ""
+			target.ImageContent = icon.content
+		else
+			target.Image = icon.image
+			target.ImageRectSize = icon.rectSize
+			target.ImageRectOffset = icon.rectOffset
+		end
+	end)
+	return true
+end
+
+local function iconLabel(name, props)
+	local className = props.ClassName or "ImageLabel"
+	props.ClassName = nil
+	props.BackgroundTransparency = props.BackgroundTransparency or 1
+	local image = create(className, props)
+	Icons.apply(image, name)
+	return image
+end
+
+local Typeface = { faces = {} }
+
+local BASE64 = {}
+do
+	local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	for index = 1, 64 do
+		BASE64[string.byte(alphabet, index)] = index - 1
+	end
+end
+
+local function base64Decode(text)
+	local crypt = getfenv().crypt
+	if type(crypt) == "table" then
+		local decoder = crypt.base64decode or crypt.base64_decode
+		if type(decoder) == "function" then
+			local ok, result = pcall(decoder, text)
+			if ok and type(result) == "string" and #result > 0 then
+				return result
+			end
+		end
+	end
+	local clean = string.gsub(text, "[^A-Za-z0-9+/=]", "")
+	local out = {}
+	for index = 1, #clean, 4 do
+		local a, b = BASE64[string.byte(clean, index)] or 0, BASE64[string.byte(clean, index + 1)] or 0
+		local c, d = BASE64[string.byte(clean, index + 2)], BASE64[string.byte(clean, index + 3)]
+		local value = a * 262144 + b * 4096 + (c or 0) * 64 + (d or 0)
+		local first, second, third = math.floor(value / 65536) % 256, math.floor(value / 256) % 256, value % 256
+		if c == nil then
+			out[#out + 1] = string.char(first)
+		elseif d == nil then
+			out[#out + 1] = string.char(first, second)
+		else
+			out[#out + 1] = string.char(first, second, third)
+		end
+	end
+	return table.concat(out)
+end
+
+function Typeface.load()
+	if Typeface.family ~= nil then
+		return
+	end
+	Typeface.family = false
+	if not (Executor.writefile and Executor.getcustomasset and Executor.isfile) then
+		return
+	end
+	local ok = pcall(function()
+		local folder = Config.Folder .. "/storage/fonts"
+		ensureFolder(folder)
+		local faces = {}
+		for _, face in ipairs({ { weight = 400, name = "Regular", data = Art.font.regular }, { weight = 700, name = "Bold", data = Art.font.bold } }) do
+			local path = string.format("%s/Menu-%d.ttf", folder, face.weight)
+			if not Executor.isfile(path) then
+				Executor.writefile(path, base64Decode(face.data))
+			end
+			table.insert(faces, { name = face.name, weight = face.weight, style = "normal", assetId = Executor.getcustomasset(path) })
+		end
+		local familyPath = folder .. "/Menu.json"
+		Executor.writefile(familyPath, Services.HttpService:JSONEncode({ name = "Menu", faces = faces }))
+		Typeface.family = Executor.getcustomasset(familyPath)
+	end)
+	if not ok then
+		Typeface.family = false
+	end
+end
+
+function Typeface.face(bold)
+	local key = bold and "bold" or "regular"
+	if Typeface.faces[key] then
+		return Typeface.faces[key]
+	end
+	local weight = bold and Enum.FontWeight.Bold or Enum.FontWeight.Regular
+	local ok, face = false, nil
+	if Typeface.family then
+		ok, face = pcall(Font.new, Typeface.family, weight, Enum.FontStyle.Normal)
+	end
+	if not ok or not face then
+		ok, face = pcall(Font.fromName, "Arimo", weight, Enum.FontStyle.Normal)
+	end
+	if not ok or not face then
+		face = Font.fromEnum(Enum.Font.SourceSans)
+	end
+	Typeface.faces[key] = face
+	return face
+end
+
+function Typeface.mono()
+	if not Typeface.faces.mono then
+		local ok, face = pcall(Font.fromName, "Inconsolata", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+		Typeface.faces.mono = ok and face or Typeface.face()
+	end
+	return Typeface.faces.mono
+end
+
+local Shadow = { DROP = 3, TRANSPARENCY = 0.3 }
+
+function Shadow.attach(target, zIndex)
+	if not target or not target.Parent then
+		return nil
+	end
+	local glyph = Art.glyphs.shadow
+	if not glyph or not Icons.get("shadow") then
+		return nil
+	end
+	local pad, slice = Art.shadow.pad, Art.shadow.slice
+	local anchor = target.AnchorPoint
+	local offsetX = -pad * (1 - 2 * anchor.X)
+	local offsetY = -pad * (1 - 2 * anchor.Y)
+	local shadow = iconLabel("shadow", {
+		Name = "Shadow",
+		AnchorPoint = anchor,
+		ImageColor3 = Color3.new(0, 0, 0),
+		ImageTransparency = Shadow.TRANSPARENCY,
+		ScaleType = Enum.ScaleType.Slice,
+		SliceCenter = Rect.new(slice, slice, glyph.w - slice, glyph.h - slice),
+		ZIndex = (zIndex or target.ZIndex) - 1,
+		Parent = target.Parent,
 	})
-	return create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromOffset(4.5, 0),
-		Size = UDim2.fromOffset(6.4, 6.4),
-		Rotation = 45,
-		BackgroundColor3 = color,
-		Parent = holder,
-	}, { corner(1) })
+	local function sync()
+		local position = target.Position
+		shadow.Position = UDim2.new(position.X.Scale, position.X.Offset + offsetX, position.Y.Scale, position.Y.Offset + offsetY + Shadow.DROP)
+		local size = target.AbsoluteSize
+		shadow.Size = UDim2.fromOffset(size.X + pad * 2, size.Y + pad * 2)
+		shadow.Visible = target.Visible
+	end
+	sync()
+	connect(target:GetPropertyChangedSignal("Position"), sync)
+	connect(target:GetPropertyChangedSignal("AbsoluteSize"), sync)
+	connect(target:GetPropertyChangedSignal("Visible"), sync)
+	return shadow
+end
+
+function Shadow.fade(shadow, shown, info)
+	if shadow then
+		Motion.to(shadow, info or Motion.HOVER_IN, { ImageTransparency = shown and Shadow.TRANSPARENCY or 1 })
+	end
 end
 
 local Store = { Values = {}, Global = {} }
-
-local function readValue(item)
-	local value = Store.Values[item.key]
-	if value == nil then
-		value = item.default
-	end
-	return copyValue(value)
-end
-
-local function notifyWatchers(key, value, instant)
-	Runtime.current[key] = value
-	for _, watcher in ipairs(Runtime.watchers[key] or {}) do
-		watcher(value, instant)
-	end
-end
-
-local function watch(key, watcher)
-	Runtime.watchers[key] = Runtime.watchers[key] or {}
-	table.insert(Runtime.watchers[key], watcher)
-	watcher(Runtime.current[key], true)
-end
-
-local function runCallback(item, value)
-	if not item.callback then
-		return
-	end
-	local ok, message = xpcall(item.callback, debug.traceback, value)
-	if not ok then
-		warn(string.format("[Neurothycal UI] callback of %s failed:\n%s", tostring(item.key), tostring(message)))
-	end
-end
-
-local function bind(item, apply)
-	local function refresh()
-		local value = apply(readValue(item), true)
-		notifyWatchers(item.key, value, true)
-		runCallback(item, value)
-	end
-	table.insert(Runtime.bindings, refresh)
-
-	local value = apply(readValue(item), true)
-	notifyWatchers(item.key, value, true)
-	if string.sub(item.key, 1, 5) == "menu_" then
-		runCallback(item, value)
-	end
-
-	return function(newValue)
-		newValue = apply(newValue, false)
-		Store.Values[item.key] = copyValue(newValue)
-		notifyWatchers(item.key, newValue, false)
-		Runtime.saveMenuValue(item.key)
-		runCallback(item, newValue)
-	end
-end
-
-local function refreshAll()
-	for _, refresh in ipairs(Runtime.bindings) do
-		refresh()
-	end
-end
-
 local Files = {}
 
 function Files.path(name)
-	return Config.CONFIG_FOLDER .. "/" .. name .. ".json"
+	return Config.Folder .. "/" .. name .. ".json"
 end
 
 function Files.memory()
-	local ok, decoded = pcall(HttpService.JSONDecode, HttpService, player:GetAttribute(Config.CONFIG_ATTRIBUTE) or "{}")
+	local ok, decoded = pcall(Services.HttpService.JSONDecode, Services.HttpService, player:GetAttribute(Config.MemoryAttribute) or "{}")
 	return ok and type(decoded) == "table" and decoded or {}
 end
 
 function Files.setMemory(memory)
-	local ok, data = pcall(HttpService.JSONEncode, HttpService, memory)
+	local ok, data = pcall(Services.HttpService.JSONEncode, Services.HttpService, memory)
 	if ok then
-		player:SetAttribute(Config.CONFIG_ATTRIBUTE, data)
+		player:SetAttribute(Config.MemoryAttribute, data)
 	end
 end
 
 function Files.write(name, data)
-	if FileApi.write then
-		if FileApi.makeFolder and FileApi.folderExists and not FileApi.folderExists(Config.CONFIG_FOLDER) then
-			FileApi.makeFolder(Config.CONFIG_FOLDER)
-		end
-		return (pcall(FileApi.write, Files.path(name), data))
+	if Executor.writefile then
+		ensureFolder(Config.Folder)
+		return (pcall(Executor.writefile, Files.path(name), data))
 	end
 	local memory = Files.memory()
 	memory[name] = data
@@ -826,19 +1716,20 @@ function Files.write(name, data)
 end
 
 function Files.read(name)
-	if FileApi.read and FileApi.exists then
-		if select(2, pcall(FileApi.exists, Files.path(name))) ~= true then
+	if Executor.readfile and Executor.isfile then
+		local ok, exists = pcall(Executor.isfile, Files.path(name))
+		if not ok or not exists then
 			return nil
 		end
-		local ok, content = pcall(FileApi.read, Files.path(name))
-		return ok and content or nil
+		local success, content = pcall(Executor.readfile, Files.path(name))
+		return success and content or nil
 	end
 	return Files.memory()[name]
 end
 
 function Files.delete(name)
-	if FileApi.delete then
-		pcall(FileApi.delete, Files.path(name))
+	if Executor.delfile then
+		pcall(Executor.delfile, Files.path(name))
 		return
 	end
 	local memory = Files.memory()
@@ -848,8 +1739,8 @@ end
 
 function Files.configs()
 	local names = {}
-	if FileApi.list then
-		local ok, paths = pcall(FileApi.list, Config.CONFIG_FOLDER)
+	if Executor.listfiles then
+		local ok, paths = pcall(Executor.listfiles, Config.Folder)
 		for _, path in ipairs(ok and paths or {}) do
 			local name = string.match(path, "([^/\\]+)%.json$")
 			if name and string.sub(name, 1, 1) ~= "_" then
@@ -879,19 +1770,19 @@ local function saveGlobal()
 		end
 	end
 	Store.Global.menu = menu
-	local ok, data = pcall(HttpService.JSONEncode, HttpService, Store.Global)
+	local ok, data = pcall(Services.HttpService.JSONEncode, Services.HttpService, Store.Global)
 	if ok then
 		Files.write("_global", data)
 	end
 end
 
 local function scheduleGlobalSave()
-	if Runtime.globalSavePending then
+	if R.globalSavePending then
 		return
 	end
-	Runtime.globalSavePending = true
+	R.globalSavePending = true
 	task.delay(1, function()
-		Runtime.globalSavePending = false
+		R.globalSavePending = false
 		saveGlobal()
 	end)
 end
@@ -901,11 +1792,69 @@ local function loadGlobal()
 	if type(data) ~= "string" then
 		return
 	end
-	local ok, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+	local ok, decoded = pcall(Services.HttpService.JSONDecode, Services.HttpService, data)
 	if ok and type(decoded) == "table" then
 		Store.Global = decoded
 		for key, value in pairs(type(decoded.menu) == "table" and decoded.menu or {}) do
 			Store.Values[key] = value
+		end
+	end
+end
+
+local function readValue(item)
+	local value = Store.Values[item.key]
+	if value == nil then
+		value = item.default
+	end
+	return copyValue(value)
+end
+
+local function notifyWatchers(key, value)
+	R.current[key] = value
+	for _, watcher in ipairs(table.clone(R.watchers[key] or {})) do
+		watcher(value)
+	end
+end
+
+local function watch(key, watcher)
+	R.watchers[key] = R.watchers[key] or {}
+	table.insert(R.watchers[key], watcher)
+	watcher(R.current[key])
+end
+
+local function runCallback(item, value)
+	if not item.callback then
+		return
+	end
+	local ok, message = xpcall(item.callback, debug.traceback, value)
+	if not ok then
+		warn(string.format("[Neurothycal UI] callback of %s failed:\n%s", tostring(item.key), tostring(message)))
+	end
+end
+
+local function bind(item, apply)
+	local function refresh()
+		local value = apply(readValue(item), true)
+		notifyWatchers(item.key, value)
+		runCallback(item, value)
+	end
+	table.insert(R.bindings, refresh)
+
+	local value = apply(readValue(item), true)
+	notifyWatchers(item.key, value)
+	if string.sub(item.key, 1, 5) == "menu_" then
+		runCallback(item, value)
+	end
+
+	return function(newValue, silent)
+		newValue = apply(newValue, false)
+		Store.Values[item.key] = copyValue(newValue)
+		notifyWatchers(item.key, newValue)
+		if string.sub(item.key, 1, 5) == "menu_" then
+			scheduleGlobalSave()
+		end
+		if not silent then
+			runCallback(item, newValue)
 		end
 	end
 end
@@ -917,8 +1866,12 @@ local function saveConfig(name)
 			values[key] = value
 		end
 	end
-	local ok, data = pcall(HttpService.JSONEncode, HttpService, values)
-	return ok and Files.write(name, data)
+	local ok, data = pcall(Services.HttpService.JSONEncode, Services.HttpService, values)
+	local written = ok and Files.write(name, data)
+	if written then
+		R.configName = name
+	end
+	return written
 end
 
 local function loadConfig(name)
@@ -926,7 +1879,7 @@ local function loadConfig(name)
 	if type(data) ~= "string" then
 		return false
 	end
-	local ok, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+	local ok, decoded = pcall(Services.HttpService.JSONDecode, Services.HttpService, data)
 	if not ok or type(decoded) ~= "table" then
 		return false
 	end
@@ -936,2146 +1889,572 @@ local function loadConfig(name)
 		end
 	end
 	Store.Values = decoded
-	refreshAll()
+	for _, refresh in ipairs(R.bindings) do
+		refresh()
+	end
+	R.configName = name
 	return true
 end
-loadGlobal()
 
-Runtime.themeName = Themes[Store.Global.theme] and Store.Global.theme or "light"
-for key, color in pairs(Themes[Runtime.themeName]) do
-	Theme[key] = color
+local Popup = { WIDTH = 194, PAD = 6, PAD_X = 7, RISE = 8, DROP = 4, MARGIN = 8, MIN_H = 120, OFFSET = 6, current = nil }
+Popup.__index = Popup
+
+function Popup.blocks(instance)
+	local current = Popup.current
+	if not current or not current.open or not current.frame then
+		return false
+	end
+	if instance == nil then
+		return true
+	end
+	return not instance:IsDescendantOf(current.frame)
 end
 
-function Runtime.saveMenuValue(key)
-	if string.sub(key, 1, 5) == "menu_" then
-		scheduleGlobalSave()
-	end
+local function isInside(popup, instance)
+	return popup ~= nil and instance ~= nil and popup.frame ~= nil and instance:IsDescendantOf(popup.frame)
 end
 
-do
-	local saved = type(Store.Global.windowSize) == "table" and Store.Global.windowSize or {}
-	Runtime.windowSize = Vector2.new(
-		math.clamp(tonumber(saved.x) or Layout.WINDOW.X, Layout.MIN_SIZE.X, Layout.MAX_SIZE.X),
-		math.clamp(tonumber(saved.y) or Layout.WINDOW.Y, Layout.MIN_SIZE.Y, Layout.MAX_SIZE.Y)
-	)
-end
-
-UI.screenGui = create("ScreenGui", {
-	Name = Config.GUI_NAME,
-	ResetOnSpawn = false,
-	IgnoreGuiInset = true,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	DisplayOrder = 50,
-	Parent = guiParent,
-})
-
-UI.windowFader = createFader({
-	Name = "Window",
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = Runtime.windowTarget,
-	Size = UDim2.fromOffset(Runtime.windowSize.X, Runtime.windowSize.Y),
-	Parent = UI.screenGui,
-})
-UI.windowScales = { create("UIScale", { Parent = UI.windowFader.plain }) }
-
-UI.root = create("Frame", {
-	Position = UDim2.fromOffset(1, 1),
-	Size = UDim2.new(1, -2, 1, -2),
-	BackgroundColor3 = Theme.Window,
-	BackgroundTransparency = 0.04,
-	Active = true,
-}, { corner(7), stroke(Theme.WindowStroke) })
-UI.windowFader.setContent(UI.root)
-
-UI.backdrop = create("CanvasGroup", {
-	Size = UDim2.fromScale(1, 1),
-	BackgroundTransparency = 1,
-	Parent = UI.root,
-}, { corner(7) })
-
-accented(create("Frame", {
-	AnchorPoint = Vector2.new(0, 1),
-	Position = UDim2.fromScale(0, 1),
-	Size = UDim2.fromScale(1, 0.45),
-	Parent = UI.backdrop,
-}, {
-	create("UIGradient", {
-		Rotation = 90,
-		Transparency = NumberSequence.new(1, 0.72),
-	}),
-}), "BackgroundColor3")
-
-UI.watermark = create("Frame", {
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromOffset(1420, 1060),
-	BackgroundTransparency = 1,
-	Rotation = -18,
-	Parent = UI.backdrop,
-})
-UI.backdropLabels = {}
-for rowIndex = 0, 12 do
-	for column = 0, 6 do
-		table.insert(UI.backdropLabels, accented(label({
-			Text = Config.WATERMARK,
-			Font = Fonts.Bold,
-			TextSize = 27,
-			TextTransparency = 0.86,
-			Position = UDim2.fromOffset(column * 235 - (rowIndex % 2) * 110, rowIndex * 88),
-			Size = UDim2.fromOffset(230, 40),
-			Parent = UI.watermark,
-		}), "TextColor3"))
-	end
-end
-
-UI.overlay = create("Frame", {
-	Name = "Overlay",
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = Runtime.windowTarget,
-	Size = UDim2.fromOffset(Runtime.windowSize.X, Runtime.windowSize.Y),
-	BackgroundTransparency = 1,
-	ZIndex = 5,
-	Parent = UI.screenGui,
-})
-UI.overlayScale = create("UIScale", { Parent = UI.overlay })
-
-local function startDrag(onMove, onEnd)
-	Runtime.activeDrag, Runtime.activeDragEnd = onMove, onEnd
-end
-
-local function cancelListening()
-	if Runtime.listeningBind then
-		Runtime.listeningBind(nil)
-	end
-end
-
-local function glide(objects, position)
-	for _, object in ipairs(objects) do
-		tween(object, { Position = position }, 0.09)
-	end
-end
-
-local popupStack = {}
-local hideTooltip
-
-local function closePopups(level)
-	if hideTooltip then
-		hideTooltip()
-	end
-	for index = #popupStack, level or 1, -1 do
-		local entry = popupStack[index]
-		popupStack[index] = nil
-		entry.catcher:Destroy()
-		entry.close()
-	end
-end
-
-local function pushPopup(level, close)
-	closePopups(level)
-	local catcher = button({
-		Position = UDim2.fromOffset(-5000, -5000),
-		Size = UDim2.fromOffset(10000, 10000),
-		ZIndex = level * 2,
-		Parent = UI.overlay,
-	})
-	catcher.MouseButton1Click:Connect(function()
-		closePopups(level)
-	end)
-	popupStack[level] = { catcher = catcher, close = close }
-end
-
-local function popupPosition(anchor, width, height, alignRight)
-	local scale = UI.overlayScale.Scale
-	local position = (anchor.AbsolutePosition - UI.overlay.AbsolutePosition) / scale
-	local size = anchor.AbsoluteSize / scale
-	local x = alignRight and (position.X + size.X - width) or position.X
-	local y = position.Y + size.Y + 3
-	if y + height > Runtime.windowSize.Y - 4 then
-		y = position.Y - height - 3
-	end
-	return math.clamp(x, 4, Runtime.windowSize.X - width - 4), math.max(y, 4)
-end
-
-local function openFloating(anchor, level, width, height)
-	local x, y = popupPosition(anchor, width, height, false)
-	local target = UDim2.fromOffset(x, y)
-	local hidden = target + UDim2.fromOffset(0, -5)
-	local fader = createFader({
-		Position = target,
-		Size = UDim2.fromOffset(width, height),
-		ZIndex = level * 2 + 1,
-		Parent = UI.overlay,
-	}, true)
-	local frame = create("Frame", {
-		Position = UDim2.fromOffset(1, 1),
-		Size = UDim2.new(1, -2, 1, -2),
-		BackgroundColor3 = Theme.Popup,
-		ClipsDescendants = true,
-		Active = true,
-	}, { corner(4), stroke(Theme.PopupStroke) })
-	fader.setContent(frame)
-
-	pushPopup(level, function()
-		fader.fade(false, 0.16, Enum.EasingStyle.Quad, nil, hidden)
-		task.delay(0.2, function()
-			fader.plain:Destroy()
-		end)
-	end)
-	fader.fade(true, 0.24, Enum.EasingStyle.Quint, hidden, target)
-	return frame, fader
-end
-
-local function createPickerWidget(parent, top, width, svHeight, minimal)
-	local innerWidth = width - 16
-	local hueY = top + 8 + svHeight + 6
-	local alphaY = hueY + 12
-	local hexY = alphaY + 12
-
-	local svMap = create("Frame", {
-		Position = UDim2.fromOffset(8, top + 8),
-		Size = UDim2.fromOffset(innerWidth, svHeight),
-		BackgroundColor3 = Color3.new(1, 0, 0),
-		Parent = parent,
-	}, {
-		corner(4),
-		create("Frame", {
-			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Theme.White,
-		}, { corner(4), create("UIGradient", { Transparency = NumberSequence.new(0, 1) }) }),
-		create("Frame", {
-			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Theme.Black,
-		}, { corner(4), create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0) }) }),
-	})
-
-	local accentStrokes = {}
-	local svCursor = create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(8, 8),
-		BackgroundTransparency = 1,
-		ZIndex = 2,
-		Parent = svMap,
-	}, { round(), stroke(Theme.White, 1.5) })
-	table.insert(accentStrokes, stroke(Theme.Accent, 1, create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(1, 3, 1, 3),
-		BackgroundTransparency = 1,
-		Parent = svCursor,
-	}, { round() })))
-
-	local hueKeypoints = {}
-	for index = 0, 6 do
-		table.insert(hueKeypoints, ColorSequenceKeypoint.new(index / 6, Color3.fromHSV(index / 6, 1, 1)))
-	end
-	local hueBar = create("Frame", {
-		Position = UDim2.fromOffset(8, hueY),
-		Size = UDim2.fromOffset(innerWidth, 7),
-		BackgroundColor3 = Theme.White,
-		Parent = parent,
-	}, { corner(3), create("UIGradient", { Color = ColorSequence.new(hueKeypoints) }) })
-	local hueCursor = create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.new(0, 3, 1, 2),
-		BackgroundColor3 = Theme.White,
-		ZIndex = 2,
-		Parent = hueBar,
-	}, { round() })
-	table.insert(accentStrokes, stroke(Theme.Accent, 1, hueCursor))
-
-	local alphaBar = create("Frame", {
-		Position = UDim2.fromOffset(8, alphaY),
-		Size = UDim2.fromOffset(innerWidth, 7),
-		BackgroundTransparency = 1,
-		Parent = parent,
-	})
-
-	local alphaClip = create("CanvasGroup", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.fromRGB(205, 205, 208),
-		Parent = alphaBar,
-	}, { corner(3) })
-	for column = 0, math.ceil(innerWidth / 3.5) do
-		create("Frame", {
-			Position = UDim2.fromOffset(column * 3.5, (column % 2) * 3.5),
-			Size = UDim2.fromOffset(3.5, 3.5),
-			BackgroundColor3 = Color3.fromRGB(120, 120, 126),
-			Parent = alphaClip,
-		})
-	end
-	local alphaFill = create("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Theme.White,
-		Parent = alphaClip,
-	}, { create("UIGradient", { Transparency = NumberSequence.new(1, 0) }) })
-	local alphaCursor = create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.new(0, 3, 1, 2),
-		BackgroundColor3 = Theme.White,
-		ZIndex = 2,
-		Parent = alphaBar,
-	}, { round() })
-	table.insert(accentStrokes, stroke(Theme.Accent, 1, alphaCursor))
-
-	local state = { h = 0, s = 0, v = 1, a = 1, onChange = nil }
-	local hexBox
-
-	local function display(notify)
-		local color = Color3.fromHSV(state.h, state.s, state.v)
-		svMap.BackgroundColor3 = Color3.fromHSV(state.h, 1, 1)
-		svCursor.Position = UDim2.fromScale(state.s, 1 - state.v)
-		hueCursor.Position = UDim2.fromScale(state.h, 0.5)
-		alphaFill.BackgroundColor3 = color
-		alphaCursor.Position = UDim2.fromScale(state.a, 0.5)
-		if hexBox then
-			hexBox.Text = string.upper(color:ToHex())
-		end
-		if notify and state.onChange then
-			state.onChange(formatColor(color, state.a))
-		end
-	end
-
-	local function setColor(color)
-		local h, s, v = color:ToHSV()
-		if s > 0 and v > 0 then
-			state.h = h
-		end
-		state.s, state.v = s, v
-	end
-
-	local function dragArea(area, update)
-		local hit = button({
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.new(1, 6, 1, 4),
-			ZIndex = 3,
-			Parent = area,
-		})
-		hit.InputBegan:Connect(function(input)
-			if not isDragInput(input) then
-				return
+function Popup.hold(target)
+	if target then
+		local found, node = false, Popup.current
+		while node do
+			if node == target then
+				found = true
+				break
 			end
-			local function move(position)
-				local relative = (Vector2.new(position.X, position.Y) - area.AbsolutePosition) / area.AbsoluteSize
-				update(math.clamp(relative.X, 0, 1), math.clamp(relative.Y, 0, 1))
-				display(true)
-			end
-			move(input.Position)
-			startDrag(move)
-		end)
-	end
-
-	dragArea(svMap, function(x, y)
-		state.s, state.v = x, 1 - y
-	end)
-	dragArea(hueBar, function(x)
-		state.h = x
-	end)
-	dragArea(alphaBar, function(x)
-		state.a = x
-	end)
-
-	local widget = { height = alphaY + 7 + 8 - top }
-
-	if not minimal then
-		hexBox = textBox({
-			Position = UDim2.fromOffset(8, hexY),
-			Size = UDim2.fromOffset(innerWidth, 15),
-			BackgroundColor3 = Theme.Field,
-			TextSize = 9,
-			PlaceholderText = "hex",
-			Parent = parent,
-		}, { corner(3) })
-		hexBox.FocusLost:Connect(function()
-			local color = parseColor(trim(hexBox.Text))
-			if color then
-				setColor(color)
-			end
-			display(color ~= nil)
-		end)
-
-		widget.height = hexY + 15 + 8 - top
-	end
-
-	function widget.open(value, onChange)
-		for _, accentStroke in ipairs(accentStrokes) do
-			accentStroke.Color = Theme.Accent
+			node = node.owner
 		end
-		local color, alpha = parseColor(value)
-		state.onChange = nil
-		setColor(color or Theme.White)
-		state.a = alpha or 1
-		display(false)
-		state.onChange = onChange
-	end
-
-	function widget.release()
-		state.onChange = nil
-	end
-
-	return widget
-end
-
-local function openList(anchor, level, width, options, isSelected, onPick, settings)
-	settings = settings or {}
-	local density = Runtime.density
-	local searchHeight = settings.search and 24 or 0
-	local itemHeight = math.floor(17 * density + 0.5)
-	local overflow = #options > 9
-	local listHeight = math.min(#options, 9) * itemHeight + 6
-
-	local baseHeight = listHeight + searchHeight + 2
-	local frame, fader = openFloating(anchor, level, width, baseHeight)
-
-	local picker, pickerOption
-
-	local function setPopupHeight(height)
-		local size = UDim2.fromOffset(width, height)
-		tween(fader.plain, { Size = size }, 0.24, Enum.EasingStyle.Quint)
-	end
-
-	local function togglePicker(option, swatch)
-		if pickerOption == option then
-			pickerOption = nil
-			picker.release()
-			setPopupHeight(baseHeight)
-			return
-		end
-		picker = picker or createPickerWidget(frame, searchHeight + listHeight, width - 2, 104, true)
-		pickerOption = option
-		picker.open(settings.colorOf(option), function(value)
-			swatch.BackgroundColor3 = parseColor(value)
-			settings.onColor(option, value)
-		end)
-		setPopupHeight(baseHeight + picker.height)
-	end
-
-	local entries = {}
-	local function refresh()
-		for _, entry in ipairs(entries) do
-			entry.text.TextColor3 = isSelected(entry.option) and Theme.Accent or Theme.TextOff
-		end
-	end
-
-	if settings.search then
-		local input = textBox({
-			Position = UDim2.fromOffset(5, 5),
-			Size = UDim2.new(1, -10, 0, 15),
-			BackgroundColor3 = Theme.Field,
-			PlaceholderText = "search...",
-			Parent = frame,
-		}, { corner(3) })
-		input:GetPropertyChangedSignal("Text"):Connect(function()
-			local query = string.lower(input.Text)
-			for _, entry in ipairs(entries) do
-				entry.button.Visible = query == "" or string.find(string.lower(entry.option), query, 1, true) ~= nil
-			end
-		end)
-	end
-
-	local scroll = create("ScrollingFrame", {
-		Position = UDim2.fromOffset(0, searchHeight),
-		Size = UDim2.new(1, 0, 0, listHeight),
-		BackgroundTransparency = 1,
-
-		ScrollingEnabled = overflow,
-		ScrollBarThickness = overflow and 2 or 0,
-		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = overflow and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
-		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ScrollBarImageColor3 = Theme.Accent,
-		Parent = frame,
-	}, { list(0), padding(3, 3, 3, 3) })
-
-	for index, option in ipairs(options) do
-		local entryButton = button({
-			Size = UDim2.new(1, 0, 0, itemHeight),
-			BackgroundColor3 = Theme.RowHover,
-			LayoutOrder = index,
-			Parent = scroll,
-		}, { corner(3) })
-		local text = label({
-			Text = option,
-			TextSize = 10 * density,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			Position = UDim2.fromOffset(6, 0),
-			Size = UDim2.new(1, -10, 1, 0),
-			Parent = entryButton,
-		})
-		table.insert(entries, { option = option, text = text, button = entryButton })
-
-		if settings.colorOf then
-			local swatch = button({
-				AnchorPoint = Vector2.new(1, 0.5),
-				Position = UDim2.new(1, -4, 0.5, 0),
-				Size = UDim2.fromOffset(10 * density, 10 * density),
-				BackgroundColor3 = parseColor(settings.colorOf(option)) or Theme.White,
-				BackgroundTransparency = 0,
-				Parent = entryButton,
-			}, { corner(2), stroke(Theme.SwatchStroke) })
-			swatch.MouseButton1Click:Connect(function()
-				togglePicker(option, swatch)
-			end)
-		end
-
-		entryButton.MouseEnter:Connect(function()
-			tween(entryButton, { BackgroundTransparency = 0 }, 0.1)
-		end)
-		entryButton.MouseLeave:Connect(function()
-			tween(entryButton, { BackgroundTransparency = 1 }, 0.1)
-		end)
-		entryButton.MouseButton1Click:Connect(function()
-			onPick(option)
-			refresh()
-		end)
-	end
-	refresh()
-	return frame
-end
-
-local function createFloatingPanel(width, height)
-	local panel = createFader({
-		Size = UDim2.fromOffset(width, height),
-		Parent = UI.overlay,
-	}, true)
-	local holder = create("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Active = true,
-	})
-	panel.setContent(holder)
-	local inner = create("Frame", {
-		Position = UDim2.fromOffset(1, 1),
-		Size = UDim2.new(1, -2, 1, -2),
-		BackgroundColor3 = Theme.Popup,
-		Parent = holder,
-	}, { corner(5), stroke(Theme.PopupStroke) })
-
-	local dragHandle = button({ Size = UDim2.fromScale(1, 1), Parent = inner })
-	connect(dragHandle.InputBegan, function(input)
-		if not isDragInput(input) then
-			return
-		end
-		local startPosition = panel.position()
-		local startInput = input.Position
-		startDrag(function(position)
-			local delta = (position - startInput) / UI.overlayScale.Scale
-			glide({ panel.plain }, startPosition + UDim2.fromOffset(delta.X, delta.Y))
-		end)
-	end)
-	return panel, inner
-end
-
-local function showPanel(panel, anchor, level, onClose)
-	local size = panel.plain.Size
-	local x, y = popupPosition(anchor, size.X.Offset, size.Y.Offset, true)
-	local offset = UDim2.fromOffset(0, 5)
-
-	panel.set("ZIndex", level * 2 + 1)
-	pushPopup(level, function()
-		if onClose then
-			onClose()
-		end
-		panel.fade(false, 0.18, Enum.EasingStyle.Quad, nil, panel.position() + offset)
-	end)
-	panel.fade(true, 0.28, Enum.EasingStyle.Quint, UDim2.fromOffset(x, y) + offset, UDim2.fromOffset(x, y))
-end
-
-local Builders
-
-local function rowHeight(item)
-	return item.height or Layout.HEIGHTS[item.type]
-end
-
-local function createPanel(level)
-	local function heightFor(contentHeight)
-		return contentHeight + 12
-	end
-local panel, inner = createFloatingPanel(Layout.PANEL_WIDTH, heightFor(0))
-	local body = create("Frame", {
-		Position = UDim2.fromOffset(0, 5),
-		Size = UDim2.new(1, 0, 1, -10),
-		BackgroundTransparency = 1,
-		Parent = inner,
-	}, { list(0) })
-
-	local section = { body = body, rows = {}, level = level + 1 }
-	function section.relayout(instant)
-		local visibleHeight = 0
-		for _, row in ipairs(section.rows) do
-			if not row.hidden then
-				visibleHeight += row.height
-			end
-		end
-		local size = UDim2.fromOffset(Layout.PANEL_WIDTH * Runtime.density, heightFor(visibleHeight * Runtime.density))
-		if instant then
-			panel.set("Size", size)
-		else
-			tween(panel.plain, { Size = size }, 0.2, Enum.EasingStyle.Quint)
-		end
-	end
-
-	table.insert(Runtime.panelSections, section)
-	return panel, section
-end
-
-UI.tooltip = createFader({
-	Size = UDim2.fromOffset(Layout.TOOLTIP_WIDTH, 40),
-	ZIndex = 40,
-	Parent = UI.overlay,
-}, true)
-UI.tooltipFrame = create("Frame", {
-	Position = UDim2.fromOffset(1, 1),
-	Size = UDim2.new(1, -2, 1, -2),
-	BackgroundColor3 = Theme.Window,
-}, { corner(3), stroke(Theme.PopupStroke) })
-UI.tooltip.setContent(UI.tooltipFrame)
-UI.tooltipText = label({
-	TextSize = 9,
-	TextColor3 = Theme.Text,
-	TextWrapped = true,
-	TextYAlignment = Enum.TextYAlignment.Top,
-	Position = UDim2.fromOffset(6, 5),
-	Size = UDim2.new(1, -12, 1, -10),
-	Parent = UI.tooltipFrame,
-})
-
-hideTooltip = function()
-	Runtime.tooltipToken += 1
-	if Runtime.tooltipShown then
-		Runtime.tooltipShown = false
-		UI.tooltip.fade(false, 0.16)
-	end
-end
-
-local function measureTooltip(text)
-	local ok, bounds = pcall(function()
-		local params = Instance.new("GetTextBoundsParams")
-		params.Text = text
-		params.Font = Fonts.Regular
-		params.Size = 9
-		params.Width = Layout.TOOLTIP_WIDTH - 14
-		return TextService:GetTextBoundsAsync(params)
-	end)
-	if ok then
-		return bounds.Y
-	end
-	return math.ceil(#text * 5 / (Layout.TOOLTIP_WIDTH - 14)) * 11
-end
-
-local function scheduleTooltip(text)
-	Runtime.tooltipToken += 1
-	local token = Runtime.tooltipToken
-	task.delay(0.35, function()
-		if token ~= Runtime.tooltipToken then
-			return
-		end
-		local height = measureTooltip(text) + 12
-		if token ~= Runtime.tooltipToken then
-			return
-		end
-		local mouse = UserInputService:GetMouseLocation()
-		local position = (mouse - UI.overlay.AbsolutePosition) / UI.overlayScale.Scale
-		local target = UDim2.fromOffset(position.X + 12, position.Y + 12)
-		UI.tooltipText.Text = text
-		UI.tooltip.set("Size", UDim2.fromOffset(Layout.TOOLTIP_WIDTH, height))
-		Runtime.tooltipShown = true
-		UI.tooltip.fade(true, 0.24, Enum.EasingStyle.Quint, target + UDim2.fromOffset(0, 5), target)
-	end)
-end
-
-local function buildColorPicker()
-	local panel, inner = createFloatingPanel(124, 157)
-	local innerScale = create("UIScale", { Parent = inner })
-	local titleLabel = label({
-		Font = Fonts.Medium,
-		TextSize = 10,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Position = UDim2.fromOffset(8, 5),
-		Size = UDim2.new(1, -16, 0, 13),
-		ZIndex = 2,
-		Parent = inner,
-	})
-	local widget = createPickerWidget(inner, 14, 122, 80)
-
-	return function(anchor, level, value, onChange, title, onClose)
-
-		local density = Runtime.density
-		panel.set("Size", UDim2.fromOffset(124 * density, 157 * density))
-		inner.Size = UDim2.new(1 / density, -2 / density, 1 / density, -2 / density)
-		innerScale.Scale = density
-
-		titleLabel.Text = title or "color"
-		widget.open(value, onChange)
-		showPanel(panel, anchor, level, function()
-			widget.release()
-			if onClose then
-				onClose()
-			end
-		end)
-	end
-end
-
-local function openColorPicker(anchor, level, value, onChange, title, onClose)
-	Runtime.openPicker = Runtime.openPicker or buildColorPicker()
-	Runtime.openPicker(anchor, level, value, onChange, title, onClose)
-end
-
-local Hotkeys = {
-	MODES = { "hold", "toggle", "always" },
-	entries = {},
-	refresh = function() end,
-}
-
-local function keyLabel(name)
-	local short = { MouseButton1 = "m1", MouseButton2 = "m2", MouseButton3 = "m3", None = "none" }
-	return short[name] or string.lower(name)
-end
-
-local function createRow(section, item, order, onHover)
-	local height = rowHeight(item)
-	local density = Runtime.density
-
-	local outer = create("Frame", {
-		Name = item.name,
-		Size = UDim2.new(1, 0, 0, height * density),
-		BackgroundTransparency = 1,
-		LayoutOrder = order,
-		Parent = section.body,
-	})
-	local row = create("Frame", {
-		Size = UDim2.fromScale(1 / density, 1 / density),
-		BackgroundTransparency = 1,
-	})
-	local rowEntry = {
-		frame = outer,
-		body = row,
-		scale = create("UIScale", { Scale = density, Parent = row }),
-		name = string.lower(item.name),
-		height = height,
-	}
-	if item.depends then
-		rowEntry.fader = createFader({
-			Size = UDim2.new(1, 0, 0, height * density),
-			Parent = outer,
-		})
-		rowEntry.fader.setContent(row)
-	else
-		row.Parent = outer
-	end
-	table.insert(section.rows, rowEntry)
-	table.insert(Runtime.rows, rowEntry)
-
-	local highlight = noFade(create("Frame", {
-		Position = UDim2.fromOffset(3, 0),
-		Size = UDim2.new(1, -6, 1, 0),
-		BackgroundColor3 = Theme.RowHover,
-		BackgroundTransparency = 1,
-		Parent = row,
-	}, { corner(3) }))
-
-	local inside = {}
-	local hovered = false
-	local function update()
-		local now = next(inside) ~= nil
-		if now == hovered then
-			return
-		end
-		hovered = now
-		tween(highlight, { BackgroundTransparency = now and 0.5 or 1 }, 0.12)
-		if item.tooltip then
-			if now then
-				scheduleTooltip(item.tooltip)
-			else
-				hideTooltip()
-			end
-		end
-		if onHover then
-			onHover(now)
-		end
-	end
-	local function track(object)
-		connect(object.MouseEnter, function()
-			inside[object] = true
-			update()
-		end)
-		connect(object.MouseLeave, function()
-			inside[object] = nil
-			update()
-		end)
-	end
-	track(row)
-
-	if item.depends then
-		local depends = type(item.depends) == "table" and item.depends or { item.depends }
-		local key = (item.dependsPrefix or "") .. depends[1]
-		outer.ClipsDescendants = true
-		watch(key, function(value, instant)
-			local shown
-			if depends[2] == nil then
-				shown = value == true
-			elseif type(depends[2]) == "table" then
-				shown = table.find(depends[2], value) ~= nil
-			else
-				shown = value == depends[2]
-			end
-			if rowEntry.hidden == not shown then
-				return
-			end
-			rowEntry.hidden = not shown
-			rowEntry.token = (rowEntry.token or 0) + 1
-			local token = rowEntry.token
-
-			local goal = { Size = UDim2.new(1, 0, 0, shown and height * Runtime.density or 0) }
-			if shown then
-				outer.Visible = not rowEntry.searchHidden
-			end
-			if instant then
-				outer.Size = goal.Size
-				outer.Visible = shown and not rowEntry.searchHidden
-				rowEntry.fader.snap(shown)
-			else
-
-				rowEntry.fader.fade(shown, shown and 0.3 or 0.16, Enum.EasingStyle.Quint)
-				tween(outer, goal, 0.26, Enum.EasingStyle.Quint).Completed:Once(function()
-					if token == rowEntry.token and rowEntry.hidden then
-						outer.Visible = false
-					end
-				end)
-			end
-			if section.relayout then
-				section.relayout(instant)
-			end
-		end)
-	end
-
-	return row, track
-end
-
-local function iconButton(row, inset, iconName, color)
-	local holder = button({
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(1, -inset, 0.5, 0),
-		Size = UDim2.fromOffset(14, 14),
-		Parent = row,
-	})
-	return holder, createIcon(holder, iconName, 10, color, UDim2.fromScale(0.5, 0.5))
-end
-
-local function CreateSwatch(row, section, colorItem, inset)
-	local swatch = button({
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(1, -inset, 0.5, 0),
-		Size = UDim2.fromOffset(11, 11),
-		BackgroundTransparency = 0,
-		Parent = row,
-	}, { corner(2) })
-	swatch:SetAttribute("NoTheme", true)
-	local swatchStroke = stroke(Theme.SwatchStroke, 1, swatch)
-	local opened = false
-
-	local function paintStroke(active)
-		tween(swatchStroke, { Color = active and Theme.Accent or Theme.SwatchStroke }, 0.12)
-	end
-	connect(swatch.MouseEnter, function()
-		paintStroke(true)
-	end)
-	connect(swatch.MouseLeave, function()
-		paintStroke(opened)
-	end)
-
-	local current
-	local commit = bind(colorItem, function(value)
-		local color, alpha = parseColor(value)
-		if not color then
-			value = colorItem.default
-			color, alpha = parseColor(value)
-		end
-		current = value
-		swatch.BackgroundColor3 = color
-		swatch.BackgroundTransparency = (1 - alpha) * 0.75
-		return current
-	end)
-	connect(swatch.MouseButton1Click, function()
-		opened = true
-		paintStroke(true)
-		openColorPicker(swatch, section.level, current, commit, colorItem.title and colorItem.title(), function()
-			opened = false
-			paintStroke(false)
-		end)
-	end)
-	return commit
-end
-
-local function CreateGear(row, section, inset)
-	local gear, icon = iconButton(row, inset, "gear", Theme.TextOff)
-	local panel, panelSection = createPanel(section.level)
-	connect(gear.MouseEnter, function()
-		tintIcon(icon, Theme.Accent)
-	end)
-	connect(gear.MouseLeave, function()
-		tintIcon(icon, Theme.TextOff)
-	end)
-	connect(gear.MouseButton1Click, function()
-		showPanel(panel, gear, section.level)
-	end)
-	return panelSection
-end
-
-local function openBindPopup(section, entry, commitKey, commitMode)
-	local density = Runtime.density
-	local itemHeight = math.floor(17 * density + 0.5)
-	local anchor = { AbsolutePosition = UserInputService:GetMouseLocation(), AbsoluteSize = Vector2.zero }
-	local frame = openFloating(anchor, section.level, 110 * density, itemHeight * 4 + 5 + 8)
-	local body = create("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Parent = frame,
-	}, { list(0), padding(3, 3, 3, 3) })
-
-	local function addRow(order)
-		local rowButton = button({
-			Size = UDim2.new(1, 0, 0, itemHeight),
-			BackgroundColor3 = Theme.RowHover,
-			LayoutOrder = order,
-			Parent = body,
-		}, { corner(3) })
-		local text = label({
-			TextSize = 10 * density,
-			TextColor3 = Theme.TextOff,
-			Position = UDim2.fromOffset(6, 0),
-			Size = UDim2.new(1, -10, 1, 0),
-			Parent = rowButton,
-		})
-		rowButton.MouseEnter:Connect(function()
-			tween(rowButton, { BackgroundTransparency = 0 }, 0.1)
-		end)
-		rowButton.MouseLeave:Connect(function()
-			tween(rowButton, { BackgroundTransparency = 1 }, 0.1)
-		end)
-		return rowButton, text
-	end
-
-	local keyButton, keyText = addRow(1)
-	local function paintKey(listening)
-		local name = entry.key == "None" and "None" or keyLabel(entry.key)
-		keyText.Text = "key: " .. (listening and "..." or name)
-	end
-	paintKey(false)
-
-	create("Frame", {
-		Size = UDim2.new(1, 0, 0, 5),
-		BackgroundTransparency = 1,
-		LayoutOrder = 2,
-		Parent = body,
-	}, {
-		create("Frame", {
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, 4, 0.5, 0),
-			Size = UDim2.new(1, -8, 0, 1),
-			BackgroundColor3 = Theme.PopupStroke,
-		}),
-	})
-
-	local modeTexts = {}
-	local function paintModes()
-		for mode, text in pairs(modeTexts) do
-			text.TextColor3 = mode == entry.mode and Theme.Accent or Theme.TextOff
-		end
-	end
-	for index, mode in ipairs(Hotkeys.MODES) do
-		local modeButton, text = addRow(2 + index)
-		text.Text = mode
-		modeTexts[mode] = text
-		modeButton.MouseButton1Click:Connect(function()
-			commitMode(mode)
-			paintModes()
-		end)
-	end
-	paintModes()
-
-	keyButton.MouseButton1Click:Connect(function()
-		cancelListening()
-		paintKey(true)
-		Runtime.listeningBind = function(input)
-			local name
-			if input == nil then
-				name = entry.key
-			elseif input.UserInputType == Enum.UserInputType.Keyboard then
-				name = input.KeyCode == Enum.KeyCode.Escape and "None" or input.KeyCode.Name
-			elseif input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.MouseButton3 then
-				name = input.UserInputType.Name
-			else
-				return
-			end
-			Runtime.listeningBind = nil
-			commitKey(name)
-			paintKey(false)
-		end
-	end)
-
-	local popup = popupStack[section.level]
-	local close = popup.close
-	popup.close = function()
-		cancelListening()
-		close()
-	end
-end
-
-local function CreateBindIcon(row, section, item, inset, setter)
-	local icon = createIcon(row, "legit", 10, Theme.TextOff, UDim2.new(1, -inset, 0.5, 0))
-	local entry = { label = item.name, key = "None", mode = "toggle", active = false, setter = setter }
-	table.insert(Hotkeys.entries, entry)
-
-	local function paint()
-		tintIcon(icon, entry.key ~= "None" and Theme.Accent or Theme.TextOff)
-	end
-	table.insert(accentRefreshers, paint)
-
-	local commitKey = bind({ key = item.key, default = item.default or "None" }, function(value)
-		entry.key = type(value) == "string" and value or "None"
-		paint()
-		Hotkeys.refresh()
-		return entry.key
-	end)
-	local commitMode = bind({ key = item.key .. ":mode", default = item.mode or "toggle" }, function(value)
-		entry.mode = table.find(Hotkeys.MODES, value) and value or "toggle"
-		Hotkeys.refresh()
-		return entry.mode
-	end)
-
-	function entry.open()
-		openBindPopup(section, entry, commitKey, commitMode)
-	end
-	entry.setKey = commitKey
-	return entry
-end
-
-local function CreateCheck(section, item, order)
-	local boxStroke
-	local enabled = false
-	local row, track = createRow(section, item, order, function(hovered)
-		tween(boxStroke, { Transparency = hovered and 0 or 1 }, 0.12)
-	end)
-
-	local box = create("Frame", {
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 8, 0.5, 0),
-		Size = UDim2.fromOffset(11, 11),
-		BackgroundColor3 = Theme.CheckOff,
-		Parent = row,
-	}, { corner(2) })
-	boxStroke = noFade(accented(stroke(Theme.Accent, 1, box), "Color"))
-	boxStroke.Transparency = 1
-	local text = label({
-		Text = item.name,
-		TextColor3 = Theme.TextOff,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Position = UDim2.fromOffset(25, 0),
-		Size = UDim2.new(1, -30, 1, 0),
-		Parent = row,
-	})
-
-	local control = { row = row, section = section }
-	local function apply(value, instant)
-		enabled = value == true
-		local duration = instant and 0 or 0.14
-		tween(box, { BackgroundColor3 = enabled and Theme.Accent or Theme.CheckOff }, duration)
-		tween(text, { TextColor3 = enabled and Theme.Text or Theme.TextOff }, duration)
-		if control.bindEntry then
-			control.bindEntry.active = enabled
-			Hotkeys.refresh()
-		end
-		return enabled
-	end
-	local commit = bind(item, apply)
-	control.commit = commit
-	table.insert(accentRefreshers, function()
-		apply(enabled, true)
-	end)
-
-	local hit = button({ Size = UDim2.fromScale(1, 1), Parent = row })
-	track(hit)
-	connect(hit.MouseButton1Click, function()
-		commit(not enabled)
-	end)
-	connect(hit.MouseButton2Click, function()
-		if control.bindEntry then
-			control.bindEntry.open()
-		end
-	end)
-
-	return control
-end
-
-local function CreateColorRow(section, item, order)
-	local row = createRow(section, item, order)
-	local text = label({
-		Text = item.name,
-		Position = UDim2.fromOffset(8, 0),
-		Size = UDim2.new(1, -40, 1, 0),
-		Parent = row,
-	})
-	return { row = row, section = section, text = text }
-end
-
-local function CreateParagraph(section, item, order)
-	local row = createRow(section, item, order)
-	label({
-		Text = item.name,
-		Font = Fonts.Medium,
-		Position = UDim2.fromOffset(8, 2),
-		Size = UDim2.new(1, -16, 0, 13),
-		Parent = row,
-	})
-	local text = label({
-		Text = item.text,
-		TextSize = 9,
-		TextColor3 = Theme.TextOff,
-		TextWrapped = true,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		Position = UDim2.fromOffset(8, 15),
-		Size = UDim2.new(1, -16, 1, -16),
-		Parent = row,
-	})
-	return { row = row, section = section, text = text }
-end
-
-local function CreateInput(section, item, order)
-	local row, track = createRow(section, item, order)
-	label({
-		Text = item.name,
-		Position = UDim2.fromOffset(8, 1),
-		Size = UDim2.new(1, -16, 0, 13),
-		Parent = row,
-	})
-	local box = textBox({
-		Position = UDim2.fromOffset(8, 15),
-		Size = UDim2.new(1, -16, 0, 16),
-		BackgroundColor3 = Theme.Field,
-		ClipsDescendants = true,
-		TextSize = 9,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		PlaceholderText = item.placeholder or "",
-		Parent = row,
-	}, { corner(3), padding(0, 6, 0, 6) })
-	track(box)
-	local boxStroke = noFade(accented(stroke(Theme.Accent, 1, box), "Color"))
-	boxStroke.Transparency = 1
-
-	local function clean(value)
-		local text = tostring(value or "")
-		if item.numeric then
-			text = string.match(text, "^%-?%d*%.?%d*") or ""
-		end
-		if item.maxLength then
-			text = string.sub(text, 1, item.maxLength)
-		end
-		return text
-	end
-
-	local commit = bind(item, function(value)
-		local text = clean(value)
-		if box.Text ~= text then
-			box.Text = text
-		end
-		return text
-	end)
-
-	connect(box.Focused, function()
-		tween(boxStroke, { Transparency = 0 })
-	end)
-	connect(box.FocusLost, function()
-		tween(boxStroke, { Transparency = 1 })
-		commit(box.Text)
-	end)
-	if not item.finished then
-		connect(box:GetPropertyChangedSignal("Text"), function()
-			commit(box.Text)
-		end)
-	end
-	return { row = row, section = section, commit = commit }
-end
-
-local function CreateSlider(section, item, order)
-	local row, track = createRow(section, item, order)
-	local min, max, decimals = item.min, item.max, item.decimals or 0
-	local factor = 10 ^ decimals
-	local suffix = item.suffix or ""
-
-	label({
-		Text = item.name,
-		Position = UDim2.fromOffset(8, 1),
-		Size = UDim2.new(1, -16, 0, 13),
-		Parent = row,
-	})
-	local bar = create("Frame", {
-		Position = UDim2.fromOffset(8, 15),
-		Size = UDim2.new(1, -16, 0, 12),
-		BackgroundColor3 = Theme.Field,
-		Parent = row,
-	}, { corner(3) })
-	local fill = accented(create("Frame", {
-		Size = UDim2.fromScale(0, 1),
-		Parent = bar,
-	}, {
-		corner(3),
-		create("UIGradient", { Transparency = NumberSequence.new(0.75, 0.3) }),
-	}), "BackgroundColor3")
-	local handle = accented(create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.new(0, 3, 1, 0),
-		Parent = bar,
-	}), "BackgroundColor3")
-	local valueBox = textBox({
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		TextSize = 9,
-		ZIndex = 2,
-		Parent = bar,
-	})
-	local hit = button({ Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = bar })
-	track(hit)
-
-	local current = min
-	local function apply(value, instant)
-		value = math.clamp(tonumber(value) or current, min, max)
-		current = math.floor(value * factor + 0.5) / factor
-		local alpha = (current - min) / (max - min)
-		local duration = instant and 0 or 0.08
-		tween(fill, { Size = UDim2.fromScale(alpha, 1) }, duration)
-		tween(handle, { Position = UDim2.fromScale(alpha, 0.5) }, duration)
-		valueBox.Text = (decimals > 0 and string.format("%." .. decimals .. "f", current) or tostring(current)) .. suffix
-		return current
-	end
-	local commit = bind(item, apply)
-
-	local function updateFromPosition(position)
-		local alpha = math.clamp((position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-		commit(min + (max - min) * alpha)
-	end
-
-	connect(hit.InputBegan, function(input)
-		if isDragInput(input) then
-			updateFromPosition(input.Position)
-			startDrag(updateFromPosition)
-		end
-	end)
-	connect(hit.MouseButton2Click, function()
-		hit.Visible = false
-		valueBox:CaptureFocus()
-	end)
-	connect(valueBox.FocusLost, function()
-		hit.Visible = true
-		commit(tonumber(string.match(valueBox.Text, "%-?[%d%.]+") or "") or current)
-	end)
-	return { row = row, section = section, commit = commit }
-end
-
-local function CreateDropdown(section, item, order)
-	local row, track = createRow(section, item, order)
-	label({
-		Text = item.name,
-		Position = UDim2.fromOffset(8, 1),
-		Size = UDim2.new(1, -16, 0, 13),
-		Parent = row,
-	})
-	local box = button({
-		Position = UDim2.fromOffset(8, 15),
-		Size = UDim2.new(1, -16, 0, 16),
-		BackgroundColor3 = Theme.Field,
-		BackgroundTransparency = 0,
-		Parent = row,
-	}, { corner(3) })
-	track(box)
-	local boxStroke = noFade(accented(stroke(Theme.Accent, 1, box), "Color"))
-	boxStroke.Transparency = 1
-	local text = label({
-		TextSize = 9,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Position = UDim2.fromOffset(6, 0),
-		Size = UDim2.new(1, -24, 1, 0),
-		Parent = box,
-	})
-	local arrow = triangle(box, Theme.TextOff, 7)
-
-	local value
-	local commit = bind(item, function(newValue)
-		if item.multi then
-			local selected = {}
-			if type(newValue) == "table" then
-				for _, option in ipairs(item.options) do
-					if table.find(newValue, option) then
-						table.insert(selected, option)
-					end
+		if found then
+			local current = Popup.current
+			while current and current ~= target do
+				if current.guard then
+					break
 				end
+				local owner = current.owner
+				current:Close()
+				current = owner
 			end
-			value = selected
-			text.Text = #selected > 0 and table.concat(selected, ", ") or "none"
-		else
-			value = table.find(item.options, newValue) and newValue or item.options[1]
-			text.Text = value or "none"
-		end
-		return value
-	end)
-
-	local listSettings = { search = item.multi or #item.options >= 5 }
-	if item.optionColors then
-		local function colorItem(option)
-			return { key = item.key .. ":option:" .. option, default = item.optionColors[option] or "FFFFFF" }
-		end
-		function listSettings.colorOf(option)
-			return readValue(colorItem(option))
-		end
-		function listSettings.onColor(option, value)
-			Store.Values[colorItem(option).key] = value
 		end
 	end
-
-	connect(box.MouseEnter, function()
-		tween(box, { BackgroundColor3 = Theme.FieldHover })
-	end)
-	connect(box.MouseLeave, function()
-		tween(box, { BackgroundColor3 = Theme.Field })
-	end)
-	connect(box.MouseButton1Click, function()
-		openList(box, section.level, box.AbsoluteSize.X / UI.overlayScale.Scale, item.options, function(option)
-			if item.multi then
-				return table.find(value, option) ~= nil
-			end
-			return option == value
-		end, function(option)
-			if item.multi then
-				local nextValue = table.clone(value)
-				local index = table.find(nextValue, option)
-				if index then
-					table.remove(nextValue, index)
-				else
-					table.insert(nextValue, option)
-				end
-				commit(nextValue)
-			else
-				commit(option)
-				closePopups(section.level)
-			end
-		end, listSettings)
-
-		tween(boxStroke, { Transparency = 0 })
-		tween(arrow, { Position = UDim2.fromOffset(4.5, 5), BackgroundColor3 = Theme.Accent }, 0.18)
-		local entry = popupStack[section.level]
-		local close = entry.close
-		entry.close = function()
-			tween(boxStroke, { Transparency = 1 })
-			tween(arrow, { Position = UDim2.fromOffset(4.5, 0), BackgroundColor3 = Theme.TextOff }, 0.18)
-			close()
-		end
-	end)
-	return { row = row, section = section, commit = commit }
-end
-
-local function CreateKeybind(section, item, order)
-	local row = createRow(section, item, order)
-	label({
-		Text = item.name,
-		Position = UDim2.fromOffset(8, 0),
-		Size = UDim2.new(1, -80, 1, 0),
-		Parent = row,
-	})
-	local box = button({
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -8, 0.5, 0),
-		Size = UDim2.fromOffset(64, 14),
-		BackgroundColor3 = Theme.Field,
-		BackgroundTransparency = 0,
-		Font = Fonts.Regular,
-		TextSize = 9,
-		TextColor3 = Theme.Text,
-		Parent = row,
-	}, { corner(3) })
-
-	local current = "None"
-	local commit = bind(item, function(value)
-		current = type(value) == "string" and value or "None"
-		box.Text = keyLabel(current)
-		return current
-	end)
-	connect(box.MouseButton1Click, function()
-		cancelListening()
-		box.Text = "..."
-		Runtime.listeningBind = function(input)
-			local name
-			if input == nil then
-				name = current
-			elseif input.UserInputType == Enum.UserInputType.Keyboard then
-				name = input.KeyCode == Enum.KeyCode.Escape and "None" or input.KeyCode.Name
-			else
-				return
-			end
-			Runtime.listeningBind = nil
-			commit(name)
-		end
-	end)
-	return { row = row, section = section, commit = commit }
-end
-
-local function CreateButton(section, item, order)
-	local row = createRow(section, item, order)
-	local action = button({
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(1, -16, 0, 16),
-		BackgroundColor3 = Theme.Field,
-		BackgroundTransparency = 0,
-		Font = Fonts.Regular,
-		TextSize = 10,
-		TextColor3 = Theme.Text,
-		Text = item.name,
-		Parent = row,
-	}, { corner(3) })
-	connect(action.MouseEnter, function()
-		tween(action, { BackgroundColor3 = Theme.FieldHover })
-	end)
-	connect(action.MouseLeave, function()
-		tween(action, { BackgroundColor3 = Theme.Field })
-	end)
-	connect(action.MouseButton1Down, function()
-		tween(action, { BackgroundColor3 = Theme.Accent }, 0.08)
-	end)
-	connect(action.MouseButton1Up, function()
-		tween(action, { BackgroundColor3 = Theme.FieldHover }, 0.2)
-	end)
-	connect(action.MouseButton1Click, item.callback)
-	return { row = row, section = section }
-end
-
-Builders = {
-	check = CreateCheck,
-	color = CreateColorRow,
-	paragraph = CreateParagraph,
-	input = CreateInput,
-	slider = CreateSlider,
-	dropdown = CreateDropdown,
-	keybind = CreateKeybind,
-	button = CreateButton,
-}
-
-local function CreateSection(column, page, title, order)
-	local container = create("Frame", {
-		Name = title,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundTransparency = 1,
-		LayoutOrder = order,
-		Parent = column,
-	})
-	local card = create("Frame", {
-		Position = UDim2.fromOffset(0, 6),
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.Card,
-		BackgroundTransparency = 0.25,
-		Parent = container,
-	}, { corner(3), stroke(Theme.CardStroke), list(0), padding(8, 0, 3, 0) })
-
-	local header = create("Frame", {
-		Size = UDim2.new(1, 0, 0, 12),
-		BackgroundTransparency = 1,
-		ZIndex = 2,
-		Parent = container,
-	})
-	accented(create("Frame", {
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.new(1, 0, 0, 1),
-		Parent = header,
-	}, {
-		create("UIGradient", { Transparency = NumberSequence.new(0, 0.5) }),
-	}), "BackgroundColor3")
-	if title ~= "" then
-		label({
-			Text = title,
-			Font = Fonts.Medium,
-			TextSize = 10,
-			BackgroundColor3 = Theme.Window,
-			BackgroundTransparency = 0,
-			Position = UDim2.fromOffset(5, 0),
-			Size = UDim2.fromScale(0, 1),
-			AutomaticSize = Enum.AutomaticSize.X,
-			Parent = header,
-		}, { padding(0, 3, 0, 3) })
+	local node = target or Popup.current
+	while node do
+		node.selfClick = true
+		node = node.owner
 	end
-
-	local section = { title = string.lower(title), container = container, body = card, rows = {}, level = 1 }
-	table.insert(page.sections, section)
-	return section
 end
 
-local setMenuOpen
+function Popup.closeAbove(target)
+	while Popup.current and Popup.current ~= target do
+		local current = Popup.current
+		current:Close()
+		if Popup.current == current then
+			break
+		end
+	end
+end
 
-UI.headerDrag = button({
-	Size = UDim2.new(1, 0, 0, Layout.HEADER),
-	Parent = UI.root,
-})
+function Popup.closeAll()
+	Popup.closeAbove(nil)
+end
 
-UI.titleHolder = create("Frame", {
-	Position = UDim2.fromOffset(10, 6),
-	Size = UDim2.fromOffset(240, 24),
-	BackgroundTransparency = 1,
-	Parent = UI.root,
-})
+function Popup.watchDismiss()
+	if Popup.dismissWired then
+		return
+	end
+	Popup.dismissWired = true
+	connect(UserInputService.InputEnded, function(input)
+		if not Popup.current or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local keep, node = false, Popup.current
+		while node do
+			if node.guard or node.selfClick then
+				keep = true
+			end
+			node.guard = false
+			node.selfClick = false
+			node = node.owner
+		end
+		if not keep then
+			Popup.closeAll()
+		end
+	end)
+end
 
-UI.titleLetters = {}
-
-local function titleLayer(character, parent)
-	local group = create("CanvasGroup", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(Layout.TITLE_SIZE + 10, 30),
-		BackgroundTransparency = 1,
-		Parent = parent,
+function Popup.new(anchor, nested)
+	local host = Popup.host
+	if not host then
+		return nil
+	end
+	nested = nested == true or isInside(Popup.current, anchor)
+	local frameZ = nested and Z.POPUP_NESTED or Z.POPUP
+	local contentZ = nested and Z.POPUP_NESTED_CONTENT or Z.POPUP_CONTENT
+	local popup = setmetatable({
+		anchor = anchor,
+		open = false,
+		placement = "beside",
+		frameWidth = Popup.WIDTH,
+		zbase = contentZ,
+	}, Popup)
+	popup.frame = create("TextButton", {
+		Name = "Popup",
+		Size = UDim2.fromOffset(Popup.WIDTH, 0),
+		skin = { BackgroundColor3 = "raised" },
+		AutoButtonColor = false,
+		Text = "",
+		Active = true,
+		Visible = false,
+		ZIndex = frameZ,
+		Parent = host,
 	})
-	local text = label({
-		Text = character,
-		Font = Fonts.Medium,
-		TextSize = Layout.TITLE_SIZE,
-		TextColor3 = Theme.White,
-		TextXAlignment = Enum.TextXAlignment.Center,
+	popup.fader = create("NumberValue", { Name = "Fade", Value = 1, Parent = popup.frame })
+	corner(popup.frame)
+	create("UIStroke", { Thickness = Metrics.stroke, skin = "border", Parent = popup.frame })
+	popup.shadow = Shadow.attach(popup.frame, frameZ)
+	popup.content = create("ScrollingFrame", {
+		Name = "Content",
 		Size = UDim2.fromScale(1, 1),
-		Parent = group,
-	})
-	return group, text
-end
-
-function UI.buildTitle(title)
-	for index = 1, #title do
-		local character = string.sub(title, index, index)
-		local halo, haloText = titleLayer(character, UI.titleHolder)
-		local letter = titleLayer(character, UI.titleHolder)
-		halo.GroupTransparency = 1
-		noFade(halo)
-		accented(haloText, "TextColor3")
-		accented(create("UIStroke", { Thickness = 2.5, Transparency = 0.25, Parent = haloText }), "Color")
-		table.insert(UI.titleLetters, {
-			letter = letter,
-			halo = halo,
-			character = character,
-			x = (index - 0.5) * Layout.TITLE_SIZE * 0.56,
-		})
-	end
-
-	task.spawn(function()
-		local x = 0
-		local widths = {}
-		for index, letter in ipairs(UI.titleLetters) do
-			local ok, bounds = pcall(function()
-				local params = Instance.new("GetTextBoundsParams")
-				params.Text = letter.character
-				params.Font = Fonts.Medium
-				params.Size = Layout.TITLE_SIZE
-				params.Width = 100
-				return TextService:GetTextBoundsAsync(params)
-			end)
-			if not ok then
-				return
-			end
-			widths[index] = bounds.X
-		end
-		for index, letter in ipairs(UI.titleLetters) do
-			letter.x = x + widths[index] / 2
-			x += widths[index]
-		end
-	end)
-end
-
-UI.searchBox = create("Frame", {
-	AnchorPoint = Vector2.new(1, 0),
-	Position = UDim2.new(1, -9, 0, 9),
-	Size = UDim2.fromOffset(104, 17),
-	BackgroundColor3 = Theme.Field,
-	BackgroundTransparency = 0.25,
-	Parent = UI.root,
-}, { corner(3), stroke(Theme.CardStroke) })
-createIcon(UI.searchBox, "search", 10, Theme.TextMuted, UDim2.new(0, 10, 0.5, 0))
-UI.searchInput = textBox({
-	Position = UDim2.fromOffset(19, 0),
-	Size = UDim2.new(1, -23, 1, 0),
-	BackgroundTransparency = 1,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	PlaceholderText = "search",
-	Parent = UI.searchBox,
-})
-
-do
-	local keypoints = {}
-	local colors = {
-		Color3.fromRGB(255, 45, 140),
-		Color3.fromRGB(150, 60, 230),
-		Color3.fromRGB(60, 110, 255),
-		Color3.fromRGB(40, 210, 220),
-		Color3.fromRGB(70, 225, 110),
-		Color3.fromRGB(240, 225, 70),
-		Color3.fromRGB(255, 130, 50),
-		Color3.fromRGB(255, 45, 90),
-	}
-	for index, color in ipairs(colors) do
-		table.insert(keypoints, ColorSequenceKeypoint.new((index - 1) / (#colors - 1), color))
-	end
-	create("Frame", {
-		Position = UDim2.fromOffset(0, Layout.HEADER),
-		Size = UDim2.new(1, 0, 0, 2),
-		BackgroundColor3 = Theme.White,
-		Parent = UI.root,
-	}, { create("UIGradient", { Color = ColorSequence.new(keypoints) }) })
-end
-
-UI.tabScroll = create("ScrollingFrame", {
-	Position = UDim2.fromOffset(6, Layout.HEADER + 3),
-	Size = UDim2.new(1, -12, 0, Layout.TABS_HEIGHT),
-	BackgroundTransparency = 1,
-	ScrollBarThickness = 0,
-	CanvasSize = UDim2.new(),
-	AutomaticCanvasSize = Enum.AutomaticSize.X,
-	ScrollingDirection = Enum.ScrollingDirection.X,
-	Parent = UI.root,
-}, { list(1, Enum.FillDirection.Horizontal) })
-
-UI.bottomBar = create("Frame", {
-	AnchorPoint = Vector2.new(0, 1),
-	Position = UDim2.fromScale(0, 1),
-	Size = UDim2.new(1, 0, 0, Layout.BOTTOM),
-	BackgroundTransparency = 1,
-	Parent = UI.root,
-}, {
-	create("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = Theme.CardStroke }),
-})
-
-UI.bottomDrag = button({ Size = UDim2.fromScale(1, 1), Parent = UI.bottomBar })
-
-UI.userBlock = create("Frame", {
-	AnchorPoint = Vector2.new(1, 0.5),
-	Position = UDim2.new(1, -20, 0.5, 0),
-	Size = UDim2.fromOffset(0, 16),
-	AutomaticSize = Enum.AutomaticSize.X,
-	BackgroundTransparency = 1,
-	Parent = UI.bottomBar,
-}, { list(4, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center) })
-UI.userScale = create("UIScale", { Parent = UI.userBlock })
-
-UI.avatar = create("ImageLabel", {
-	Size = UDim2.fromOffset(13, 13),
-	BackgroundColor3 = Theme.Black,
-	LayoutOrder = 1,
-	Parent = UI.userBlock,
-}, { round() })
-label({
-	Text = string.lower(player.Name),
-	TextSize = 9,
-	Size = UDim2.fromScale(0, 1),
-	AutomaticSize = Enum.AutomaticSize.X,
-	LayoutOrder = 2,
-	Parent = UI.userBlock,
-})
-label({
-	Text = "·",
-	TextSize = 9,
-	TextColor3 = Theme.TextMuted,
-	Size = UDim2.fromScale(0, 1),
-	AutomaticSize = Enum.AutomaticSize.X,
-	LayoutOrder = 3,
-	Parent = UI.userBlock,
-})
-UI.subscriptionLabel = accented(label({
-	Text = Config.SUBSCRIPTION_TEXT,
-	TextSize = 9,
-	Size = UDim2.fromScale(0, 1),
-	AutomaticSize = Enum.AutomaticSize.X,
-	LayoutOrder = 4,
-	Parent = UI.userBlock,
-}), "TextColor3")
-UI.userSettings = button({
-	Size = UDim2.fromOffset(12, 14),
-	LayoutOrder = 5,
-	Parent = UI.userBlock,
-})
-UI.themeIcon = createIcon(UI.userSettings, "sun", 10, Theme.TextOff, UDim2.fromScale(0.5, 0.5))
-
-task.spawn(function()
-	local ok, image = pcall(Players.GetUserThumbnailAsync, Players, player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-	if ok and UI.avatar.Parent then
-		UI.avatar.Image = image
-	end
-end)
-
-UI.pagesHolder = create("Frame", {
-	Name = "Pages",
-	Position = UDim2.fromOffset(0, Layout.HEADER + 3 + Layout.TABS_HEIGHT + 3),
-	Size = UDim2.new(1, 0, 1, -(Layout.HEADER + 3 + Layout.TABS_HEIGHT + 3 + Layout.BOTTOM)),
-	BackgroundTransparency = 1,
-	ClipsDescendants = true,
-	Parent = UI.root,
-})
-
-local function createColumn(page, xScale, xOffset)
-	local column = create("ScrollingFrame", {
-		Position = UDim2.new(xScale, xOffset, 0, 0),
-		Size = UDim2.new(0.5, -(Layout.COLUMN_GAP + 4), 1, 0),
 		BackgroundTransparency = 1,
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ScrollBarThickness = 2,
-		ScrollBarImageTransparency = 0.4,
-		Parent = page.frame,
-	}, { list(5), padding(1, 3, 6, 1) })
-	accented(column, "ScrollBarImageColor3")
-	connect(column:GetPropertyChangedSignal("CanvasPosition"), function()
-		closePopups(1)
+		ScrollBarThickness = 4,
+		VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
+		skin = { ScrollBarImageColor3 = "hard" },
+		ZIndex = contentZ,
+		Parent = popup.frame,
+	})
+	popup.layout = create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		Padding = UDim.new(0, Metrics.rowGap),
+		Parent = popup.content,
+	})
+	create("UIPadding", {
+		PaddingTop = UDim.new(0, Popup.PAD),
+		PaddingBottom = UDim.new(0, Popup.PAD),
+		PaddingLeft = UDim.new(0, Popup.PAD_X),
+		PaddingRight = UDim.new(0, Popup.PAD_X),
+		Parent = popup.content,
+	})
+	connect(popup.layout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+		popup:resize()
 	end)
-	return column
-end
-
-local function createPage(name)
-	local page = { name = name, sections = {} }
-	page.fader = createFader({
-		Name = name,
-		Size = UDim2.fromScale(1, 1),
-		Parent = UI.pagesHolder,
-	})
-	page.frame = create("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-	})
-	page.fader.setContent(page.frame)
-	page.columns = { createColumn(page, 0, 7), createColumn(page, 0.5, 3) }
-	return page
-end
-
-local function applySearch()
-	local page = Runtime.currentPage
-	if not page then
-		return
-	end
-	local query = string.lower(UI.searchInput.Text)
-	for _, section in ipairs(page.sections) do
-		local titleMatch = query == "" or string.find(section.title, query, 1, true) ~= nil
-		local anyVisible = false
-		for _, row in ipairs(section.rows) do
-			local matches = titleMatch or string.find(row.name, query, 1, true) ~= nil
-			row.searchHidden = not matches
-			row.frame.Visible = matches and not row.hidden
-			anyVisible = anyVisible or (matches and not row.hidden)
+	connect(popup.fader.Changed, function()
+		if popup.shot then
+			Fade.apply(popup.shot, popup.fader.Value)
 		end
-		section.container.Visible = anyVisible
-	end
+	end)
+	connect(popup.frame.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Popup.hold(popup)
+		end
+	end)
+	Popup.watchDismiss()
+	return popup
 end
 
-connect(UI.searchInput:GetPropertyChangedSignal("Text"), applySearch)
-
-local function paintNavButton(entry, selected, duration)
-	tween(entry.text, { TextColor3 = selected and Theme.Accent or Theme.Text }, duration)
-	tween(entry.line, { BackgroundTransparency = selected and 0 or 1 }, duration)
-	tintIcon(entry.icon, selected and Theme.Accent or Theme.Text, duration)
-end
-
-local function createNavButton(parent, name, iconName, order, height, onClick)
-	local holder = button({
-		Size = UDim2.fromOffset(0, height),
-		AutomaticSize = Enum.AutomaticSize.X,
-		LayoutOrder = order,
-		Parent = parent,
-	})
-
-	local content = create("Frame", {
-		Size = UDim2.fromScale(0, 1),
-		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundTransparency = 1,
-		Parent = holder,
-	}, {
-		padding(0, 6, 0, 6),
-		list(4, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center),
-	})
-	local icon = createIcon(content, iconName, 11, Theme.Text)
-	icon.LayoutOrder = 1
-	local text = label({
-		Text = name,
-		Size = UDim2.fromScale(0, 1),
-		AutomaticSize = Enum.AutomaticSize.X,
-		LayoutOrder = 2,
-		Parent = content,
-	})
-	local line = accented(create("Frame", {
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundTransparency = 1,
-		Parent = holder,
-	}), "BackgroundColor3")
-	table.insert(Runtime.navScales, create("UIScale", { Scale = Runtime.density, Parent = holder }))
-	connect(holder.MouseButton1Click, onClick)
-	return { holder = holder, icon = icon, text = text, line = line }
-end
-
-local function selectSub(tab, sub)
-	local page = sub.page
-	if page == Runtime.currentPage then
+function Popup:resize()
+	local height = self.layout.AbsoluteContentSize.Y
+	if height <= 0 then
 		return
 	end
-	closePopups(1)
-	local previous = Runtime.currentPage
-	Runtime.currentPage = page
-	tab.currentSub = sub
-
-	if previous then
-		previous.fader.fade(false, 0.2, Enum.EasingStyle.Quint, nil, UDim2.fromOffset(0, -8))
+	local screen = viewport()
+	local limit = math.max(screen.Y - Popup.MARGIN * 2, Popup.MIN_H)
+	if self.maxHeight then
+		limit = math.min(limit, self.maxHeight)
 	end
-	page.fader.fade(true, 0.38, Enum.EasingStyle.Quint, UDim2.fromOffset(0, previous and 12 or 0), UDim2.fromOffset(0, 0))
-
-	for _, other in ipairs(tab.subs) do
-		paintNavButton(other.nav, other == sub, 0.2)
-	end
-	applySearch()
+	self.frame.Size = UDim2.fromOffset(self.frameWidth, math.min(height + Popup.PAD * 2, limit))
+	self:settle()
 end
 
-local function selectTab(tab)
-	if tab == Runtime.currentTab then
+function Popup:settle()
+	if not self.frame or self.wantY == nil then
 		return
 	end
-	local previous = Runtime.currentTab
-	Runtime.currentTab = tab
-	if previous then
-		previous.subBar.Visible = false
-		paintNavButton(previous.nav, false, 0.2)
+	local screenY = viewport().Y
+	local hostY = Popup.host.AbsolutePosition.Y
+	local height = self.frame.AbsoluteSize.Y
+	if height <= 0 then
+		return
 	end
-	tab.subBar.Visible = #tab.subs > 1
-	paintNavButton(tab.nav, true, 0.2)
-	if tab.currentSub or tab.subs[1] then
-		selectSub(tab, tab.currentSub or tab.subs[1])
+	self.homeY = math.max(Popup.MARGIN, math.min(hostY + self.wantY, screenY - height - Popup.MARGIN)) - hostY
+	if self.open and not self.sliding then
+		self.frame.Position = UDim2.fromOffset(self.frame.Position.X.Offset, self.homeY)
 	end
-
-	local scroll = UI.tabScroll
-	local scale = Runtime.baseScale
-	local left = (tab.nav.holder.AbsolutePosition.X - scroll.AbsolutePosition.X) / scale + scroll.CanvasPosition.X
-	local right = left + tab.nav.holder.AbsoluteSize.X / scale
-	local visibleWidth = scroll.AbsoluteSize.X / scale
-	local target = scroll.CanvasPosition.X
-	if left < target then
-		target = left
-	elseif right > target + visibleWidth then
-		target = right - visibleWidth
-	end
-	tween(scroll, { CanvasPosition = Vector2.new(target, 0) }, 0.25, Enum.EasingStyle.Quint)
-
-	UI.setPreviewShown(tab.preview == true and Runtime.menuOpen)
 end
 
-UI.setPreviewShown = function() end
-
-table.insert(accentRefreshers, function()
-	local tab = Runtime.currentTab
-	if tab then
-		paintNavButton(tab.nav, true, 0)
-		for _, sub in ipairs(tab.subs) do
-			paintNavButton(sub.nav, sub == tab.currentSub, 0)
+function Popup:place()
+	local anchor, host = self.anchor, Popup.host
+	if not anchor or not host then
+		return
+	end
+	local hostPosition, anchorPosition, anchorSize = host.AbsolutePosition, anchor.AbsolutePosition, anchor.AbsoluteSize
+	local width = self.width or Popup.WIDTH
+	local x, y
+	if self.placement == "below" then
+		width = anchorSize.X
+		x, y = anchorPosition.X - hostPosition.X, anchorPosition.Y - hostPosition.Y + anchorSize.Y + Popup.DROP
+	else
+		x, y = anchorPosition.X - hostPosition.X + anchorSize.X + Popup.OFFSET, anchorPosition.Y - hostPosition.Y
+		if hostPosition.X + x + width > viewport().X then
+			x = anchorPosition.X - hostPosition.X - width - Popup.OFFSET
 		end
 	end
-end)
+	self.frameWidth = width
+	self.wantY = y
+	self.homeY = y
+	self.frame.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
+	self:resize()
+end
 
-UI.notifications = create("Frame", {
-	Position = UDim2.fromOffset(10, 10),
-	Size = UDim2.fromOffset(0, 0),
-	AutomaticSize = Enum.AutomaticSize.XY,
-	BackgroundTransparency = 1,
-	Parent = UI.screenGui,
-}, { list(4) })
-UI.notificationsScale = create("UIScale", { Parent = UI.notifications })
+function Popup:Open()
+	if self.open then
+		return self
+	end
+	if Popup.current ~= self then
+		local owner, node = nil, Popup.current
+		while node do
+			if isInside(node, self.anchor) then
+				owner = node
+				break
+			end
+			node = node.owner
+		end
+		Popup.closeAbove(owner)
+		self.owner = owner
+	else
+		self.owner = nil
+	end
+	self.open = true
+	Popup.current = self
+	self.guard = true
+	self.frame.Visible = true
+	self:place()
+	self.frame.Position = UDim2.fromOffset(self.frame.Position.X.Offset, self.homeY + Popup.RISE)
+	Motion.cancel(self.fade)
+	Motion.cancel(self.slide)
+	if self.shot and not self.settled then
+		Fade.apply(self.shot, 0)
+	end
+	self.settled = false
+	self.shot = Fade.snapshot(self.frame)
+	self.fader.Value = 1
+	Fade.apply(self.shot, 1)
+	self.fade = Motion.to(self.fader, Motion.HOVER_IN, { Value = 0 })
+	self.sliding = true
+	self.slide = Motion.to(self.frame, Motion.HOVER_IN, { Position = UDim2.fromOffset(self.frame.Position.X.Offset, self.homeY) })
+	if self.slide then
+		self.slide.Completed:Once(function()
+			self.sliding = false
+		end)
+	else
+		self.sliding = false
+	end
+	Shadow.fade(self.shadow, true, Motion.HOVER_IN)
+	if self.onOpen then
+		self.onOpen()
+	end
+	return self
+end
 
-do
-	local saved = type(Store.Global.notifyPosition) == "table" and Store.Global.notifyPosition or {}
-	Runtime.notifyTarget = UDim2.fromOffset(tonumber(saved.x) or 10, tonumber(saved.y) or 10)
-	UI.notifications.Position = Runtime.notifyTarget
-
-	local holder = create("Frame", {
-		Size = UDim2.fromOffset(150, 0),
-		BackgroundTransparency = 1,
-		LayoutOrder = 0,
-		Parent = UI.notifications,
-	})
-	local fader = createFader({
-		Size = UDim2.fromOffset(150, 18),
-		Parent = holder,
-	})
-	local handle = button({
-		Position = UDim2.fromOffset(1, 1),
-		Size = UDim2.new(1, -2, 1, -2),
-		BackgroundColor3 = Theme.Window,
-		BackgroundTransparency = 0.08,
-	}, { corner(3), stroke(Theme.WindowStroke) })
-	fader.setContent(handle)
-	accented(create("Frame", {
-		Size = UDim2.new(0, 2, 1, 0),
-		Parent = handle,
-	}), "BackgroundColor3")
-	label({
-		Text = "notifications appear here",
-		TextColor3 = Theme.TextOff,
-		Position = UDim2.fromOffset(8, 0),
-		Size = UDim2.new(1, -10, 1, 0),
-		Parent = handle,
-	})
-
-	connect(handle.InputBegan, function(input)
-		if not isDragInput(input) then
+function Popup:Close()
+	if not self.open then
+		return self
+	end
+	if Popup.current and Popup.current ~= self and Popup.current.owner == self then
+		Popup.current:Close()
+	end
+	self.open = false
+	if Popup.current == self then
+		Popup.current = self.owner
+	end
+	self.owner = nil
+	Motion.cancel(self.fade)
+	Motion.cancel(self.slide)
+	self.sliding = false
+	if self.shot and self.fader.Value > 0 then
+		Fade.apply(self.shot, 0)
+		self.fader.Value = 0
+	end
+	self.shot = Fade.snapshot(self.frame)
+	self.settled = false
+	self.fade = Motion.to(self.fader, Motion.HOVER_OUT, { Value = 1 })
+	Shadow.fade(self.shadow, false, Motion.HOVER_OUT)
+	local function finish()
+		if self.open then
 			return
 		end
-		local startPosition = Runtime.notifyTarget
-		local startInput = input.Position
-		startDrag(function(position)
-			local delta = position - startInput
-			Runtime.notifyTarget = startPosition + UDim2.fromOffset(delta.X, delta.Y)
-			glide({ UI.notifications }, Runtime.notifyTarget)
-		end, function()
-			Store.Global.notifyPosition = { x = Runtime.notifyTarget.X.Offset, y = Runtime.notifyTarget.Y.Offset }
-			saveGlobal()
-		end)
-	end)
-
-	function UI.setNotifyHandleShown(shown)
-		tween(holder, { Size = UDim2.fromOffset(150, shown and 18 or 0) }, 0.26, Enum.EasingStyle.Quint)
-		fader.fade(shown, shown and 0.3 or 0.2, Enum.EasingStyle.Quint)
+		self.frame.Visible = false
+		if self.shot then
+			Fade.apply(self.shot, 0)
+		end
+		self.settled = true
 	end
+	if self.fade then
+		self.fade.Completed:Once(finish)
+	else
+		finish()
+	end
+	if self.onClose then
+		self.onClose()
+	end
+	return self
 end
 
-function UI.notify(text, duration)
-	if not Runtime.notificationsEnabled then
-		return
+function Popup:Toggle()
+	if not self.open then
+		return self:Open()
 	end
-	Runtime.notifyOrder += 1
+	local owner = self.owner
+	self:Close()
+	if owner then
+		Popup.hold(owner)
+	end
+	return self
+end
 
-	local holder = create("Frame", {
-		Size = UDim2.fromOffset(0, 18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundTransparency = 1,
-		LayoutOrder = Runtime.notifyOrder,
-		Parent = UI.notifications,
-	})
-	local pill = create("Frame", {
-		Position = UDim2.fromOffset(-12, 0),
-		Size = UDim2.fromScale(0, 1),
-		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundColor3 = Theme.Window,
-		BackgroundTransparency = 1,
-		Parent = holder,
-	}, { corner(3), padding(0, 8, 0, 8) })
-	local edge = accented(create("Frame", {
-		Size = UDim2.new(0, 2, 1, 0),
-		Position = UDim2.fromOffset(-8, 0),
-		BackgroundTransparency = 1,
-		Parent = pill,
-	}), "BackgroundColor3")
-	local message = label({
-		Text = text,
+local Tooltip = { DWELL = 0.45, OFFSET = 8, SLIDE = 6, MAX_WIDTH = 220, PAD_X = 7, token = 0, shown = false }
+
+function Tooltip.ensure()
+	if Tooltip.label and Tooltip.label.Parent then
+		return Tooltip.label
+	end
+	local host = Popup.host
+	if not host then
+		return nil
+	end
+	Tooltip.label = create("TextLabel", {
+		Name = "Tooltip",
+		AnchorPoint = Vector2.new(0, 0.5),
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.fromOffset(0, 0),
+		Text = "",
+		TextSize = Metrics.textSize - 1,
+		skin = { BackgroundColor3 = "raised", TextColor3 = "body" },
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		FontFace = Typeface.face(),
 		TextTransparency = 1,
-		Size = UDim2.fromScale(0, 1),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Parent = pill,
-	})
-
-	local function fade(visible, seconds)
-		tween(pill, {
-			BackgroundTransparency = visible and 0.08 or 1,
-			Position = UDim2.fromOffset(visible and 0 or -12, 0),
-		}, seconds, Enum.EasingStyle.Quint)
-		tween(edge, { BackgroundTransparency = visible and 0 or 1 }, seconds)
-		tween(message, { TextTransparency = visible and 0 or 1 }, seconds)
-	end
-	fade(true, 0.32)
-
-	task.delay(duration or 3.5, function()
-		if not holder.Parent then
-			return
-		end
-		fade(false, 0.3)
-		task.wait(0.3)
-		if holder.Parent then
-			tween(holder, { Size = UDim2.fromOffset(0, 0) }, 0.18).Completed:Once(function()
-				holder:Destroy()
-			end)
-		end
-	end)
-end
-
-function Hotkeys.height(count)
-	return 30 + math.max(count, 1) * 15
-end
-
-do
-	local saved = type(Store.Global.hotkeyPosition) == "table" and Store.Global.hotkeyPosition or {}
-	Runtime.hotkeyTarget = UDim2.fromOffset(tonumber(saved.x) or 40, tonumber(saved.y) or 300)
-	Runtime.hotkeysShown = false
-
-	UI.hotkeyFader = createFader({
-		Position = Runtime.hotkeyTarget,
-		Size = UDim2.fromOffset(150, Hotkeys.height(0)),
-		Parent = UI.screenGui,
-	})
-	UI.hotkeyScales = { create("UIScale", { Parent = UI.hotkeyFader.plain }) }
-	local content = create("Frame", {
-		Position = UDim2.fromOffset(1, 1),
-		Size = UDim2.new(1, -2, 1, -2),
-		BackgroundColor3 = Theme.Window,
-		BackgroundTransparency = 0.05,
-	}, { corner(5), stroke(Theme.WindowStroke), list(0) })
-	UI.hotkeyFader.setContent(content)
-
-	local header = button({
-		Size = UDim2.new(1, 0, 0, 20),
-		LayoutOrder = 1,
-		Parent = content,
-	}, {
-		padding(0, 8, 0, 8),
-		list(5, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center),
-	})
-	local icon = createIcon(header, "hotkeys", 11, Theme.Accent)
-	icon.LayoutOrder = 1
-	table.insert(accentRefreshers, function()
-		tintIcon(icon, Theme.Accent, 0)
-	end)
-	accented(label({
-		Text = "hotkeys",
-		TextSize = 11,
-		Size = UDim2.fromScale(0, 1),
-		AutomaticSize = Enum.AutomaticSize.X,
-		LayoutOrder = 2,
-		Parent = header,
-	}), "TextColor3")
-	accented(create("Frame", {
-		Size = UDim2.new(1, 0, 0, 1),
-		LayoutOrder = 2,
-		Parent = content,
-	}), "BackgroundColor3")
-	UI.hotkeyRows = create("Frame", {
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
-		LayoutOrder = 3,
-		Parent = content,
-	}, { list(0), padding(3, 8, 0, 8) })
-
-	UI.hotkeyEmpty = create("Frame", {
-		Size = UDim2.new(1, 0, 0, 15),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-		LayoutOrder = 0,
-		Parent = UI.hotkeyRows,
+		Visible = false,
+		ZIndex = Z.TOOLTIP,
+		Parent = host,
 	})
-	label({
-		Text = "no keybinds",
-		TextSize = 9,
-		TextColor3 = Theme.TextMuted,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, 0, 0, 15),
-		Parent = UI.hotkeyEmpty,
+	corner(Tooltip.label)
+	Tooltip.stroke = create("UIStroke", { Thickness = Metrics.stroke, skin = "border", Transparency = 1, Parent = Tooltip.label })
+	create("UIPadding", {
+		PaddingTop = UDim.new(0, 4),
+		PaddingBottom = UDim.new(0, 4),
+		PaddingLeft = UDim.new(0, Tooltip.PAD_X),
+		PaddingRight = UDim.new(0, Tooltip.PAD_X),
+		Parent = Tooltip.label,
 	})
-
-	connect(header.InputBegan, function(input)
-		if not isDragInput(input) then
-			return
-		end
-		local startPosition = Runtime.hotkeyTarget
-		local startInput = input.Position
-		startDrag(function(position)
-			local delta = position - startInput
-			Runtime.hotkeyTarget = startPosition + UDim2.fromOffset(delta.X, delta.Y)
-			glide({ UI.hotkeyFader.plain }, Runtime.hotkeyTarget)
-		end, function()
-			Store.Global.hotkeyPosition = { x = Runtime.hotkeyTarget.X.Offset, y = Runtime.hotkeyTarget.Y.Offset }
-			saveGlobal()
-		end)
-	end)
+	create("UISizeConstraint", { MaxSize = Vector2.new(Tooltip.MAX_WIDTH, math.huge), Parent = Tooltip.label })
+	Tooltip.shadow = Shadow.attach(Tooltip.label, Z.TOOLTIP)
+	Shadow.fade(Tooltip.shadow, false, TweenInfo.new(0))
+	local arrowWidth, arrowHeight = Icons.dimensions("tooltipArrow")
+	Tooltip.arrow = iconLabel("tooltipArrow", {
+		Name = "TooltipArrow",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(arrowWidth or 7, arrowHeight or 12),
+		skin = "raised",
+		ImageTransparency = 1,
+		Visible = false,
+		ZIndex = Z.TOOLTIP + 1,
+		Parent = host,
+	})
+	return Tooltip.label
 end
 
-function Hotkeys.createRow(order)
-	local frame = create("Frame", {
-		Size = UDim2.new(1, 0, 0, 0),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-		LayoutOrder = order,
-		Parent = UI.hotkeyRows,
-	})
-	local keyText = label({ TextSize = 9, Size = UDim2.new(0, 22, 0, 15), Parent = frame })
-	local nameText = label({
-		TextSize = 9,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Position = UDim2.fromOffset(24, 0),
-		Size = UDim2.new(1, -60, 0, 15),
-		Parent = frame,
-	})
-	local modeText = label({
-		TextSize = 9,
-		TextColor3 = Theme.TextMuted,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.new(1, 0, 0, 15),
-		Parent = frame,
-	})
-	return { frame = frame, key = keyText, name = nameText, mode = modeText, shown = false }
+local function tooltipFade(shown)
+	local info = shown and Motion.HOVER_IN or Motion.HOVER_OUT
+	local animation = Motion.to(Tooltip.label, info, { BackgroundTransparency = shown and 0.05 or 1, TextTransparency = shown and 0 or 1 })
+	Motion.to(Tooltip.stroke, info, { Transparency = shown and 0 or 1 })
+	Motion.to(Tooltip.arrow, info, { ImageTransparency = shown and 0.05 or 1 })
+	Shadow.fade(Tooltip.shadow, shown, info)
+	return animation
 end
 
-Hotkeys.refresh = function()
-	if not UI.hotkeyRows then
+function Tooltip.hide()
+	Tooltip.token += 1
+	if not Tooltip.shown then
 		return
 	end
-	local count = 0
-	for index, entry in ipairs(Hotkeys.entries) do
-		local shown = entry.active and entry.key ~= "None"
-		if shown then
-			count += 1
-			entry.row = entry.row or Hotkeys.createRow(index)
+	Tooltip.shown = false
+	local token = Tooltip.token
+	local animation = tooltipFade(false)
+	local function finish()
+		if token == Tooltip.token and not Tooltip.shown then
+			Tooltip.label.Visible = false
+			Tooltip.arrow.Visible = false
 		end
-		local row = entry.row
-		if row then
-			row.key.Text = keyLabel(entry.key)
-			row.name.Text = entry.label
-			row.mode.Text = entry.mode
-			if row.shown ~= shown then
-				row.shown = shown
-				tween(row.frame, { Size = UDim2.new(1, 0, 0, shown and 15 or 0) }, 0.26, Enum.EasingStyle.Quint)
+	end
+	if animation then
+		animation.Completed:Once(finish)
+	else
+		finish()
+	end
+end
+
+function Tooltip.show(target, content)
+	if not Tooltip.ensure() then
+		return
+	end
+	Tooltip.token += 1
+	local token = Tooltip.token
+	task.spawn(function()
+		task.wait(Tooltip.DWELL)
+		if token ~= Tooltip.token or Popup.blocks(target) or not target.Parent then
+			return
+		end
+		local label = Tooltip.label
+		label.TextWrapped = false
+		label.AutomaticSize = Enum.AutomaticSize.XY
+		label.Size = UDim2.fromOffset(0, 0)
+		label.Text = content
+		label.Visible = true
+		task.wait()
+		if token ~= Tooltip.token then
+			label.Visible = false
+			return
+		end
+		if label.TextBounds.X + Tooltip.PAD_X * 2 > Tooltip.MAX_WIDTH then
+			label.AutomaticSize = Enum.AutomaticSize.Y
+			label.TextWrapped = true
+			label.Size = UDim2.fromOffset(Tooltip.MAX_WIDTH, 0)
+			task.wait()
+			if token ~= Tooltip.token then
+				label.Visible = false
+				return
 			end
 		end
-	end
-
-	tween(UI.hotkeyEmpty, { Size = UDim2.new(1, 0, 0, count == 0 and 15 or 0) }, 0.22, Enum.EasingStyle.Quint)
-
-	local size = UDim2.fromOffset(150, Hotkeys.height(count))
-	tween(UI.hotkeyFader.plain, { Size = size }, 0.26, Enum.EasingStyle.Quint)
-
-	local wanted = Runtime.hotkeyListEnabled and (count > 0 or Runtime.menuOpen)
-	if wanted ~= Runtime.hotkeysShown then
-		Runtime.hotkeysShown = wanted
-		local hidden = Runtime.hotkeyTarget + UDim2.fromOffset(0, 7)
-		if wanted then
-			UI.hotkeyFader.fade(true, 0.3, Enum.EasingStyle.Quint, hidden, Runtime.hotkeyTarget)
-		else
-			UI.hotkeyFader.fade(false, 0.22, Enum.EasingStyle.Quad, nil, hidden)
+		local host = Popup.host
+		local hostPosition, position, size = host.AbsolutePosition, target.AbsolutePosition, target.AbsoluteSize
+		local x, y = position.X - hostPosition.X + size.X + Tooltip.OFFSET, position.Y - hostPosition.Y + size.Y / 2
+		local flipped = hostPosition.X + x + label.AbsoluteSize.X > viewport().X
+		if flipped then
+			x = position.X - hostPosition.X - label.AbsoluteSize.X - Tooltip.OFFSET
 		end
-	end
+		local arrow = Tooltip.arrow
+		local arrowWidth = arrow.Size.X.Offset
+		local arrowX
+		if flipped then
+			arrowX = x + label.AbsoluteSize.X + arrowWidth / 2 - 1
+			arrow.Rotation = 180
+		else
+			arrowX = x - arrowWidth / 2 + 1
+			arrow.Rotation = 0
+		end
+		arrow.Visible = true
+		local slide = flipped and Tooltip.SLIDE or -Tooltip.SLIDE
+		label.Position = UDim2.fromOffset(x + slide, y)
+		arrow.Position = UDim2.fromOffset(arrowX + slide, y)
+		Tooltip.shown = true
+		tooltipFade(true)
+		Motion.to(label, Motion.HOVER_IN, { Position = UDim2.fromOffset(x, y) })
+		Motion.to(arrow, Motion.HOVER_IN, { Position = UDim2.fromOffset(arrowX, y) })
+	end)
 end
 
-function Hotkeys.handle(input)
-	if UserInputService:GetFocusedTextBox() then
+function Tooltip.attach(target, content)
+	if not target or type(content) ~= "string" or content == "" then
 		return
 	end
-	local name = input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode.Name or input.UserInputType.Name
-	for _, entry in ipairs(Hotkeys.entries) do
-		if entry.key == name and entry.mode == "toggle" then
-			entry.setter(not entry.active)
-			UI.notify(entry.label .. (entry.active and " enabled" or " disabled"), 2)
+	connect(target.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(target) then
+			Tooltip.show(target, content)
 		end
+	end)
+	connect(target.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			Tooltip.hide()
+		end
+	end)
+end
+
+function Tooltip.dismiss()
+	Tooltip.token += 1
+	Tooltip.shown = false
+	if Tooltip.label then
+		Tooltip.label.Visible = false
+		Tooltip.label.BackgroundTransparency = 1
+		Tooltip.label.TextTransparency = 1
+		Tooltip.arrow.Visible = false
+		Tooltip.arrow.ImageTransparency = 1
 	end
 end
 
-function Hotkeys.isDown(key)
+local function onHover(target, callback)
+	connect(target.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			if Popup.blocks(target) then
+				return
+			end
+			callback(true)
+		end
+	end)
+	connect(target.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			callback(false)
+		end
+	end)
+end
+
+local function onPress(target, callback)
+	connect(target.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			callback(true)
+		end
+	end)
+	connect(target.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseMovement then
+			callback(false)
+		end
+	end)
+end
+
+local Binds = { MODES = { "hold", "toggle", "always" }, list = {}, capturing = nil }
+
+function Binds.label(key)
+	if not key or key == "None" then
+		return "none"
+	end
+	local name = tostring(key)
+	name = string.match(name, "([^%.]+)$") or name
+	name = string.gsub(name, "^MouseButton", "mb")
+	name = string.gsub(name, "^Left", "")
+	name = string.gsub(name, "^Right", "r")
+	return string.lower(name)
+end
+
+function Binds.fromInput(input, allowLeftClick)
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		return input.KeyCode.Name
+	end
+	local name = input.UserInputType.Name
+	if string.match(name, "^MouseButton") and (allowLeftClick or input.UserInputType ~= Enum.UserInputType.MouseButton1) then
+		return name
+	end
+	return nil
+end
+
+function Binds.matches(key, input)
+	if not key or key == "None" then
+		return false
+	end
+	return input.KeyCode.Name == key or input.UserInputType.Name == key
+end
+
+function Binds.isDown(key)
+	if not key or key == "None" then
+		return false
+	end
 	if string.sub(key, 1, 11) == "MouseButton" then
-		return UserInputService:IsMouseButtonPressed(Enum.UserInputType[key])
+		local ok, inputType = pcall(function()
+			return Enum.UserInputType[key]
+		end)
+		return ok and UserInputService:IsMouseButtonPressed(inputType)
 	end
 	local ok, keyCode = pcall(function()
 		return Enum.KeyCode[key]
@@ -3083,789 +2462,2419 @@ function Hotkeys.isDown(key)
 	return ok and UserInputService:IsKeyDown(keyCode)
 end
 
-function Hotkeys.update()
-	local blocked = UserInputService:GetFocusedTextBox() ~= nil or Runtime.listeningBind ~= nil
-	for _, entry in ipairs(Hotkeys.entries) do
-		local wanted
+function Binds.typing()
+	if UserInputService:GetFocusedTextBox() then
+		return true
+	end
+	local ok, focused = pcall(function()
+		local bar = game:GetService("TextChatService"):FindFirstChildOfClass("ChatInputBarConfiguration")
+		return bar ~= nil and bar.IsFocused == true
+	end)
+	return ok and focused == true
+end
+
+function Binds.capture(callback)
+	Binds.capturing = callback
+end
+
+function Binds.cancelCapture()
+	local callback = Binds.capturing
+	Binds.capturing = nil
+	if callback then
+		callback(nil, true)
+	end
+end
+
+function Binds.handleBegan(input)
+	if Binds.capturing then
+		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Escape then
+			local callback = Binds.capturing
+			Binds.capturing = nil
+			callback("None")
+			return true
+		end
+		local name = Binds.fromInput(input, false)
+		if name then
+			local callback = Binds.capturing
+			Binds.capturing = nil
+			callback(name)
+		end
+		return true
+	end
+	if Binds.typing() then
+		return false
+	end
+	for _, entry in ipairs(Binds.list) do
+		if Binds.matches(entry.key, input) then
+			entry:fire(true)
+		end
+	end
+	return false
+end
+
+function Binds.handleEnded(input)
+	if Binds.capturing then
+		return
+	end
+	for _, entry in ipairs(Binds.list) do
+		if Binds.matches(entry.key, input) then
+			entry:fire(false)
+		end
+	end
+end
+
+function Binds.poll()
+	local blocked = Binds.capturing ~= nil or Binds.typing()
+	for _, entry in ipairs(Binds.list) do
 		if entry.mode == "hold" and entry.key ~= "None" then
-			wanted = not blocked and Hotkeys.isDown(entry.key)
-		elseif entry.mode == "always" then
-			wanted = true
-		end
-		if wanted ~= nil and wanted ~= entry.active then
-			entry.setter(wanted)
-		end
-	end
-end
-
-Hotkeys.refresh()
-
-local Preview = { tab = "enemies", shown = false }
-
-do
-	Preview.fader = createFader({
-		Name = "EspPreview",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Size = UDim2.fromOffset(Layout.PREVIEW.X, Runtime.windowSize.Y),
-		Parent = UI.screenGui,
-	})
-	Preview.scales = { create("UIScale", { Parent = Preview.fader.plain }) }
-	local root = create("Frame", {
-		Position = UDim2.fromOffset(1, 1),
-		Size = UDim2.new(1, -2, 1, -2),
-		BackgroundColor3 = Theme.PreviewBg,
-		BackgroundTransparency = 0.04,
-		Active = true,
-	}, { corner(7), stroke(Theme.WindowStroke) })
-	Preview.fader.setContent(root)
-
-	accented(label({
-		Text = "esp preview",
-		TextSize = 9,
-		Position = UDim2.fromOffset(9, 5),
-		Size = UDim2.fromOffset(120, 12),
-		Parent = root,
-	}), "TextColor3")
-	accented(create("Frame", {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -8, 0, 6),
-		Size = UDim2.fromOffset(7, 7),
-		Parent = root,
-	}), "BackgroundColor3")
-
-	Preview.name = label({
-		Text = string.lower(player.DisplayName),
-		TextSize = 9,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(22, 56),
-		Size = UDim2.fromOffset(130, 12),
-		Parent = root,
-	})
-	Preview.box = create("Frame", {
-		Position = UDim2.fromOffset(22, 70),
-		Size = UDim2.fromOffset(130, 232),
-		BackgroundTransparency = 1,
-		Parent = root,
-	})
-	Preview.boxStroke = stroke(Theme.Accent, 1, Preview.box)
-	Preview.boxStroke:SetAttribute("NoTheme", true)
-	Preview.name:SetAttribute("NoTheme", true)
-
-	Preview.health = create("Frame", {
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.fromOffset(18, 302),
-		Size = UDim2.fromOffset(2, 186),
-		BackgroundColor3 = Color3.fromRGB(240, 205, 70),
-		Parent = root,
-	})
-
-	local viewport = create("ViewportFrame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Ambient = Theme.White,
-		LightColor = Theme.White,
-		Parent = Preview.box,
-	})
-	Preview.camera = create("Camera", { FieldOfView = 30, Parent = viewport })
-	viewport.CurrentCamera = Preview.camera
-	Preview.bodyParts = {}
-
-	local function part(size, position, color)
-		local piece = Instance.new("Part")
-		piece.Anchored = true
-		piece.Size = size
-		piece.CFrame = CFrame.new(position)
-		piece.Material = Enum.Material.SmoothPlastic
-		piece.Color = color or Theme.White
-		piece.Parent = viewport
-		return piece
-	end
-	for _, body in ipairs({
-		{ Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 2.6, 0) },
-		{ Vector3.new(2, 2, 1), Vector3.new(0, 1, 0) },
-		{ Vector3.new(1, 2, 1), Vector3.new(-1.5, 1, 0) },
-		{ Vector3.new(1, 2, 1), Vector3.new(1.5, 1, 0) },
-		{ Vector3.new(1, 2, 1), Vector3.new(-0.5, -1, 0) },
-		{ Vector3.new(1, 2, 1), Vector3.new(0.5, -1, 0) },
-	}) do
-		table.insert(Preview.bodyParts, part(body[1], body[2]))
-	end
-	part(Vector3.new(0.22, 0.24, 0.05), Vector3.new(-0.26, 2.72, 0.62), Theme.Accent)
-	part(Vector3.new(0.22, 0.24, 0.05), Vector3.new(0.26, 2.72, 0.62), Theme.Accent)
-
-	Preview.skeleton = {}
-	for _, bone in ipairs({
-		{ Vector3.new(0.09, 4.2, 0.09), Vector3.new(0, 1, 0) },
-		{ Vector3.new(3.1, 0.09, 0.09), Vector3.new(0, 1.8, 0) },
-		{ Vector3.new(0.09, 1.9, 0.09), Vector3.new(-1.5, 0.9, 0) },
-		{ Vector3.new(0.09, 1.9, 0.09), Vector3.new(1.5, 0.9, 0) },
-		{ Vector3.new(1.1, 0.09, 0.09), Vector3.new(0, 0, 0) },
-		{ Vector3.new(0.09, 2, 0.09), Vector3.new(-0.5, -1, 0) },
-		{ Vector3.new(0.09, 2, 0.09), Vector3.new(0.5, -1, 0) },
-	}) do
-		table.insert(Preview.skeleton, part(bone[1], bone[2]))
-	end
-
-	Preview.flags = create("Frame", {
-		Position = UDim2.fromOffset(157, 70),
-		Size = UDim2.fromOffset(74, 232),
-		BackgroundTransparency = 1,
-		Parent = root,
-	}, { list(1) })
-	Preview.flagIcons = {}
-	for index, flag in ipairs({
-		{ "SHOOT", "crosshair" },
-		{ "RELOAD", "rotate-cw" },
-		{ "", "circle-x" },
-		{ "BURNING", "flame" },
-		{ "SMOKED", "cloud" },
-		{ "AIR", "wind" },
-		{ "CROUCH", "arrow-down" },
-		{ "WALK", "footprints" },
-		{ "SCOPED", "scan" },
-		{ "IMMUNE", "shield" },
-		{ "LOW HP", "heart" },
-		{ "AK", "swords" },
-		{ "C4", "bomb" },
-		{ "DEFUSE KIT", "wrench" },
-		{ "HELMET", "hard-hat" },
-		{ "SILENCED", "volume-x" },
-		{ "$1000", "dollar-sign" },
-		{ "42ms", "wifi" },
-		{ "24/90", "backpack" },
-	}) do
-		local row = create("Frame", {
-			Size = UDim2.new(1, 0, 0, 11),
-			BackgroundTransparency = 1,
-			LayoutOrder = index,
-			Parent = Preview.flags,
-		})
-		table.insert(Preview.flagIcons, createIcon(row, flag[2], 8, Theme.Accent, UDim2.new(0, 4, 0.5, 0)))
-		accented(label({
-			Text = flag[1],
-			Font = Fonts.Bold,
-			TextSize = 8,
-			Position = UDim2.fromOffset(11, 0),
-			Size = UDim2.new(1, -11, 1, 0),
-			Parent = row,
-		}), "TextColor3")
-	end
-	table.insert(accentRefreshers, function()
-		for _, icon in ipairs(Preview.flagIcons) do
-			tintIcon(icon, Theme.Accent, 0)
-		end
-	end)
-
-	Preview.weaponBar = accented(create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromOffset(87, 307),
-		Size = UDim2.fromOffset(34, 2),
-		Parent = root,
-	}), "BackgroundColor3")
-	Preview.weapon = label({
-		Text = "CT Knife",
-		TextSize = 8,
-		TextColor3 = Theme.TextOff,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(22, 311),
-		Size = UDim2.fromOffset(130, 11),
-		Parent = root,
-	})
-
-	local tabsBar = create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -4),
-		Size = UDim2.fromOffset(0, 18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundTransparency = 1,
-		Parent = root,
-	}, { list(4, Enum.FillDirection.Horizontal) })
-
-	Preview.tabs = {}
-	local function paintChip(chip, selected, duration)
-		chip.text.Visible = selected
-		tween(chip.frame, {
-			BackgroundColor3 = selected and Theme.Accent or Theme.Field,
-			BackgroundTransparency = selected and 0.75 or 0,
-		}, duration)
-		tween(chip.text, { TextColor3 = selected and Theme.Accent or Theme.Text }, duration)
-		tintIcon(chip.icon, selected and Theme.Accent or Theme.TextOff, duration)
-	end
-	for index, tabInfo in ipairs({
-		{ "enemy", "enemies", "user" },
-		{ "allies", "allies", "users" },
-		{ "local", "local", "circle-dot" },
-	}) do
-		local frame = button({
-			Size = UDim2.fromOffset(0, 16),
-			AutomaticSize = Enum.AutomaticSize.X,
-			BackgroundColor3 = Theme.Field,
-			BackgroundTransparency = 0,
-			LayoutOrder = index,
-			Parent = tabsBar,
-		}, {
-			corner(3),
-			padding(0, 6, 0, 6),
-			list(4, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center),
-		})
-		local icon = createIcon(frame, tabInfo[3], 10, Theme.TextOff)
-		icon.LayoutOrder = 1
-		local text = label({
-			Text = tabInfo[1],
-			TextSize = 9,
-			Size = UDim2.fromScale(0, 1),
-			AutomaticSize = Enum.AutomaticSize.X,
-			LayoutOrder = 2,
-			Parent = frame,
-		})
-		local chip = { frame = frame, icon = icon, text = text }
-		table.insert(Preview.tabs, chip)
-		connect(frame.MouseButton1Click, function()
-			Preview.tab = tabInfo[2]
-			for _, other in ipairs(Preview.tabs) do
-				paintChip(other, other == chip, 0.15)
+			local down = not blocked and Binds.isDown(entry.key)
+			if down ~= entry.get() then
+				entry.set(down)
 			end
-			Preview.refresh()
-		end)
-		paintChip(chip, index == 1, 0)
-	end
-	table.insert(accentRefreshers, function()
-		for index, chip in ipairs(Preview.tabs) do
-			paintChip(chip, chip.text.Visible, 0)
+		elseif entry.mode == "always" and entry.get() ~= true then
+			entry.set(true)
 		end
-	end)
+	end
 end
 
-function Preview.value(field)
-	if Preview.tab == "local" then
+local BindEntry = {}
+BindEntry.__index = BindEntry
+
+function BindEntry:fire(pressed)
+	if self.mode == "hold" then
+		self.set(pressed)
+	elseif self.mode == "toggle" and pressed then
+		self.set(not self.get())
+	end
+end
+
+function BindEntry:repaint()
+	if self.icon then
+		Motion.to(self.icon, Motion.HOVER_IN, { ImageColor3 = (self.key ~= "None" or self.mode == "always") and Accent.get() or Skin.get("dim") })
+	end
+end
+
+local function bindRow(parent, order, text, onClick)
+	local row = create("TextButton", {
+		Name = "Row",
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, 22),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+		ZIndex = parent.ZIndex,
+		Parent = parent,
+	})
+	corner(row)
+	local state = { selected = false, accent = false }
+	local label = create("TextLabel", {
+		Name = "Label",
+		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -20, 1, 0),
+		BackgroundTransparency = 1,
+		Text = text,
+		TextSize = Metrics.textSize - 1,
+		TextColor3 = Skin.get("dim"),
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = parent.ZIndex + 1,
+		Parent = row,
+	})
+	connect(row.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Popup.hold()
+			onClick()
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(row) then
+			Motion.to(row, Motion.HOVER_IN, { BackgroundTransparency = 0.92 })
+		end
+	end)
+	connect(row.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			Motion.to(row, Motion.HOVER_OUT, { BackgroundTransparency = 1 })
+		end
+	end)
+	local paint = Live.add(label, function(info)
+		Live.set(label, info, { TextColor3 = (state.selected or state.accent) and Accent.get() or Skin.get("dim") })
+	end)
+
+	return label, function(selected)
+		state.selected = selected
+		paint(Motion.HOVER_IN)
+	end, function(accent)
+		state.accent = accent
+		paint(nil)
+	end
+end
+
+function BindEntry:buildPanel()
+	if self.popup then
+		return self.popup
+	end
+	local popup = Popup.new(self.anchor)
+	if not popup then
 		return nil
 	end
-	return Runtime.current[Preview.tab .. "_" .. field]
-end
-
-function Preview.refresh()
-	local boxColor = parseColor(Preview.value("box_color"))
-	local nameColor = parseColor(Preview.value("name_color"))
-	local chamsColor = parseColor(Preview.value("chams_color"))
-
-	Preview.boxStroke.Transparency = Preview.value("box") and 0 or 1
-	Preview.boxStroke.Color = boxColor or Theme.Accent
-	Preview.name.Visible = Preview.value("name") == true
-	Preview.name.TextColor3 = nameColor or Theme.Text
-	Preview.weapon.Visible = Preview.value("weapon") == true
-	Preview.weaponBar.Visible = Preview.weapon.Visible
-	Preview.health.Visible = Preview.value("health") == true
-	Preview.flags.Visible = Preview.value("flags") == true
-
-	local chams = Preview.value("chams") == true or Preview.tab == "local"
-	for _, piece in ipairs(Preview.bodyParts) do
-		piece.Color = chams and (chamsColor or Theme.White) or Theme.White
-		piece.Transparency = chams and 0 or 0.72
-	end
-
-	local skeletonColor = parseColor(Preview.value("skeleton_color"))
-	local skeleton = Preview.value("skeleton") == true
-	for _, bone in ipairs(Preview.skeleton) do
-		bone.Color = skeletonColor or Theme.White
-		bone.Transparency = skeleton and 0 or 1
-	end
-end
-
-function Preview.bind()
-	for _, section in ipairs({ "enemies", "allies" }) do
-		for _, field in ipairs({
-			"box", "box_color", "name", "name_color", "weapon", "health",
-			"flags", "chams", "chams_color", "skeleton", "skeleton_color",
-		}) do
-			watch(section .. "_" .. field, Preview.refresh)
+	self.popup = popup
+	local marks = {}
+	local entry = self
+	local function refresh()
+		entry.keyRow.Text = string.format("key: %s", Binds.label(entry.key))
+		for mode, mark in pairs(marks) do
+			mark(mode == entry.mode)
 		end
 	end
-	Preview.refresh()
-end
-
-local function previewPosition(windowPosition)
-	local offset = (Runtime.windowSize.X / 2 + Layout.PREVIEW_GAP) * Runtime.baseScale
-	return windowPosition + UDim2.fromOffset(offset, 0)
-end
-
-UI.setPreviewShown = function(shown)
-	if shown == Preview.shown then
-		return
-	end
-	Preview.shown = shown
-	local target = previewPosition(Runtime.windowTarget)
-	if shown then
-		Preview.fader.fade(true, 0.38, Enum.EasingStyle.Quint, target + UDim2.fromOffset(-14, 0), target)
-	else
-		Preview.fader.fade(false, 0.24, nil, nil, target + UDim2.fromOffset(-14, 0))
-	end
-end
-
-local function setWindowPosition(position)
-	Runtime.windowTarget = position
-	glide({ UI.windowFader.plain, UI.overlay }, position)
-	glide({ Preview.fader.plain }, previewPosition(position))
-end
-
-local function beginWindowDrag(input)
-	if not isDragInput(input) then
-		return
-	end
-	closePopups(1)
-	local startPosition = Runtime.windowTarget
-	local startInput = input.Position
-	startDrag(function(position)
-		local delta = position - startInput
-		setWindowPosition(startPosition + UDim2.fromOffset(delta.X, delta.Y))
-	end)
-end
-
-connect(UI.headerDrag.InputBegan, beginWindowDrag)
-connect(UI.bottomDrag.InputBegan, beginWindowDrag)
-
-do
-	local grip = button({
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -2, 1, -2),
-		Size = UDim2.fromOffset(16, 16),
-		ZIndex = 10,
-		Parent = UI.root,
-	})
-	local lines = {
-		shape(grip, 9.5, 9.5, 11, 1.5, Theme.TextMuted, -45),
-		shape(grip, 12, 12, 4.5, 1.5, Theme.TextMuted, -45),
-	}
-	local function paintGrip(color)
-		for _, line in ipairs(lines) do
-			tween(line, { BackgroundColor3 = color }, 0.12)
-		end
-	end
-	connect(grip.MouseEnter, function()
-		paintGrip(Theme.Accent)
-	end)
-	connect(grip.MouseLeave, function()
-		paintGrip(Theme.TextMuted)
-	end)
-
-	connect(grip.InputBegan, function(input)
-		if not isDragInput(input) then
-			return
-		end
-		closePopups(1)
-		local startSize = Runtime.windowSize
-		local startPosition = Runtime.windowTarget
-		local startInput = input.Position
-		startDrag(function(position)
-			local delta = (position - startInput) / Runtime.baseScale
-			local size = Vector2.new(
-				math.clamp(startSize.X + delta.X, Layout.MIN_SIZE.X, Layout.MAX_SIZE.X),
-				math.clamp(startSize.Y + delta.Y, Layout.MIN_SIZE.Y, Layout.MAX_SIZE.Y)
-			)
-			Runtime.windowSize = size
-
-			local grow = (size - startSize) * Runtime.baseScale / 2
-			setWindowPosition(startPosition + UDim2.fromOffset(grow.X, grow.Y))
-			for _, object in ipairs({ UI.windowFader.plain, UI.overlay }) do
-				tween(object, { Size = UDim2.fromOffset(size.X, size.Y) }, 0.09)
+	local keyLabel, _, keyAccent
+	keyLabel, _, keyAccent = bindRow(popup.content, 0, "", function()
+		Binds.cancelCapture()
+		keyLabel.Text = "press any key..."
+		keyAccent(true)
+		Binds.capture(function(name, cancelled)
+			keyAccent(false)
+			if not cancelled and name then
+				entry.commit({ key = name, mode = entry.mode })
 			end
-			tween(Preview.fader.plain, { Size = UDim2.fromOffset(Layout.PREVIEW.X, size.Y) }, 0.09)
-		end, function()
-			Store.Global.windowSize = { x = math.floor(Runtime.windowSize.X), y = math.floor(Runtime.windowSize.Y) }
-			saveGlobal()
+			refresh()
 		end)
 	end)
-end
-
-setMenuOpen = function(open)
-	Runtime.menuOpen = open
-	closePopups(1)
-	cancelListening()
-
-	if not open then
-		for _, letter in ipairs(UI.titleLetters) do
-			letter.halo.Visible = false
-		end
-	end
-	for _, scale in ipairs(UI.windowScales) do
-		tween(scale, { Scale = Runtime.baseScale * (open and 1 or 0.95) }, 0.3, Enum.EasingStyle.Quint)
-	end
-	UI.windowFader.fade(open, 0.3, Enum.EasingStyle.Quint)
-	UI.setNotifyHandleShown(open and Runtime.notificationsEnabled)
-	UI.setPreviewShown(open and Runtime.currentTab ~= nil and Runtime.currentTab.preview == true)
-	Hotkeys.refresh()
-end
-
-connect(UserInputService.InputChanged, function(input)
-	if Runtime.activeDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		Runtime.activeDrag(input.Position)
-	end
-end)
-
-connect(UserInputService.InputEnded, function(input)
-	if Runtime.activeDrag and isDragInput(input) then
-		local onEnd = Runtime.activeDragEnd
-		Runtime.activeDrag, Runtime.activeDragEnd = nil, nil
-		if onEnd then
-			onEnd()
-		end
-	end
-end)
-
-connect(UserInputService.InputBegan, function(input, gameProcessed)
-	if Runtime.listeningBind then
-		Runtime.listeningBind(input)
-		return
-	end
-	if input.KeyCode == Runtime.menuKey and not gameProcessed then
-		setMenuOpen(not Runtime.menuOpen)
-	end
-	Hotkeys.handle(input)
-end)
-
-do
-	local saved = type(Store.Global.watermarkPosition) == "table" and Store.Global.watermarkPosition or {}
-	Runtime.watermarkTarget = UDim2.new(0.5, tonumber(saved.x) or 0, 0, tonumber(saved.y) or 8)
-	UI.watermarkBar = button({
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = Runtime.watermarkTarget,
-		Size = UDim2.fromOffset(0, 20),
-		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundColor3 = Theme.Window,
-		BackgroundTransparency = 0.05,
-		Visible = false,
-		Parent = UI.screenGui,
-	}, {
-		corner(4),
-		stroke(Theme.WindowStroke),
-		padding(0, 9, 0, 9),
-		list(9, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center),
+	self.keyRow = keyLabel
+	create("Frame", {
+		Name = "Divider",
+		LayoutOrder = 1,
+		Size = UDim2.new(1, 0, 0, 1),
+		skin = "border",
+		ZIndex = popup.content.ZIndex,
+		Parent = popup.content,
 	})
-	UI.watermarkScale = create("UIScale", { Parent = UI.watermarkBar })
-
-	local order = 0
-	local function nextOrder()
-		order += 1
-		return order
-	end
-	local function text(value, color)
-		return label({
-			Text = value,
-			TextSize = 9,
-			TextColor3 = color or Theme.TextOff,
-			Size = UDim2.fromScale(0, 1),
-			AutomaticSize = Enum.AutomaticSize.X,
-			LayoutOrder = nextOrder(),
-			Parent = UI.watermarkBar,
-		})
-	end
-
-	local function segment(iconName)
-		local holder = create("Frame", {
-			Size = UDim2.fromScale(0, 1),
-			AutomaticSize = Enum.AutomaticSize.X,
-			BackgroundTransparency = 1,
-			LayoutOrder = nextOrder(),
-			Parent = UI.watermarkBar,
-		}, { list(3, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center) })
-		createIcon(holder, iconName, 9, Theme.TextOff).LayoutOrder = 1
-		return label({
-			TextSize = 9,
-			TextColor3 = Theme.TextOff,
-			Size = UDim2.fromScale(0, 1),
-			AutomaticSize = Enum.AutomaticSize.X,
-			LayoutOrder = 2,
-			Parent = holder,
-		})
-	end
-
-	UI.watermarkTitle = accented(text(Config.TITLE), "TextColor3")
-	segment("user").Text = string.lower(player.Name)
-	UI.watermarkVersion = segment("gamepad-2")
-	local playersText = segment("users")
-	local sessionText = segment("timer")
-
-	local graph = create("Frame", {
-		Size = UDim2.fromOffset(38, 11),
-		BackgroundTransparency = 1,
-		LayoutOrder = nextOrder(),
-		Parent = UI.watermarkBar,
-	}, { list(1, Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Bottom) })
-	local bars = {}
-	for index = 1, 13 do
-		bars[index] = accented(create("Frame", {
-			Size = UDim2.new(0, 2, 0.3, 0),
-			LayoutOrder = index,
-			Parent = graph,
-		}), "BackgroundColor3")
-	end
-
-	local fpsText = segment("activity")
-	local pingText = segment("wifi")
-	local clockText = segment("clock")
-
-	local started = os.clock()
-	local history = {}
-	task.spawn(function()
-		while UI.watermarkBar.Parent do
-			local fps = math.floor(1 / math.max(Runtime.frameTime or 1 / 60, 1e-3) + 0.5)
-			table.insert(history, fps)
-			if #history > #bars then
-				table.remove(history, 1)
-			end
-			for index, bar in ipairs(bars) do
-				local sample = history[index] or 0
-				bar.Size = UDim2.new(0, 2, math.clamp(sample / 144, 0.12, 1), 0)
-			end
-
-			local elapsed = math.floor(os.clock() - started)
-			sessionText.Text = string.format("%dm%02ds", math.floor(elapsed / 60), elapsed % 60)
-			playersText.Text = tostring(#Players:GetPlayers())
-			fpsText.Text = tostring(fps)
-			pingText.Text = string.format("%d ms", math.floor(player:GetNetworkPing() * 1000 + 0.5))
-			clockText.Text = os.date("%H:%M")
-			task.wait(0.5)
-		end
-	end)
-
-	connect(UI.watermarkBar.InputBegan, function(input)
-		if not isDragInput(input) then
-			return
-		end
-		local startPosition = Runtime.watermarkTarget
-		local startInput = input.Position
-		startDrag(function(position)
-			local delta = position - startInput
-			Runtime.watermarkTarget = startPosition + UDim2.fromOffset(delta.X, delta.Y)
-			glide({ UI.watermarkBar }, Runtime.watermarkTarget)
-		end, function()
-			Store.Global.watermarkPosition = { x = Runtime.watermarkTarget.X.Offset, y = Runtime.watermarkTarget.Y.Offset }
-			saveGlobal()
+	for index, mode in ipairs(Binds.MODES) do
+		local _, mark = bindRow(popup.content, index + 1, mode, function()
+			entry.commit({ key = entry.key, mode = mode })
+			refresh()
 		end)
-	end)
-end
-
-connect(RunService.RenderStepped, function(deltaTime)
-
-	Runtime.frameTime = (Runtime.frameTime or deltaTime) * 0.9 + deltaTime * 0.1
-	Hotkeys.update()
-	if not Runtime.menuOpen then
-		return
+		marks[mode] = mark
 	end
-	local clock = os.clock()
-	local count = #UI.titleLetters
-	local radius = 4.5
-	local wave = (clock * 5.5) % (count + radius * 2) - radius
-	for index, letter in ipairs(UI.titleLetters) do
-
-		local distance = math.abs(index - wave)
-		local glow = distance < radius and 0.5 + 0.5 * math.cos(math.pi * distance / radius) or 0
-
-		local lift = math.sin(clock * 2.2 + index * 0.5) * 1.3 + glow * -1.8
-
-		local tilt = math.sin(clock * 2.2 + index * 0.5 + 1.2) * 1.4 + 0.05
-		local position = UDim2.fromOffset(letter.x, 11 + lift)
-		letter.letter.Position = position
-		letter.letter.Rotation = tilt
-		letter.letter.GroupColor3 = Theme.Text:Lerp(Theme.Accent, glow * 0.3)
-
-		letter.halo.Visible = glow > 0.01
-		if letter.halo.Visible then
-			letter.halo.Position = position
-			letter.halo.Rotation = tilt
-			letter.halo.GroupTransparency = 1 - glow * 0.8
-		end
-	end
-
-	if Preview.shown then
-		local angle = math.sin(clock * 0.6) * math.rad(40)
-		local eye = CFrame.Angles(0, angle, 0) * CFrame.new(0, 0.6, 15)
-		Preview.camera.CFrame = CFrame.new(eye.Position, Vector3.new(0, 0.6, 0))
-	end
-end)
-
-local THEMED_PROPERTIES = {
-	{ "GuiObject", "BackgroundColor3" },
-	{ "TextLabel", "TextColor3" },
-	{ "TextButton", "TextColor3" },
-	{ "TextBox", "TextColor3" },
-	{ "TextBox", "PlaceholderColor3" },
-	{ "UIStroke", "Color" },
-	{ "ImageLabel", "ImageColor3" },
-	{ "ScrollingFrame", "ScrollBarImageColor3" },
-}
-
-local function setTheme(name)
-	if not Themes[name] or name == Runtime.themeName then
-		return
-	end
-	local from, to = Themes[Runtime.themeName], Themes[name]
-	local lookup = {}
-	for key, color in pairs(from) do
-		lookup[color:ToHex()] = to[key]
-	end
-
-	local function recolor(instance)
-		if instance:GetAttribute("NoTheme") then
-			return
-		end
-		for _, entry in ipairs(THEMED_PROPERTIES) do
-			if instance:IsA(entry[1]) then
-				local replacement = lookup[instance[entry[2]]:ToHex()]
-				if replacement then
-					instance[entry[2]] = replacement
-				end
-			end
-		end
-	end
-	for _, instance in ipairs(UI.screenGui:GetDescendants()) do
-		recolor(instance)
-	end
-
-	Runtime.themeName = name
-	for key, color in pairs(to) do
-		Theme[key] = color
-	end
-
-	for _, refresh in ipairs(accentRefreshers) do
+	popup.onClose = function()
+		Binds.cancelCapture()
 		refresh()
 	end
-	Preview.refresh()
-
-	Store.Global.theme = name
-	saveGlobal()
+	self.refreshPanel = refresh
+	refresh()
+	return popup
 end
 
-connect(UI.userSettings.MouseEnter, function()
-	tintIcon(UI.themeIcon, Theme.Accent)
-end)
-connect(UI.userSettings.MouseLeave, function()
-	tintIcon(UI.themeIcon, Theme.TextOff)
-end)
-connect(UI.userSettings.MouseButton1Click, function()
-	setTheme(Runtime.themeName == "light" and "dark" or "light")
-	tintIcon(UI.themeIcon, Theme.Accent, 0)
-end)
+local Rows = {}
 
-local function applyDensity()
-	local density = math.clamp(Layout.MIN_EFFECTIVE_SCALE / Runtime.baseScale, 1, Layout.MAX_DENSITY)
-	if density == Runtime.density then
+function Rows.slot(control)
+	control.slots = (control.slots or 0) + 1
+	return (control.slots - 1) * Metrics.subStep
+end
+
+function Rows.reserve(control)
+	local used = (control.slots or 0) * Metrics.subStep + Metrics.controlX
+	if not control.title or used <= Metrics.controlX then
 		return
 	end
-	Runtime.density = density
-
-	for _, row in ipairs(Runtime.rows) do
-		row.body.Size = UDim2.fromScale(1 / density, 1 / density)
-		row.scale.Scale = density
-		if not row.hidden then
-			row.frame.Size = UDim2.new(1, 0, 0, row.height * density)
-		end
-		if row.fader then
-			row.fader.set("Size", UDim2.new(1, 0, 0, row.height * density))
-		end
-	end
-	for _, scale in ipairs(Runtime.navScales) do
-		scale.Scale = density
-	end
-	for _, section in ipairs(Runtime.panelSections) do
-		section.relayout(true)
-	end
-	UI.userScale.Scale = density
-
-	local tabsHeight = Layout.TABS_HEIGHT * density
-	local bottomHeight = Layout.BOTTOM * density
-	local pagesTop = Layout.HEADER + 3 + tabsHeight + 3
-	UI.tabScroll.Size = UDim2.new(1, -12, 0, tabsHeight)
-	UI.bottomBar.Size = UDim2.new(1, 0, 0, bottomHeight)
-	UI.pagesHolder.Position = UDim2.fromOffset(0, pagesTop)
-	UI.pagesHolder.Size = UDim2.new(1, 0, 1, -(pagesTop + bottomHeight))
+	local size = control.title.Size
+	control.title.Size = UDim2.new(1, -(control.title.Position.X.Offset + used), size.Y.Scale, size.Y.Offset)
 end
 
-local function updateScale()
-	local camera = workspace.CurrentCamera
-	if not camera then
+function Rows.adornY(control)
+	return control.adornY or Metrics.row // 2
+end
+
+function Rows.iconButton(control, iconName)
+	local offset, size = Rows.slot(control), Metrics.icon
+	local image = iconLabel(iconName, {
+		Name = iconName,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -offset - Metrics.controlX, 0, Rows.adornY(control)),
+		Size = UDim2.fromOffset(size, size),
+		ImageColor3 = Skin.get("dim"),
+		ZIndex = control.zbase + 3,
+		Parent = control.main,
+	})
+	Rows.reserve(control)
+	return image, size
+end
+
+function Rows.refreshVisible(control)
+	if control.main then
+		control.main.Visible = not control.hidden and not control.filtered and not control.userHidden
+	end
+end
+
+local function dependencyMet(expected, value)
+	if expected == nil then
+		if type(value) == "table" then
+			return next(value) ~= nil
+		end
+		return value ~= nil and value ~= false and value ~= ""
+	end
+	local wanted = type(expected) == "table" and expected or { expected }
+	for _, option in ipairs(wanted) do
+		if value == option or (type(value) == "table" and table.find(value, option)) then
+			return true
+		end
+	end
+	return false
+end
+
+function Rows.depends(control, depends)
+	if not depends then
 		return
 	end
-	local viewport = camera.ViewportSize
-
-	Runtime.baseScale = math.clamp(math.min(viewport.X / 1400, viewport.Y / 850), 0.8, 1.5) * (Runtime.scaleMultiplier or 1)
-	for _, scale in ipairs(UI.windowScales) do
-		scale.Scale = Runtime.baseScale * (Runtime.menuOpen and 1 or 0.95)
+	local key, expected = depends, nil
+	if type(depends) == "table" then
+		key, expected = depends[1], depends[2]
 	end
-	for _, scale in ipairs(Preview.scales) do
-		scale.Scale = Runtime.baseScale
-	end
-	UI.overlayScale.Scale = Runtime.baseScale
-	UI.notificationsScale.Scale = Runtime.baseScale
-	for _, scale in ipairs(UI.hotkeyScales) do
-		scale.Scale = Runtime.baseScale
-	end
-	UI.watermarkScale.Scale = Runtime.baseScale
-	Preview.fader.set("Position", previewPosition(Runtime.windowTarget))
-	applyDensity()
-	closePopups(1)
+	watch(key, function(value)
+		control.hidden = not dependencyMet(expected, value)
+		Rows.refreshVisible(control)
+	end)
 end
 
-UI.updateScale = updateScale
-
-local function watchCamera()
-	if Runtime.cameraConnection then
-		Runtime.cameraConnection:Disconnect()
-	end
-	local camera = workspace.CurrentCamera
-	if camera then
-		Runtime.cameraConnection = connect(camera:GetPropertyChangedSignal("ViewportSize"), updateScale)
-	end
-	updateScale()
+local function pressBox(control, box, pressed)
+	Motion.cancel(control.pressTween)
+	local size = Metrics.control * (pressed and Metrics.pressScale or 1)
+	control.pressTween = Motion.to(box, pressed and Motion.PRESS or Motion.RELEASE, { Size = UDim2.fromOffset(size, size) })
 end
 
-connect(workspace:GetPropertyChangedSignal("CurrentCamera"), watchCamera)
-watchCamera()
+function Rows.base(section, height, name, tooltip)
+	local control = { section = section, zbase = section.zbase, slots = 0 }
+	section.order += 1
+	control.main = create("Frame", {
+		Name = "Row",
+		LayoutOrder = section.order,
+		Size = UDim2.new(1, 0, 0, height),
+		skin = "rowGlow",
+		BackgroundTransparency = 1,
+		ZIndex = control.zbase,
+		Parent = section.content,
+	})
+	corner(control.main)
+	control.name = string.lower(tostring(name or ""))
+	control.tooltip = tooltip
+	return control
+end
 
-connect(UI.screenGui.Destroying, function()
-	Runtime.listeningBind = nil
-	Runtime.activeDrag, Runtime.activeDragEnd = nil, nil
-	for _, connection in ipairs(connections) do
-		connection:Disconnect()
+function Rows.title(control, x, y, height, text, role)
+	control.title = create("TextLabel", {
+		Name = "Title",
+		Position = UDim2.fromOffset(x, y or 0),
+		Size = UDim2.new(1, -x, height and 0 or 1, height or 0),
+		BackgroundTransparency = 1,
+		Text = text or "",
+		TextSize = Metrics.textSize,
+		skin = role or "body",
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = control.zbase + 2,
+		Parent = control.interest or control.main,
+	})
+	return control.title
+end
+
+local function fieldStroke(parent)
+	return create("UIStroke", {
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Thickness = Metrics.stroke,
+		skin = "stroke",
+		Parent = parent,
+	})
+end
+
+local function fieldPainter(stroke, state)
+	return Live.add(stroke, function(info)
+		local color
+		if state.focused or state.open then
+			color = Accent.get()
+		elseif state.hovered then
+			color = Skin.get("edge")
+		else
+			color = Skin.get("stroke")
+		end
+		Live.set(stroke, info, { Color = color })
+	end)
+end
+
+local Checker = {}
+
+function Checker.paint(image)
+	if Checker.content == nil then
+		local size = 10
+		local pixels = buffer.create(size * size * 4)
+		for y = 0, size - 1 do
+			for x = 0, size - 1 do
+				local dark = (x < 5) ~= (y < 5)
+				local shade = dark and 198 or 255
+				local offset = (y * size + x) * 4
+				buffer.writeu8(pixels, offset, shade)
+				buffer.writeu8(pixels, offset + 1, shade)
+				buffer.writeu8(pixels, offset + 2, shade)
+				buffer.writeu8(pixels, offset + 3, 255)
+			end
+		end
+		Checker.content = Raster.image(pixels, size, size, "checker") or false
 	end
-	table.clear(connections)
-end)
-
-local Library = { Options = {}, Toggles = {} }
-
-local function hexOf(color)
-	if typeof(color) == "Color3" then
-		return formatColor(color, 1)
+	if Checker.content then
+		pcall(function()
+			image.ImageContent = Checker.content
+			image.ScaleType = Enum.ScaleType.Tile
+			image.TileSize = UDim2.fromOffset(10, 10)
+		end)
 	end
-	return color or "FFFFFF"
+end
+
+local HUE_SEQUENCE
+do
+	local keypoints = {}
+	for index = 0, 6 do
+		table.insert(keypoints, ColorSequenceKeypoint.new(index / 6, Color3.fromHSV(index / 6 % 1, 1, 1)))
+	end
+	HUE_SEQUENCE = ColorSequence.new(keypoints)
+end
+
+local Picker = {
+	SQUARE_H = 120,
+	STRIP_H = 12,
+	FIELD_H = 22,
+	GAP = 8,
+	RING = 11,
+	MARK_W = 4,
+	WIDTH = 190,
+	MODE_H = 22,
+	RAIL_ROW_H = 24,
+	RAIL_H = 16,
+	DIAL = 24,
+	DIAL_R = 7,
+	DOT = 5,
+	HANDLE = 13,
+	HANDLE_ON = 16,
+	HANDLE_INSET = 9,
+	HANDLE_DIM = 0.45,
+	SNAP = 6,
+	BLEND = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+}
+
+local PickerState = { h = 0, s = 1, v = 1, a = 1, slots = {}, at = 1, gradientCapable = false, on = false, angle = 90 }
+
+local function pickerColor()
+	return Color3.fromHSV(PickerState.h, PickerState.s, PickerState.v)
+end
+
+function Picker.height()
+	local height = Picker.SQUARE_H + Picker.STRIP_H * 2 + Picker.FIELD_H + Picker.GAP * 3
+	if PickerState.gradientCapable then
+		height += Picker.MODE_H + Picker.GAP
+		if PickerState.on then
+			height += Picker.RAIL_ROW_H + Picker.GAP
+		end
+	end
+	return height
+end
+
+function Picker.snapAngle(angle)
+	angle %= 360
+	local nearest = math.floor(angle / 45 + 0.5) * 45
+	local distance = math.abs(angle - nearest)
+	if (distance > 180 and 360 - distance or distance) <= Picker.SNAP then
+		return nearest % 360
+	end
+	return angle
+end
+
+function Picker.build()
+	if Picker.popup then
+		return Picker.popup
+	end
+	local popup = Popup.new(nil, true)
+	if not popup then
+		return nil
+	end
+	popup.width = Picker.WIDTH
+	popup.frameWidth = Picker.WIDTH
+	Picker.popup = popup
+	local z = popup.zbase
+	local body = create("Frame", {
+		Name = "Body",
+		Size = UDim2.new(1, 0, 0, Picker.height()),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		ZIndex = z,
+		Parent = popup.content,
+	})
+	Picker.body = body
+	create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, Picker.GAP), Parent = body })
+	create("UIPadding", { PaddingLeft = UDim.new(0, Picker.GAP), PaddingRight = UDim.new(0, Picker.GAP), Parent = body })
+
+	Picker.mode = create("Frame", {
+		Name = "Mode",
+		LayoutOrder = -2,
+		Size = UDim2.new(1, 0, 0, Picker.MODE_H),
+		skin = "control",
+		Visible = false,
+		ZIndex = z,
+		Parent = body,
+	})
+	corner(Picker.mode)
+	Picker.thumb = create("Frame", {
+		Name = "Thumb",
+		Position = UDim2.new(0, 2, 0, 2),
+		Size = UDim2.new(0.5, -4, 1, -4),
+		skin = "raised",
+		ZIndex = z + 1,
+		Parent = Picker.mode,
+	})
+	corner(Picker.thumb, Metrics.corner - 1)
+	create("UIStroke", { Thickness = Metrics.stroke, skin = "hard", Parent = Picker.thumb })
+	Picker.modeLabels = {}
+	for index, name in ipairs({ "solid", "gradient" }) do
+		Picker.modeLabels[index] = create("TextLabel", {
+			Name = name,
+			Position = UDim2.fromScale((index - 1) * 0.5, 0),
+			Size = UDim2.fromScale(0.5, 1),
+			BackgroundTransparency = 1,
+			Text = name,
+			TextSize = Metrics.textSize - 2,
+			FontFace = Typeface.face(),
+			ZIndex = z + 2,
+			Parent = Picker.mode,
+		})
+	end
+	Live.add(Picker.mode, function(info)
+		for index, label in ipairs(Picker.modeLabels) do
+			local selected = (index == 2) == PickerState.on
+			Live.set(label, info, { TextColor3 = Skin.get(selected and "text" or "faint") })
+		end
+	end)
+
+	Picker.railRow = create("Frame", {
+		Name = "RailRow",
+		LayoutOrder = -1,
+		Size = UDim2.new(1, 0, 0, Picker.RAIL_ROW_H),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = z,
+		Parent = body,
+	})
+	Picker.rail = create("Frame", {
+		Name = "Rail",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 0, 0.5, 0),
+		Size = UDim2.new(1, -(Picker.DIAL + Picker.GAP), 0, Picker.RAIL_H),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		ZIndex = z,
+		Parent = Picker.railRow,
+	})
+	corner(Picker.rail)
+	local railChecker = create("ImageLabel", { Name = "Checker", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = z - 1, Parent = Picker.rail })
+	corner(railChecker)
+	Checker.paint(railChecker)
+	Picker.railRamp = create("UIGradient", { Parent = Picker.rail })
+	Picker.stops, Picker.stopRings = {}, {}
+	for index = 1, 2 do
+		local stop = create("Frame", {
+			Name = "Stop" .. index,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.fromOffset(Picker.HANDLE, Picker.HANDLE),
+			BackgroundTransparency = 1,
+			ZIndex = z + 2,
+			Parent = Picker.rail,
+		})
+		corner(stop, UDim.new(1, 0))
+		create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = Picker.HANDLE_DIM, Parent = stop })
+		local ring = create("Frame", {
+			Name = "Ring",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.new(1, -2, 1, -2),
+			BackgroundTransparency = 1,
+			ZIndex = z + 2,
+			Parent = stop,
+		})
+		corner(ring, UDim.new(1, 0))
+		Picker.stopRings[index] = create("UIStroke", { Thickness = 1, Color = Color3.new(1, 1, 1), Transparency = Picker.HANDLE_DIM, Parent = ring })
+		local position = index - 1
+		stop.Position = UDim2.new(position, (1 - position * 2) * Picker.HANDLE_INSET, 0.5, 0)
+		Picker.stops[index] = stop
+	end
+	Picker.dial = create("Frame", {
+		Name = "Dial",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(Picker.DIAL, Picker.DIAL),
+		skin = "control",
+		ZIndex = z,
+		Parent = Picker.railRow,
+	})
+	corner(Picker.dial, UDim.new(1, 0))
+	create("UIStroke", { Thickness = Metrics.stroke, skin = "hard", Parent = Picker.dial })
+	Picker.dot = Accent.follow(create("Frame", {
+		Name = "Dot",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(Picker.DOT, Picker.DOT),
+		ZIndex = z + 1,
+		Parent = Picker.dial,
+	}), "BackgroundColor3")
+	corner(Picker.dot, UDim.new(1, 0))
+
+	Picker.square = create("Frame", {
+		Name = "Square",
+		LayoutOrder = 0,
+		Size = UDim2.new(1, 0, 0, Picker.SQUARE_H),
+		BackgroundColor3 = Color3.fromHSV(0, 1, 1),
+		ZIndex = z,
+		Parent = body,
+	})
+	corner(Picker.square)
+	local saturation = create("Frame", { Name = "Saturation", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = z + 1, Parent = Picker.square })
+	corner(saturation)
+	create("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = saturation })
+	local value = create("Frame", { Name = "Value", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = z + 2, Parent = Picker.square })
+	corner(value)
+	create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = value })
+	Picker.ring = create("Frame", {
+		Name = "Ring",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(Picker.RING, Picker.RING),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		ZIndex = z + 3,
+		Parent = Picker.square,
+	})
+	corner(Picker.ring, UDim.new(1, 0))
+	create("UIStroke", { Thickness = 2, Color = Color3.new(1, 1, 1), Parent = Picker.ring })
+
+	local function strip(name, order, gradient)
+		local frame = create("Frame", {
+			Name = name,
+			LayoutOrder = order,
+			Size = UDim2.new(1, 0, 0, Picker.STRIP_H),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			ZIndex = z,
+			Parent = body,
+		})
+		corner(frame, UDim.new(1, 0))
+		if name == "Alpha" then
+			local checker = create("ImageLabel", { Name = "Checker", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = z - 1, Parent = frame })
+			corner(checker, UDim.new(1, 0))
+			Checker.paint(checker)
+		end
+		gradient.Parent = frame
+		create("UIGradient", gradient)
+		local mark = create("Frame", {
+			Name = "Mark",
+			AnchorPoint = Vector2.new(0.5, 0),
+			Size = UDim2.new(0, Picker.MARK_W, 1, 0),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			ZIndex = z + 1,
+			Parent = frame,
+		})
+		corner(mark, UDim.new(1, 0))
+		create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.6, Parent = mark })
+		return frame, mark
+	end
+	Picker.strip, Picker.mark = strip("Hue", 1, { Color = HUE_SEQUENCE })
+	Picker.alpha, Picker.alphaMark = strip("Alpha", 2, { Transparency = NumberSequence.new(1, 0) })
+
+	Picker.hex = create("TextBox", {
+		Name = "Hex",
+		LayoutOrder = 3,
+		Size = UDim2.new(1, 0, 0, Picker.FIELD_H),
+		Text = "FFFFFF",
+		TextSize = Metrics.textSize - 2,
+		skin = { BackgroundColor3 = "field", TextColor3 = "body" },
+		FontFace = Typeface.face(),
+		ClearTextOnFocus = false,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = z,
+		Parent = body,
+	})
+	corner(Picker.hex, Metrics.corner - 1)
+	local hexState = { focused = false }
+	local paintHex = fieldPainter(fieldStroke(Picker.hex), hexState)
+	create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = Picker.hex })
+
+	Picker.blend = create("NumberValue", { Name = "Blend", Value = 1, Parent = popup.frame })
+	connect(Picker.blend.Changed, function(amount)
+		local from, to = Picker.blendFrom, Picker.blendTo
+		if not from or not to then
+			return
+		end
+		local delta = to.h - from.h
+		if delta > 0.5 then
+			delta -= 1
+		elseif delta < -0.5 then
+			delta += 1
+		end
+		PickerState.h = (from.h + delta * amount) % 1
+		PickerState.s = from.s + (to.s - from.s) * amount
+		PickerState.v = from.v + (to.v - from.v) * amount
+		PickerState.a = from.a + (to.a - from.a) * amount
+		Picker.redraw()
+		if amount >= 1 then
+			Picker.blendFrom, Picker.blendTo = nil, nil
+		end
+	end)
+
+	local dragging
+	local function update()
+		if dragging == "square" then
+			local x, y = relative(Picker.square, mouse())
+			PickerState.s, PickerState.v = x, 1 - y
+		elseif dragging == "strip" then
+			PickerState.h = math.min((relative(Picker.strip, mouse())), 0.999)
+		elseif dragging == "alpha" then
+			PickerState.a = (relative(Picker.alpha, mouse()))
+		elseif dragging == "angle" then
+			local center = Picker.dial.AbsolutePosition + Picker.dial.AbsoluteSize / 2
+			local delta = mouse() - center
+			local angle = math.deg(math.atan2(delta.Y, delta.X))
+			PickerState.angle = Picker.snapAngle(angle < 0 and angle + 360 or angle)
+		end
+		Picker.store()
+		Picker.redraw()
+		Picker.commit()
+	end
+	local function startDrag(frame, mode)
+		connect(frame.InputBegan, function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+				return
+			end
+			Popup.hold()
+			Picker.blendFrom, Picker.blendTo = nil, nil
+			dragging = mode
+			if mode == "square" then
+				Motion.to(Picker.ring, Motion.PRESS, { Size = UDim2.fromOffset(Picker.RING + 4, Picker.RING + 4) })
+			end
+			update()
+		end)
+	end
+	startDrag(Picker.square, "square")
+	startDrag(Picker.strip, "strip")
+	startDrag(Picker.alpha, "alpha")
+	startDrag(Picker.dial, "angle")
+	connect(UserInputService.InputChanged, function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			update()
+		end
+	end)
+	connect(UserInputService.InputEnded, function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = nil
+			Motion.to(Picker.ring, Motion.RELEASE, { Size = UDim2.fromOffset(Picker.RING, Picker.RING) })
+		end
+	end)
+	connect(Picker.mode.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		Popup.hold()
+		local x = relative(Picker.mode, mouse())
+		Picker.setMode(x >= 0.5)
+	end)
+	for index, stop in ipairs(Picker.stops) do
+		connect(stop.InputBegan, function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				Popup.hold()
+				Picker.select(index)
+			end
+		end)
+	end
+	connect(Picker.hex.Focused, function()
+		Picker.editing = true
+		hexState.focused = true
+		Popup.hold()
+		paintHex(Motion.HOVER_IN)
+	end)
+	connect(Picker.hex.FocusLost, function()
+		Picker.editing = false
+		hexState.focused = false
+		paintHex(Motion.HOVER_OUT)
+		local text = string.gsub(Picker.hex.Text, "^%s*#?", "")
+		text = string.gsub(text, "%s*$", "")
+		if string.match(text, "^%x%x%x%x%x%x$") then
+			PickerState.h, PickerState.s, PickerState.v = Color3.fromHex(text):ToHSV()
+			Picker.store()
+			Picker.redraw()
+			Picker.commit()
+		else
+			Picker.redraw()
+		end
+	end)
+	popup.onClose = function()
+		dragging = nil
+		if Picker.onClose then
+			local callback = Picker.onClose
+			Picker.onClose = nil
+			callback()
+		end
+	end
+	return popup
+end
+
+function Picker.store()
+	local slot = PickerState.slots[PickerState.at]
+	if slot then
+		slot.color, slot.alpha = pickerColor(), PickerState.a
+	end
+end
+
+function Picker.redraw()
+	local color = pickerColor()
+	Picker.square.BackgroundColor3 = Color3.fromHSV(PickerState.h, 1, 1)
+	Picker.alpha.BackgroundColor3 = color
+	Picker.ring.Position = UDim2.fromScale(PickerState.s, 1 - PickerState.v)
+	Picker.mark.Position = UDim2.fromScale(PickerState.h, 0)
+	Picker.alphaMark.Position = UDim2.fromScale(PickerState.a, 0)
+	Picker.ring.BackgroundColor3 = color
+	if not Picker.editing then
+		Picker.hex.Text = string.upper(color:ToHex())
+	end
+	if PickerState.on then
+		local first, second = PickerState.slots[1], PickerState.slots[2]
+		local firstColor = PickerState.at == 1 and color or first.color
+		local secondColor = PickerState.at == 2 and color or second.color
+		Picker.railRamp.Color = ColorSequence.new(firstColor, secondColor)
+		Picker.railRamp.Transparency = NumberSequence.new(1 - first.alpha, 1 - second.alpha)
+		local radians = math.rad(PickerState.angle)
+		Picker.dot.Position = UDim2.fromOffset(Picker.DIAL / 2 + math.cos(radians) * Picker.DIAL_R, Picker.DIAL / 2 + math.sin(radians) * Picker.DIAL_R)
+	end
+end
+
+function Picker.layout(info)
+	Picker.mode.Visible = PickerState.gradientCapable
+	Picker.railRow.Visible = PickerState.gradientCapable and PickerState.on
+	local thumb = { Position = UDim2.new(PickerState.on and 0.5 or 0, 2, 0, 2) }
+	local size = { Size = UDim2.new(1, 0, 0, Picker.height()) }
+	if info then
+		Motion.to(Picker.thumb, info, thumb)
+		Motion.to(Picker.body, info, size)
+	else
+		writeProperties(Picker.thumb, thumb)
+		writeProperties(Picker.body, size)
+	end
+	Live.list[Picker.mode](info)
+	for index, stop in ipairs(Picker.stops) do
+		local selected = index == PickerState.at
+		local handle = selected and Picker.HANDLE_ON or Picker.HANDLE
+		Live.set(stop, info, { Size = UDim2.fromOffset(handle, handle) })
+		Live.set(Picker.stopRings[index], info, { Transparency = selected and 0 or Picker.HANDLE_DIM })
+	end
+end
+
+function Picker.select(index)
+	local slot = PickerState.slots[index]
+	if not slot then
+		return
+	end
+	PickerState.at = index
+	local h, s, v = slot.color:ToHSV()
+	Picker.blendFrom = { h = PickerState.h, s = PickerState.s, v = PickerState.v, a = PickerState.a }
+	Picker.blendTo = { h = h, s = s, v = v, a = slot.alpha }
+	Motion.cancel(Picker.blendTween)
+	Picker.blend.Value = 0
+	Picker.blendTween = Motion.to(Picker.blend, Picker.BLEND, { Value = 1 })
+	Picker.layout(Motion.STATE)
+end
+
+function Picker.setMode(gradient)
+	if not PickerState.gradientCapable or gradient == PickerState.on then
+		return
+	end
+	PickerState.on = gradient
+	if not gradient and PickerState.at ~= 1 then
+		Picker.select(1)
+	end
+	Picker.layout(Motion.STATE)
+	Picker.redraw()
+	Picker.commit()
+end
+
+function Picker.commit()
+	if not Picker.onChange then
+		return
+	end
+	local first = PickerState.slots[1]
+	local gradient
+	if PickerState.gradientCapable then
+		local second = PickerState.slots[2]
+		gradient = { on = PickerState.on, color = second.color, alpha = second.alpha, angle = PickerState.angle }
+	end
+	Picker.onChange(first.color, first.alpha, gradient)
+end
+
+function Picker.isOpenFor(anchor)
+	return Picker.popup ~= nil and Picker.popup.open and Picker.popup.anchor == anchor
+end
+
+function Picker.open(anchor, color, alpha, onChange, onClose, gradient)
+	local popup = Picker.build()
+	if not popup then
+		return
+	end
+	if popup.open then
+		popup:Close()
+	end
+	popup.anchor = anchor
+	Picker.onChange = nil
+	Picker.blendFrom, Picker.blendTo = nil, nil
+	PickerState.slots = { { color = color, alpha = alpha or 1 } }
+	PickerState.at = 1
+	PickerState.gradientCapable = gradient ~= nil
+	PickerState.on = gradient ~= nil and gradient.on == true
+	if gradient then
+		PickerState.slots[2] = { color = gradient.color or color, alpha = gradient.alpha or 1 }
+		PickerState.angle = gradient.angle or 90
+	end
+	PickerState.h, PickerState.s, PickerState.v = color:ToHSV()
+	PickerState.a = alpha or 1
+	Picker.layout(nil)
+	Picker.redraw()
+	Picker.onChange = onChange
+	Picker.onClose = onClose
+	popup:Open()
+end
+
+local Builders = {}
+
+function Builders.check(section, item)
+	local control = Rows.base(section, Metrics.row, item.name, item.tooltip)
+	local z = control.zbase
+	local state = { value = false, hovered = false }
+	control.box = Accent.follow(create("Frame", {
+		Name = "Box",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(Metrics.controlX + Metrics.control // 2, Metrics.row // 2),
+		Size = UDim2.fromOffset(Metrics.control, Metrics.control),
+		ZIndex = z,
+		Parent = control.main,
+	}), "BackgroundColor3")
+	corner(control.box)
+	local boxStroke = create("UIStroke", { Thickness = Metrics.stroke, Parent = control.box })
+	local overlay = create("Frame", {
+		Name = "Overlay",
+		Size = UDim2.fromScale(1, 1),
+		skin = "control",
+		ZIndex = z + 1,
+		Parent = control.box,
+	})
+	corner(overlay)
+	control.interest = create("Frame", { Name = "Hit", Size = UDim2.new(1, 0, 0, Metrics.row), BackgroundTransparency = 1, ZIndex = z + 2, Parent = control.main })
+	Rows.title(control, Metrics.labelX, 0, nil, item.name, nil)
+	Skin.unpaint(control.title)
+
+	local paint = Live.add(control.main, function(info)
+		Live.set(boxStroke, info, { Color = state.hovered and Accent.get() or Skin.get("hard") })
+		Live.set(control.main, info, { BackgroundColor3 = Skin.get("rowGlow"), BackgroundTransparency = state.hovered and Metrics.rowHover or 1 })
+		Live.set(control.title, info, { TextColor3 = Skin.get(state.value and "muted" or "faint") })
+	end)
+
+	control.commit = bind(item, function(value, initial)
+		state.value = value == true
+		if initial then
+			overlay.BackgroundTransparency = state.value and 1 or 0
+		else
+			Motion.to(overlay, Motion.STATE, { BackgroundTransparency = state.value and 1 or 0 })
+		end
+		paint(not initial and Motion.STATE or nil)
+		return state.value
+	end)
+	onPress(control.interest, function(pressed)
+		pressBox(control, control.box, pressed)
+		if pressed then
+			control.commit(not state.value)
+		end
+	end)
+	onHover(control.interest, function(hovered)
+		state.hovered = hovered
+		paint(hovered and Motion.HOVER_IN or Motion.HOVER_OUT)
+	end)
+	Tooltip.attach(control.interest, item.tooltip)
+	control.kind = "check"
+	return control
+end
+
+function Builders.label(section, item)
+	local control = Rows.base(section, 0, item.name, item.tooltip)
+	control.main.AutomaticSize = Enum.AutomaticSize.Y
+	control.adornY = 11
+	control.title = create("TextLabel", {
+		Name = "Title",
+		Position = UDim2.fromOffset(Metrics.controlX, 2),
+		Size = UDim2.new(1, -Metrics.controlX * 2, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		Text = item.name or "",
+		TextSize = Metrics.textSize,
+		skin = "body",
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = true,
+		ZIndex = control.zbase + 2,
+		Parent = control.main,
+	})
+	create("UIPadding", { PaddingBottom = UDim.new(0, 4), Parent = control.title })
+	control.interest = control.title
+	control.label = control.title
+	Tooltip.attach(control.title, item.tooltip)
+	control.commit = function() end
+	control.kind = "label"
+	return control
+end
+
+function Builders.paragraph(section, item)
+	local control = Rows.base(section, 0, (item.name or "") .. " " .. (item.text or ""), item.tooltip)
+	control.main.AutomaticSize = Enum.AutomaticSize.Y
+	create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2), Parent = control.main })
+	create("UIPadding", { PaddingLeft = UDim.new(0, Metrics.controlX), PaddingRight = UDim.new(0, Metrics.controlX), Parent = control.main })
+	if item.name and item.name ~= "" then
+		control.title = create("TextLabel", {
+			Name = "Title",
+			LayoutOrder = 1,
+			Size = UDim2.new(1, 0, 0, 18),
+			BackgroundTransparency = 1,
+			Text = item.name,
+			TextSize = Metrics.textSize,
+			skin = "text",
+			FontFace = Typeface.face(),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = control.zbase + 2,
+			Parent = control.main,
+		})
+	end
+	control.label = create("TextLabel", {
+		Name = "Content",
+		LayoutOrder = 2,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		Text = item.text or "",
+		TextSize = Metrics.textSize - 1,
+		skin = "faint",
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = true,
+		ZIndex = control.zbase + 2,
+		Parent = control.main,
+	})
+	create("UIPadding", { PaddingBottom = UDim.new(0, 4), Parent = control.label })
+	Tooltip.attach(control.main, item.tooltip)
+	control.commit = function() end
+	control.kind = "paragraph"
+	return control
+end
+
+function Builders.divider(section, item)
+	local height = item.name and item.name ~= "" and 18 or 8
+	local control = Rows.base(section, height, item.name, nil)
+	local function line(name, side)
+		return create("Frame", {
+			Name = name,
+			AnchorPoint = Vector2.new(side, 0.5),
+			Position = UDim2.new(side, side == 0 and 6 or -6, 0.5, 0),
+			Size = UDim2.new(0.5, -6, 0, 1),
+			skin = "line",
+			ZIndex = control.zbase,
+			Parent = control.main,
+		})
+	end
+	local left, right = line("Left", 0), line("Right", 1)
+	if height == 18 then
+		local title = create("TextLabel", {
+			Name = "Title",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(0, height),
+			AutomaticSize = Enum.AutomaticSize.X,
+			BackgroundTransparency = 1,
+			Text = item.name,
+			TextSize = Metrics.textSize - 1,
+			skin = "dim",
+			FontFace = Typeface.face(),
+			ZIndex = control.zbase + 1,
+			Parent = control.main,
+		})
+		local function fit()
+			local half = title.AbsoluteSize.X / 2 + 8
+			left.Size = UDim2.new(0.5, -6 - half, 0, 1)
+			right.Size = UDim2.new(0.5, -6 - half, 0, 1)
+		end
+		connect(title:GetPropertyChangedSignal("AbsoluteSize"), fit)
+		fit()
+	end
+	control.commit = function() end
+	control.kind = "divider"
+	return control
+end
+
+function Builders.button(section, item)
+	local HEIGHT, BAR_H, PAD, INSET = 34, 26, 4, 10
+	local control = Rows.base(section, HEIGHT, item.name, item.tooltip)
+	local z = control.zbase
+	local state = { hovered = false }
+	control.adornY = HEIGHT - PAD - BAR_H // 2
+	local bar = create("TextButton", {
+		Name = "Bar",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -PAD),
+		Size = UDim2.new(1, -INSET * 2, 0, BAR_H),
+		AutoButtonColor = false,
+		Text = item.name or "button",
+		TextSize = Metrics.textSize,
+		FontFace = Typeface.face(),
+		skin = { TextColor3 = "text" },
+		ZIndex = z + 1,
+		Parent = control.main,
+	})
+	corner(bar)
+	local stroke = fieldStroke(bar)
+	local gradient = create("UIGradient", {
+		Color = ColorSequence.new(Color3.fromRGB(180, 180, 180), Color3.fromRGB(253, 253, 253)),
+		Rotation = -90,
+		Parent = bar,
+	})
+	control.label = bar
+	control.interest = bar
+	local paint = Live.add(bar, function(info)
+		Live.set(bar, info, { BackgroundColor3 = Skin.get(state.hovered and "hover" or "control") })
+		Live.set(stroke, info, { Color = state.hovered and Accent.get() or Skin.get("stroke") })
+	end)
+	local function press(pressed)
+		Motion.cancel(control.pressTween)
+		local inset = pressed and 2 or 0
+		control.pressTween = Motion.to(bar, pressed and Motion.PRESS or Motion.RELEASE, {
+			Size = UDim2.new(1, -INSET * 2 - inset * 2, 0, BAR_H - inset * 2),
+		})
+		gradient.Rotation = pressed and 90 or -90
+	end
+	connect(bar.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Popup.hold()
+			press(true)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(bar) then
+			state.hovered = true
+			paint(Motion.HOVER_IN)
+		end
+	end)
+	connect(bar.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			press(false)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			press(false)
+			state.hovered = false
+			paint(Motion.HOVER_OUT)
+		end
+	end)
+	connect(bar.Activated, function()
+		runCallback(item)
+	end)
+	Tooltip.attach(bar, item.tooltip)
+	control.commit = function() end
+	control.kind = "button"
+	return control
+end
+
+function Builders.slider(section, item)
+	local LABEL_H, LABEL_GAP, LANE_H, TRACK, GRAB_W, GRAB_H, BOX_W, BOX_GAP = 18, 4, 20, 4, 10, 17, 72, 8
+	local laneY = LABEL_H + LABEL_GAP
+	local control = Rows.base(section, laneY + LANE_H, item.name, item.tooltip)
+	control.main.BackgroundTransparency = 1
+	control.adornY = LABEL_H // 2
+	local z = control.zbase
+	local minimum, maximum = tonumber(item.min) or 0, tonumber(item.max) or 100
+	local decimals = math.max(0, math.floor(tonumber(item.decimals) or 0))
+	local step = 10 ^ -decimals
+	local suffix = item.suffix and tostring(item.suffix) or ""
+	local state = { value = minimum, hovered = false, held = false, editing = false }
+
+	Rows.title(control, Metrics.controlX, 0, LABEL_H, item.name, "body")
+	local counter = create("NumberValue", { Name = "Counter", Value = minimum, Parent = control.main })
+	local box = create("TextBox", {
+		Name = "Value",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -Metrics.controlX, 0, laneY + LANE_H // 2),
+		Size = UDim2.fromOffset(BOX_W, LANE_H - 2),
+		Text = "",
+		TextSize = Metrics.textSize - 2,
+		FontFace = Typeface.face(),
+		ClearTextOnFocus = false,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = z + 1,
+		Parent = control.main,
+	})
+	corner(box, Metrics.corner - 1)
+	local boxState = { focused = false }
+	local paintBox = fieldPainter(fieldStroke(box), boxState)
+	local lane = create("Frame", {
+		Name = "Lane",
+		Position = UDim2.fromOffset(Metrics.controlX, laneY),
+		Size = UDim2.new(1, -(Metrics.controlX * 2 + BOX_W + BOX_GAP), 0, LANE_H),
+		BackgroundTransparency = 1,
+		ZIndex = z + 1,
+		Parent = control.main,
+	})
+	control.interest = lane
+	local track = create("Frame", {
+		Name = "Track",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromScale(0, 0.5),
+		Size = UDim2.new(1, 0, 0, TRACK),
+		ZIndex = z + 1,
+		Parent = lane,
+	})
+	corner(track, UDim.new(1, 0))
+	local fill = Accent.follow(create("Frame", { Name = "Fill", Size = UDim2.fromScale(0, 1), ZIndex = z + 2, Parent = track }), "BackgroundColor3")
+	corner(fill, UDim.new(1, 0))
+	create("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(55, 55, 55), Color3.new(1, 1, 1)), Parent = fill })
+	local grab = create("Frame", {
+		Name = "Grab",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0, 0.5),
+		Size = UDim2.fromOffset(GRAB_W, GRAB_H),
+		ZIndex = z + 3,
+		Parent = lane,
+	})
+	corner(grab, 3)
+	create("UIStroke", { Thickness = 1, skin = "hard", Transparency = 0.7, Parent = grab })
+	local bubble = create("TextLabel", {
+		Name = "Bubble",
+		AnchorPoint = Vector2.new(0.5, 1),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 18),
+		Text = "",
+		TextSize = Metrics.textSize - 2,
+		skin = { BackgroundColor3 = "raised", TextColor3 = "text" },
+		FontFace = Typeface.face(),
+		Visible = false,
+		ZIndex = z + 4,
+		Parent = lane,
+	})
+	corner(bubble)
+	local bubbleStroke = create("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Thickness = 1, skin = "border", Transparency = 1, Parent = bubble })
+	create("UIPadding", { PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7), Parent = bubble })
+
+	local paint = Live.add(lane, function(info)
+		Live.set(track, info, { BackgroundColor3 = Skin.get(state.hovered and "edge" or "line") })
+		Live.set(grab, info, { BackgroundColor3 = state.held and Accent.get():Lerp(Color3.new(1, 1, 1), 0.45) or Skin.get("grab") })
+		Live.set(box, info, { BackgroundColor3 = Skin.get("field") })
+		if not state.pulsing then
+			Live.set(box, info, { TextColor3 = Skin.get("body") })
+		end
+	end)
+
+	local function format(value)
+		return string.format("%." .. decimals .. "f", value)
+	end
+	local function alphaOf(value)
+		return maximum == minimum and 0 or (value - minimum) / (maximum - minimum)
+	end
+	local function clampValue(value)
+		value = tonumber(value) or minimum
+		value = minimum + math.floor((value - minimum) / step + 0.5) * step
+		return math.clamp(tonumber(format(value)) or value, minimum, maximum)
+	end
+	local function showValue()
+		if not state.editing then
+			box.Text = format(counter.Value) .. suffix
+		end
+		bubble.Text = format(state.value) .. suffix
+	end
+	connect(counter.Changed, showValue)
+	local function redraw(info)
+		local alpha = alphaOf(state.value)
+		if info then
+			Motion.to(fill, info, { Size = UDim2.new(alpha, 0, 1, 0) })
+			Motion.to(grab, info, { Position = UDim2.new(alpha, 0, 0.5, 0) })
+			Motion.to(bubble, info, { Position = UDim2.new(alpha, 0, 0.5, -(GRAB_H // 2) - 6) })
+			Motion.cancel(control.countTween)
+			control.countTween = Motion.to(counter, info, { Value = state.value })
+		else
+			fill.Size = UDim2.new(alpha, 0, 1, 0)
+			grab.Position = UDim2.new(alpha, 0, 0.5, 0)
+			bubble.Position = UDim2.new(alpha, 0, 0.5, -(GRAB_H // 2) - 6)
+			counter.Value = state.value
+		end
+		showValue()
+	end
+	local DRAG = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local STEP = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	control.commit = bind(item, function(value, initial)
+		state.value = clampValue(value)
+		redraw(not initial and STEP or nil)
+		return state.value
+	end)
+
+	local function pulse()
+		state.pulsing = true
+		box.TextColor3 = Accent.get()
+		local animation = Motion.to(box, Motion.HOVER_OUT, { TextColor3 = Skin.get("body") })
+		task.delay(Motion.HOVER_OUT.Time, function()
+			state.pulsing = false
+		end)
+		return animation
+	end
+	local function showBubble(shown)
+		local goal = { BackgroundTransparency = shown and 0 or 1, TextTransparency = shown and 0 or 1 }
+		if shown then
+			bubble.Visible = true
+			bubble.BackgroundTransparency = 1
+			bubble.TextTransparency = 1
+			Motion.to(bubble, Motion.HOVER_IN, goal)
+			Motion.to(bubbleStroke, Motion.HOVER_IN, { Transparency = 0 })
+			return
+		end
+		local animation = Motion.to(bubble, Motion.HOVER_OUT, goal)
+		Motion.to(bubbleStroke, Motion.HOVER_OUT, { Transparency = 1 })
+		if animation then
+			animation.Completed:Once(function()
+				if not state.held then
+					bubble.Visible = false
+				end
+			end)
+		else
+			bubble.Visible = false
+		end
+	end
+	local function dragTo(x)
+		local width = lane.AbsoluteSize.X
+		if width <= 0 then
+			return
+		end
+		local value = clampValue(minimum + math.clamp((x - lane.AbsolutePosition.X) / width, 0, 1) * (maximum - minimum))
+		if value ~= state.value then
+			state.value = value
+			redraw(DRAG)
+			control.commit(value)
+		end
+	end
+
+	local function scroller()
+		local node = control.main.Parent
+		while node do
+			if node:IsA("ScrollingFrame") then
+				return node
+			end
+			node = node.Parent
+		end
+		return nil
+	end
+	connect(lane.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			state.held = true
+			R.slider = { drag = dragTo, release = function()
+				state.held = false
+				paint(Motion.RELEASE)
+				showBubble(false)
+			end }
+			paint(Motion.PRESS)
+			showBubble(true)
+			dragTo(mouse().X)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			if Popup.blocks(lane) then
+				return
+			end
+			local frame = scroller()
+			if frame then
+				state.scrollWas = state.scrollWas == nil and frame.ScrollingEnabled or state.scrollWas
+				frame.ScrollingEnabled = false
+			end
+			state.hovered = true
+			paint(Motion.HOVER_IN)
+		end
+	end)
+	connect(lane.InputChanged, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseWheel then
+			control.commit(clampValue(state.value - input.Position.Z * -1 * step))
+		end
+	end)
+	connect(lane.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			local frame = scroller()
+			if frame and state.scrollWas ~= nil then
+				frame.ScrollingEnabled = state.scrollWas
+				state.scrollWas = nil
+			end
+			state.hovered = false
+			paint(Motion.HOVER_OUT)
+		end
+	end)
+	connect(box.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Popup.hold()
+		end
+	end)
+	connect(box.Focused, function()
+		Popup.hold()
+		state.editing = true
+		boxState.focused = true
+		paintBox(Motion.HOVER_IN)
+	end)
+	connect(box.FocusLost, function()
+		state.editing = false
+		boxState.focused = false
+		paintBox(Motion.HOVER_OUT)
+		local text = string.lower(trim(box.Text))
+		if suffix ~= "" and string.sub(text, -#suffix) == string.lower(suffix) then
+			text = trim(string.sub(text, 1, #text - #suffix))
+		end
+		local number = tonumber(text)
+		if number then
+			control.commit(clampValue(number))
+			pulse()
+		else
+			redraw(STEP)
+		end
+	end)
+	Tooltip.attach(lane, item.tooltip)
+	control.kind = "slider"
+	return control
+end
+
+function Builders.input(section, item)
+	local LABEL_H, LABEL_GAP, FIELD_H = 18, 4, 20
+	local control = Rows.base(section, LABEL_H + LABEL_GAP + FIELD_H, item.name, item.tooltip)
+	control.adornY = LABEL_H // 2
+	local z = control.zbase
+	local state = { value = "", hovered = false, focused = false }
+	Rows.title(control, Metrics.controlX, 0, LABEL_H, item.name, "body")
+	local field = create("TextBox", {
+		Name = "Field",
+		Position = UDim2.fromOffset(Metrics.controlX, LABEL_H + LABEL_GAP),
+		Size = UDim2.new(1, -Metrics.controlX * 2, 0, FIELD_H - 2),
+		skin = { BackgroundColor3 = "field", TextColor3 = "body", PlaceholderColor3 = "hint" },
+		Text = "",
+		PlaceholderText = item.placeholder or "",
+		TextSize = Metrics.textSize - 2,
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = z + 1,
+		Parent = control.main,
+	})
+	corner(field, Metrics.corner - 1)
+	local paint = fieldPainter(fieldStroke(field), state)
+	create("UIPadding", { PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7), Parent = field })
+	control.interest = field
+
+	local function clean(value)
+		value = tostring(value or "")
+		if item.maxLength then
+			value = string.sub(value, 1, item.maxLength)
+		end
+		if item.numeric and value ~= "" and not string.match(value, "^%-?%d*%.?%d*$") then
+			return nil
+		end
+		return value
+	end
+	control.commit = bind(item, function(value)
+		value = clean(value) or state.value
+		state.value = value
+		if field.Text ~= value and not state.focused then
+			field.Text = value
+		end
+		return value
+	end)
+	connect(field:GetPropertyChangedSignal("Text"), function()
+		local cleaned = clean(field.Text)
+		if cleaned == nil then
+			field.Text = state.value
+			return
+		end
+		if cleaned ~= field.Text then
+			field.Text = cleaned
+			return
+		end
+		if not item.finished and state.focused and cleaned ~= state.value then
+			control.commit(cleaned)
+		end
+	end)
+	connect(field.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Popup.hold()
+		end
+	end)
+	connect(field.Focused, function()
+		Popup.hold()
+		state.focused = true
+		paint(Motion.HOVER_IN)
+	end)
+	connect(field.FocusLost, function()
+		state.focused = false
+		paint(Motion.HOVER_OUT)
+		if field.Text ~= state.value then
+			control.commit(field.Text)
+		end
+	end)
+	connect(field.MouseEnter, function()
+		state.hovered = true
+		paint(Motion.HOVER_IN)
+	end)
+	connect(field.MouseLeave, function()
+		state.hovered = false
+		paint(Motion.HOVER_OUT)
+	end)
+	Tooltip.attach(field, item.tooltip)
+	control.kind = "input"
+	return control
+end
+
+function Builders.keybind(section, item)
+	local control = Rows.base(section, Metrics.row, item.name, item.tooltip)
+	local z = control.zbase
+	local state = { value = "None", listening = false, hovered = false }
+	control.interest = create("Frame", { Name = "Hit", Size = UDim2.new(1, 0, 0, Metrics.row), BackgroundTransparency = 1, ZIndex = z + 2, Parent = control.main })
+	Rows.title(control, Metrics.controlX, 0, nil, item.name, "body")
+	local key = create("TextButton", {
+		Name = "Key",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -Metrics.controlX, 0, Metrics.row // 2),
+		Size = UDim2.fromOffset(0, 18),
+		AutomaticSize = Enum.AutomaticSize.X,
+		AutoButtonColor = false,
+		Text = "",
+		TextSize = Metrics.textSize - 2,
+		FontFace = Typeface.face(),
+		ZIndex = z + 3,
+		Parent = control.main,
+	})
+	corner(key, Metrics.corner - 1)
+	create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = key })
+	local keyStroke = fieldStroke(key)
+	local fieldState = { hovered = false, focused = false }
+	local paintStroke = fieldPainter(keyStroke, fieldState)
+	local paint = Live.add(key, function(info)
+		Live.set(key, info, { BackgroundColor3 = Skin.get("field"), TextColor3 = state.listening and Accent.get() or Skin.get("body") })
+	end)
+	local function refresh()
+		key.Text = state.listening and "..." or Binds.label(state.value)
+		fieldState.focused = state.listening
+		paint(Motion.HOVER_IN)
+		paintStroke(Motion.HOVER_IN)
+	end
+	control.commit = bind(item, function(value)
+		if typeof(value) == "EnumItem" then
+			value = value.Name
+		end
+		state.value = type(value) == "string" and value ~= "" and value or "None"
+		refresh()
+		return state.value
+	end)
+	connect(key.MouseButton1Click, function()
+		Popup.hold()
+		Binds.cancelCapture()
+		state.listening = true
+		refresh()
+		Binds.capture(function(name, cancelled)
+			state.listening = false
+			if not cancelled and name then
+				control.commit(name)
+			else
+				refresh()
+			end
+		end)
+	end)
+	connect(key.MouseEnter, function()
+		fieldState.hovered = true
+		paintStroke(Motion.HOVER_IN)
+	end)
+	connect(key.MouseLeave, function()
+		fieldState.hovered = false
+		paintStroke(Motion.HOVER_OUT)
+	end)
+	Tooltip.attach(control.interest, item.tooltip)
+	control.kind = "keybind"
+	return control
+end
+
+local function normalizeChoice(item, value)
+	if item.multi then
+		local lookup = {}
+		if type(value) == "table" then
+			for key, entry in pairs(value) do
+				if type(key) == "number" then
+					lookup[tostring(entry)] = true
+				elseif entry == true then
+					lookup[tostring(key)] = true
+				end
+			end
+		elseif value ~= nil then
+			lookup[tostring(value)] = true
+		end
+		local selected = {}
+		for _, option in ipairs(item.options) do
+			if lookup[tostring(option)] then
+				table.insert(selected, option)
+			end
+		end
+		return selected
+	end
+	if type(value) == "table" then
+		value = value[1]
+	end
+	if type(value) == "number" and item.options[value] ~= nil and not table.find(item.options, value) then
+		value = item.options[value]
+	end
+	for _, option in ipairs(item.options) do
+		if value ~= nil and tostring(option) == tostring(value) then
+			return option
+		end
+	end
+	return nil
+end
+
+local LIST = { LABEL_H = 18, LABEL_GAP = 4, FIELD_H = 26, PAD_LEFT = 10, PAD_RIGHT = 24, ROW_H = 22, SWATCH = 14, SWATCH_PAD = 6, PANEL_ROWS = 16, SEARCH_H = 24, SQUARE_H = 92, STRIP_H = 11, STRIP_GAP = 7, KNOB = 9, EDITOR_PAD = 8 }
+LIST.EDITOR_H = LIST.SQUARE_H + (LIST.STRIP_GAP + LIST.STRIP_H) * 2 + LIST.EDITOR_PAD
+
+local function optionEditor(control, row, option, swatch)
+	local z = control.popup.zbase
+	local editor = create("Frame", {
+		Name = "Editor",
+		Position = UDim2.fromOffset(LIST.PAD_LEFT, LIST.ROW_H),
+		Size = UDim2.new(1, -(LIST.PAD_LEFT + LIST.EDITOR_PAD), 0, LIST.EDITOR_H - LIST.EDITOR_PAD),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = z + 1,
+		Parent = row,
+	})
+	local square = create("Frame", { Name = "Square", Size = UDim2.new(1, 0, 0, LIST.SQUARE_H), ZIndex = z + 1, Parent = editor })
+	corner(square)
+	local white = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = z + 2, Parent = square })
+	corner(white)
+	create("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = white })
+	local shade = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = z + 3, Parent = square })
+	corner(shade)
+	create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = shade })
+	local dot = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(LIST.KNOB, LIST.KNOB), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = z + 4, Parent = square })
+	corner(dot, UDim.new(1, 0))
+	create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.35, Parent = dot })
+	local function mark(parent)
+		local frame = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.new(0, 4, 1, 2), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = z + 3, Parent = parent })
+		corner(frame, UDim.new(1, 0))
+		create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.35, Parent = frame })
+		return frame
+	end
+	local hue = create("Frame", { Position = UDim2.fromOffset(0, LIST.SQUARE_H + LIST.STRIP_GAP), Size = UDim2.new(1, 0, 0, LIST.STRIP_H), ZIndex = z + 1, Parent = editor })
+	corner(hue, UDim.new(1, 0))
+	create("UIGradient", { Color = HUE_SEQUENCE, Parent = hue })
+	local hueMark = mark(hue)
+	local alphaY = LIST.SQUARE_H + LIST.STRIP_H + LIST.STRIP_GAP * 2
+	local checker = create("ImageLabel", { Position = UDim2.fromOffset(0, alphaY), Size = UDim2.new(1, 0, 0, LIST.STRIP_H), BackgroundTransparency = 1, ZIndex = z + 1, Parent = editor })
+	corner(checker, UDim.new(1, 0))
+	Checker.paint(checker)
+	local alpha = create("Frame", { Position = UDim2.fromOffset(0, alphaY), Size = UDim2.new(1, 0, 0, LIST.STRIP_H), ZIndex = z + 2, Parent = editor })
+	corner(alpha, UDim.new(1, 0))
+	create("UIGradient", { Transparency = NumberSequence.new(1, 0), Parent = alpha })
+	local alphaMark = mark(alpha)
+
+	local picker = control.optionPickers[option]
+	local color, opacity = parseColor(R.current[picker.key])
+	color, opacity = color or Color3.new(1, 1, 1), opacity or 1
+	local h, s, v = color:ToHSV()
+	local function redraw()
+		local current = Color3.fromHSV(h, s, v)
+		square.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+		swatch.BackgroundColor3 = current
+		swatch.BackgroundTransparency = 1 - opacity
+		alpha.BackgroundColor3 = current
+		dot.Position = UDim2.fromScale(s, 1 - v)
+		hueMark.Position = UDim2.fromScale(h, 0.5)
+		alphaMark.Position = UDim2.fromScale(opacity, 0.5)
+		picker.commit(formatColor(current, opacity))
+	end
+	local function drag(frame, apply)
+		local active = false
+		connect(frame.InputBegan, function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				Popup.hold(control.popup)
+				active = true
+				apply(relative(frame, mouse()))
+				redraw()
+			end
+		end)
+		connect(UserInputService.InputChanged, function(input)
+			if active and input.UserInputType == Enum.UserInputType.MouseMovement then
+				apply(relative(frame, mouse()))
+				redraw()
+			end
+		end)
+		connect(UserInputService.InputEnded, function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				active = false
+			end
+		end)
+	end
+	drag(square, function(x, y)
+		s, v = x, 1 - y
+	end)
+	drag(hue, function(x)
+		h = math.min(x, 0.999)
+	end)
+	drag(alpha, function(x)
+		opacity = x
+	end)
+	dot.Position = UDim2.fromScale(s, 1 - v)
+	hueMark.Position = UDim2.fromScale(h, 0.5)
+	alphaMark.Position = UDim2.fromScale(opacity, 0.5)
+	square.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+	alpha.BackgroundColor3 = color
+	return editor
+end
+
+local function listRow(control, option, order)
+	local item = control.item
+	local z = control.popup.zbase
+	local state = { hovered = false }
+	local row = create("TextButton", {
+		Name = "Row",
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, LIST.ROW_H),
+		skin = "rowGlow",
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+		ZIndex = z,
+		Parent = control.popup.content,
+	})
+	corner(row)
+	control.rows[option] = row
+	local swatchSpace = 0
+	local picker = control.optionPickers and control.optionPickers[option]
+	if picker then
+		swatchSpace = LIST.SWATCH + LIST.SWATCH_PAD
+		local color, opacity = parseColor(R.current[picker.key])
+		local swatch = create("TextButton", {
+			Name = "Swatch",
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -LIST.SWATCH_PAD, 0, LIST.ROW_H // 2),
+			Size = UDim2.fromOffset(LIST.SWATCH, LIST.SWATCH),
+			BackgroundColor3 = color or Color3.new(1, 1, 1),
+			BackgroundTransparency = 1 - (opacity or 1),
+			AutoButtonColor = false,
+			Text = "",
+			ZIndex = z + 2,
+			Parent = row,
+		})
+		corner(swatch)
+		create("UIStroke", { Thickness = 1, skin = "border", Parent = swatch })
+		local editor, expanded = nil, false
+		connect(swatch.MouseButton1Click, function()
+			Popup.hold(control.popup)
+			if not editor then
+				editor = optionEditor(control, row, option, swatch)
+				row.ClipsDescendants = true
+			end
+			expanded = not expanded
+			if expanded then
+				editor.Visible = true
+			end
+			Motion.to(row, Motion.STATE, { Size = UDim2.new(1, 0, 0, expanded and LIST.ROW_H + LIST.EDITOR_H or LIST.ROW_H) })
+			if not expanded then
+				task.delay(0.15, function()
+					if editor and not expanded then
+						editor.Visible = false
+					end
+				end)
+			end
+		end)
+	end
+	local label = create("TextLabel", {
+		Name = "Label",
+		Position = UDim2.fromOffset(LIST.PAD_LEFT, 0),
+		Size = UDim2.new(1, -(LIST.PAD_LEFT * 2) - swatchSpace, 0, LIST.ROW_H),
+		BackgroundTransparency = 1,
+		Text = tostring(option),
+		TextSize = Metrics.textSize - 1,
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = z + 1,
+		Parent = row,
+	})
+	local hit = create("TextButton", {
+		Name = "Hit",
+		Size = UDim2.new(1, -swatchSpace, 0, LIST.ROW_H),
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+		ZIndex = z + 1,
+		Parent = row,
+	})
+	local function chosen()
+		local value = R.current[item.key]
+		if item.multi then
+			return type(value) == "table" and table.find(value, option) ~= nil
+		end
+		return value == option
+	end
+	local paint = Live.add(label, function(info)
+		Live.set(label, info, { TextColor3 = chosen() and Accent.get() or Skin.get("hint") })
+	end)
+	connect(hit.MouseButton1Click, function()
+		Popup.hold(control.popup)
+		if item.multi then
+			local value = table.clone(R.current[item.key] or {})
+			local position = table.find(value, option)
+			if position then
+				table.remove(value, position)
+			else
+				table.insert(value, option)
+			end
+			control.commit(value)
+		else
+			control.commit(option)
+			control.popup:Close()
+		end
+	end)
+	connect(row.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(row) then
+			Motion.to(row, Motion.HOVER_IN, { BackgroundTransparency = 0.92 })
+		end
+	end)
+	connect(row.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			Motion.to(row, Motion.HOVER_OUT, { BackgroundTransparency = 1 })
+		end
+	end)
+	control.marks[option] = paint
+end
+
+local function buildListPanel(control)
+	if control.popup then
+		return control.popup
+	end
+	local popup = Popup.new(control.field)
+	if not popup then
+		return nil
+	end
+	control.popup = popup
+	popup.placement = "below"
+	popup.maxHeight = LIST.PANEL_ROWS * (LIST.ROW_H + Metrics.rowGap) + LIST.SEARCH_H + Metrics.rowGap + Popup.PAD * 2
+	local z = popup.zbase
+	local search = create("TextBox", {
+		Name = "Search",
+		LayoutOrder = 0,
+		Size = UDim2.new(1, -(LIST.PAD_LEFT * 2), 0, LIST.SEARCH_H),
+		Text = "",
+		PlaceholderText = "search...",
+		TextSize = Metrics.textSize - 2,
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		skin = { BackgroundColor3 = "field", TextColor3 = "body", PlaceholderColor3 = "hint" },
+		ZIndex = z + 1,
+		Parent = popup.content,
+	})
+	corner(search, Metrics.corner - 1)
+	fieldStroke(search)
+	create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = search })
+	Accent.follow(create("Frame", {
+		Name = "Rule",
+		LayoutOrder = 1,
+		Size = UDim2.new(1, -(LIST.PAD_LEFT * 2), 0, 1),
+		BackgroundTransparency = 0.75,
+		ZIndex = z,
+		Parent = popup.content,
+	}), "BackgroundColor3")
+	control.search = search
+	local function filter()
+		local query = string.lower(search.Text)
+		for option, row in pairs(control.rows) do
+			row.Visible = query == "" or string.find(string.lower(tostring(option)), query, 1, true) ~= nil
+		end
+	end
+	connect(search:GetPropertyChangedSignal("Text"), filter)
+	connect(search.Focused, function()
+		Popup.hold()
+	end)
+	control.rebuildRows = function()
+		for _, row in pairs(control.rows) do
+			row:Destroy()
+		end
+		control.rows, control.marks = {}, {}
+		for index, option in ipairs(control.item.options) do
+			listRow(control, option, index + 1)
+		end
+		filter()
+	end
+	control.rebuildRows()
+	popup.onOpen = function()
+		control.state.open = true
+		control.paint(Motion.HOVER_IN)
+		Motion.to(control.caret, Motion.HOVER_IN, { Rotation = 90 })
+		search.Text = ""
+		filter()
+	end
+	popup.onClose = function()
+		control.state.open = false
+		control.paint(Motion.HOVER_OUT)
+		Motion.to(control.caret, Motion.HOVER_OUT, { Rotation = 270 })
+	end
+	return popup
+end
+
+function Builders.dropdown(section, item)
+	local control = Rows.base(section, LIST.LABEL_H + LIST.LABEL_GAP + LIST.FIELD_H, item.name, item.tooltip)
+	control.adornY = LIST.LABEL_H // 2
+	control.item = item
+	item.options = item.options or {}
+	control.rows, control.marks = {}, {}
+	local z = control.zbase
+	local state = { hovered = false, open = false }
+	control.state = state
+	Rows.title(control, Metrics.controlX, 0, LIST.LABEL_H, item.name, "body")
+	local field = create("TextButton", {
+		Name = "Field",
+		Position = UDim2.fromOffset(Metrics.controlX, LIST.LABEL_H + LIST.LABEL_GAP),
+		Size = UDim2.new(1, -Metrics.controlX * 2, 0, LIST.FIELD_H - 2),
+		skin = { BackgroundColor3 = "field", TextColor3 = "body" },
+		AutoButtonColor = false,
+		Text = "none",
+		TextSize = Metrics.textSize - 2,
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = z + 1,
+		Parent = control.main,
+	})
+	control.field = field
+	control.interest = field
+	corner(field, Metrics.corner - 1)
+	local stroke = fieldStroke(field)
+	create("UIPadding", { PaddingLeft = UDim.new(0, LIST.PAD_LEFT), PaddingRight = UDim.new(0, LIST.PAD_RIGHT), Parent = field })
+	local caretWidth, caretHeight = Icons.dimensions("tooltipArrow")
+	control.caret = iconLabel("tooltipArrow", {
+		Name = "Caret",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, LIST.PAD_RIGHT - 9, 0.5, 0),
+		Size = UDim2.fromOffset(caretWidth or 7, caretHeight or 12),
+		Rotation = 270,
+		ZIndex = z + 2,
+		Parent = field,
+	})
+	local paintStroke = fieldPainter(stroke, state)
+	control.paint = function(info)
+		paintStroke(info)
+		Live.set(control.caret, info, { ImageColor3 = state.open and Accent.get() or Skin.get("hint") })
+	end
+	Live.add(control.caret, control.paint)
+
+	if item.optionColors then
+		control.optionPickers = {}
+		for _, option in ipairs(item.options) do
+			local default = item.optionColors[option]
+			if default ~= nil then
+				local key = item.key .. ":option:" .. tostring(option)
+				control.optionPickers[option] = {
+					key = key,
+					commit = bind({ key = key, default = hexOf(default) }, function(value)
+						local color, alpha = parseColor(value)
+						return color and formatColor(color, alpha) or hexOf(default)
+					end),
+				}
+			end
+		end
+	end
+
+	control.commit = bind(item, function(value)
+		value = normalizeChoice(item, value)
+		if item.multi then
+			local names = {}
+			for _, option in ipairs(value) do
+				table.insert(names, tostring(option))
+			end
+			field.Text = #names > 0 and table.concat(names, ", ") or "none"
+		else
+			field.Text = value ~= nil and tostring(value) or "none"
+		end
+		task.defer(function()
+			for _, mark in pairs(control.marks) do
+				mark(Motion.HOVER_IN)
+			end
+		end)
+		return value
+	end)
+	control.setOptions = function(options)
+		item.options = options
+		if control.rebuildRows then
+			control.rebuildRows()
+		end
+	end
+	connect(field.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local popup = buildListPanel(control)
+			if popup then
+				popup:Toggle()
+			end
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			if Popup.blocks(field) then
+				return
+			end
+			state.hovered = true
+			control.paint(Motion.HOVER_IN)
+		end
+	end)
+	connect(field.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			state.hovered = false
+			control.paint(Motion.HOVER_OUT)
+		end
+	end)
+	Tooltip.attach(field, item.tooltip)
+	control.kind = "dropdown"
+	return control
+end
+
+local Adorn = {}
+
+function Adorn.color(control, key, default, callback, gradientInfo)
+	local offset, size = Rows.slot(control), Metrics.control
+	local z = control.zbase + 3
+	local state = { hovered = false, open = false }
+	local gradientKey = key .. "_gradient"
+	local swatch = create("Frame", {
+		Name = "Swatch",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(1, -offset - Metrics.controlX - size // 2, 0, Rows.adornY(control)),
+		Size = UDim2.fromOffset(size, size),
+		ZIndex = z + 1,
+		Parent = control.main,
+	})
+	corner(swatch)
+	local ramp = create("UIGradient", { Enabled = false, Parent = swatch })
+	local stroke = create("UIStroke", { Thickness = Metrics.stroke, Parent = swatch })
+	local paint = Live.add(swatch, function(info)
+		Live.set(stroke, info, { Color = (state.hovered or state.open) and Accent.get() or Skin.get("hard") })
+	end)
+	Rows.reserve(control)
+
+	local defaultColor, defaultAlpha = parseColor(default)
+	local defaultHex = defaultColor and formatColor(defaultColor, defaultAlpha) or "FFFFFFFF"
+
+	local function gradientValue()
+		local value = R.current[gradientKey]
+		return type(value) == "table" and value or nil
+	end
+
+	local function describe()
+		local value = gradientValue()
+		if not value then
+			return nil
+		end
+		local color, alpha = parseColor(value.color)
+		return { Enabled = value.on == true, Color = color, Transparency = 1 - (alpha or 1), Angle = value.angle }
+	end
+
+	local function repaint(instant)
+		local color, alpha = parseColor(R.current[key] or defaultHex)
+		if not color then
+			return
+		end
+		local gradient = gradientValue()
+		if gradient and gradient.on then
+			local second, secondAlpha = parseColor(gradient.color)
+			ramp.Color = ColorSequence.new(color, second or color)
+			ramp.Transparency = NumberSequence.new(1 - alpha, 1 - (secondAlpha or 1))
+			ramp.Rotation = gradient.angle or 90
+			ramp.Enabled = true
+			writeProperties(swatch, { BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0 })
+			return
+		end
+		ramp.Enabled = false
+		local goal = { BackgroundColor3 = color, BackgroundTransparency = 1 - alpha }
+		if instant then
+			writeProperties(swatch, goal)
+		else
+			Motion.to(swatch, Motion.STATE, goal)
+		end
+	end
+
+	local gradientCommit
+	if gradientInfo then
+		local second = gradientInfo.Default or gradientInfo.Color or default
+		gradientCommit = bind({
+			key = gradientKey,
+			default = { on = gradientInfo.Enabled == true, color = hexOf(second), angle = tonumber(gradientInfo.Angle) or 90 },
+		}, function(value)
+			if type(value) ~= "table" then
+				value = {}
+			end
+			local color, alpha = parseColor(value.color)
+			task.defer(repaint, true)
+			return { on = value.on == true, color = color and formatColor(color, alpha) or hexOf(second), angle = tonumber(value.angle) or 90 }
+		end)
+	end
+
+	local commit = bind({
+		key = key,
+		default = defaultHex,
+		callback = callback and function(value)
+			local color, alpha = parseColor(value)
+			callback(color, 1 - (alpha or 1), describe())
+		end,
+	}, function(value, initial)
+		local color, alpha = parseColor(value)
+		if not color then
+			color, alpha = parseColor(R.current[key] or defaultHex)
+		end
+		local result = formatColor(color, alpha)
+		R.current[key] = result
+		repaint(initial or state.live)
+		return result
+	end)
+
+	local function press(pressed)
+		Motion.cancel(state.pressTween)
+		local scaled = Metrics.control * (pressed and Metrics.pressScale or 1)
+		state.pressTween = Motion.to(swatch, pressed and Motion.PRESS or Motion.RELEASE, { Size = UDim2.fromOffset(scaled, scaled) })
+	end
+	connect(swatch.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			press(true)
+			if Picker.isOpenFor(swatch) then
+				Picker.popup:Close()
+				return
+			end
+			local color, alpha = parseColor(R.current[key])
+			local gradient
+			if gradientCommit then
+				local value = gradientValue() or {}
+				local second, secondAlpha = parseColor(value.color)
+				gradient = { on = value.on == true, color = second or color, alpha = secondAlpha or 1, angle = value.angle or 90 }
+			end
+			state.open = true
+			paint(Motion.HOVER_IN)
+			Picker.open(swatch, color or Color3.new(1, 1, 1), alpha or 1, function(newColor, newAlpha, newGradient)
+				state.live = true
+				if gradientCommit and newGradient then
+					gradientCommit({ on = newGradient.on, color = formatColor(newGradient.color, newGradient.alpha), angle = newGradient.angle }, true)
+				end
+				commit(formatColor(newColor, newAlpha))
+				state.live = false
+			end, function()
+				state.open = false
+				paint(Motion.HOVER_OUT)
+			end, gradient)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(swatch) then
+			state.hovered = true
+			paint(Motion.HOVER_IN)
+		end
+	end)
+	connect(swatch.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			press(false)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			press(false)
+			state.hovered = false
+			paint(Motion.HOVER_OUT)
+		end
+	end)
+	return commit, describe, gradientCommit and gradientKey or nil, gradientCommit
+end
+
+function Adorn.gear(control)
+	local icon, size = Rows.iconButton(control, "gear")
+	local popup = Popup.new(icon)
+	if not popup then
+		return nil
+	end
+	local state = { hovered = false }
+	local paint = Live.add(icon, function(info)
+		local active = state.hovered or popup.open
+		Live.set(icon, info, { ImageColor3 = active and Accent.get() or Skin.get("dim"), Rotation = active and 45 or 0 })
+	end)
+	popup.onOpen = function()
+		paint(Motion.HOVER_IN)
+	end
+	popup.onClose = function()
+		paint(Motion.HOVER_OUT)
+	end
+	local function press(pressed)
+		Motion.cancel(state.pressTween)
+		local scaled = size * (pressed and Metrics.pressScale or 1)
+		state.pressTween = Motion.to(icon, pressed and Motion.PRESS or Motion.RELEASE, { Size = UDim2.fromOffset(scaled, scaled) })
+	end
+	connect(icon.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			press(true)
+			popup:Toggle()
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(icon) then
+			state.hovered = true
+			if not popup.open then
+				paint(Motion.HOVER_IN)
+			end
+		end
+	end)
+	connect(icon.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			press(false)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			press(false)
+			state.hovered = false
+			if not popup.open then
+				paint(Motion.HOVER_OUT)
+			end
+		end
+	end)
+	return { content = popup.content, zbase = popup.zbase, order = 0, popup = popup, controls = {}, title = control.item and control.item.name or "" }
+end
+
+function Adorn.keybind(control, key, info, setter, getter)
+	local offset, size = Rows.slot(control), Metrics.icon
+	local anchor = create("Frame", {
+		Name = "Keybind",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -offset - Metrics.controlX, 0, Rows.adornY(control)),
+		Size = UDim2.fromOffset(size, size),
+		BackgroundTransparency = 1,
+		ZIndex = control.zbase + 3,
+		Parent = control.main,
+	})
+	Rows.reserve(control)
+	local entry = setmetatable({
+		anchor = anchor,
+		key = "None",
+		mode = "toggle",
+		label = info.Text or (control.item and control.item.name) or key,
+		group = control.section and control.section.title or nil,
+		set = setter,
+		get = getter,
+	}, BindEntry)
+	entry.icon = iconLabel("mouseRight", {
+		Name = "Hint",
+		Size = UDim2.fromScale(1, 1),
+		ImageColor3 = Skin.get("dim"),
+		ZIndex = control.zbase + 3,
+		Parent = anchor,
+	})
+	Live.add(entry.icon, function(paintInfo)
+		Live.set(entry.icon, paintInfo, { ImageColor3 = (entry.key ~= "None" or entry.mode == "always") and Accent.get() or Skin.get("dim") })
+	end)
+	entry.commit = bind({
+		key = key,
+		default = { key = info.Default, mode = info.Mode },
+	}, function(value)
+		if type(value) ~= "table" then
+			value = { key = value, mode = entry.mode }
+		end
+		local name = value.key
+		if typeof(name) == "EnumItem" then
+			name = name.Name
+		end
+		local mode = string.lower(tostring(value.mode or "toggle"))
+		if not table.find(Binds.MODES, mode) then
+			mode = "toggle"
+		end
+		local wasAlways = entry.mode == "always"
+		entry.key = type(name) == "string" and name ~= "" and name or "None"
+		entry.mode = mode
+		entry:repaint()
+		if wasAlways and mode ~= "always" and entry.get() then
+			entry.set(false)
+		end
+		if entry.refreshPanel then
+			entry.refreshPanel()
+		end
+		return { key = entry.key, mode = entry.mode }
+	end)
+	connect((control.interest or control.main).InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			local popup = entry:buildPanel()
+			if popup then
+				popup:Toggle()
+			end
+		end
+	end)
+	table.insert(Binds.list, entry)
+	return entry
+end
+
+local function createSection(column, title, sub)
+	local section = {
+		title = title or "",
+		zbase = Z.WIDGET,
+		order = 0,
+		controls = {},
+		sub = sub,
+		column = column,
+	}
+	column.order += 1
+	section.main = create("Frame", {
+		Name = "Section",
+		LayoutOrder = column.order,
+		Size = UDim2.new(1, 0, 0, 30),
+		skin = { BackgroundColor3 = "surface", BorderColor3 = "hard" },
+		BorderSizePixel = 1,
+		ZIndex = Z.WIDGET,
+		Parent = column.frame,
+	})
+	section.content = create("Frame", {
+		Name = "Content",
+		Size = UDim2.fromScale(1, 1),
+		skin = { BackgroundColor3 = "surface", BorderColor3 = "border" },
+		BorderSizePixel = 1,
+		BorderMode = Enum.BorderMode.Inset,
+		ZIndex = Z.WIDGET,
+		Parent = section.main,
+	})
+	Accent.follow(create("Frame", {
+		Name = "Accent",
+		Size = UDim2.new(1, 0, 0, 1),
+		ZIndex = Z.WIDGET + 1,
+		Parent = section.main,
+	}), "BackgroundColor3")
+	local layout = create("UIListLayout", {
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, Metrics.rowGap),
+		Parent = section.content,
+	})
+	create("UIPadding", {
+		PaddingTop = UDim.new(0, Geometry.cardPadTop),
+		PaddingBottom = UDim.new(0, Geometry.cardPadBottom),
+		Parent = section.content,
+	})
+	if section.title ~= "" then
+		local titleLabel = create("TextLabel", {
+			Name = "Title",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.fromOffset(12, 0),
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 16),
+			Text = section.title,
+			TextSize = Geometry.sectionSize,
+			FontFace = Typeface.face(),
+			skin = { BackgroundColor3 = "surface", TextColor3 = "text" },
+			ZIndex = Z.WIDGET + 2,
+			Parent = section.main,
+		})
+		create("UIPadding", { PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2), Parent = titleLabel })
+	end
+	local function fit()
+		section.main.Size = UDim2.new(1, 0, 0, layout.AbsoluteContentSize.Y + Geometry.cardPadTop + Geometry.cardPadBottom)
+	end
+	connect(layout:GetPropertyChangedSignal("AbsoluteContentSize"), fit)
+	fit()
+	return section
 end
 
 local Element = {}
 
 function Element.__index(self, key)
+	local current = R.current[rawget(self, "key")]
 	if key == "Value" then
-		local value = Runtime.current[rawget(self, "key")]
 		if rawget(self, "isColor") then
-			return (parseColor(value))
+			return (parseColor(current))
+		elseif rawget(self, "isKeyPicker") then
+			return type(current) == "table" and current.key or "None"
 		end
-		return value
+		return current
+	elseif key == "Transparency" and rawget(self, "isColor") then
+		local _, alpha = parseColor(current)
+		return 1 - (alpha or 1)
+	elseif key == "Mode" and rawget(self, "isKeyPicker") then
+		return type(current) == "table" and current.mode or "toggle"
+	elseif key == "Gradient" and rawget(self, "isColor") then
+		local describe = rawget(self, "describe")
+		return describe and describe() or nil
 	end
 	return Element[key]
 end
 
-function Element:SetValue(value)
-	self.commit(value)
+function Element:SetValue(value, mode)
+	if rawget(self, "isKeyPicker") then
+		if type(value) == "table" and value[1] then
+			value = { key = value[1], mode = value[2] }
+		elseif type(value) ~= "table" then
+			value = { key = value, mode = mode or self.Mode }
+		end
+	elseif rawget(self, "isColor") then
+		value = hexOf(value)
+	end
+	if self.commit then
+		self.commit(value)
+	end
+	return self
+end
+
+function Element:SetGradient(gradient)
+	local commitGradient = rawget(self, "commitGradient")
+	if commitGradient and type(gradient) == "table" then
+		local current = self.Gradient or {}
+		local color = gradient.Color or current.Color or Color3.new(1, 1, 1)
+		local transparency = gradient.Transparency or current.Transparency or 0
+		local enabled = gradient.Enabled
+		if enabled == nil then
+			enabled = current.Enabled
+		end
+		commitGradient({ on = enabled == true, color = formatColor(color, 1 - transparency), angle = gradient.Angle or current.Angle or 90 })
+		self.commit(R.current[self.key])
+	end
 	return self
 end
 
 function Element:OnChanged(callback)
+	local gradientKey = rawget(self, "gradientKey")
+	if gradientKey then
+
+		local first = true
+		watch(gradientKey, function()
+			if first then
+				first = false
+				return
+			end
+			local color, alpha = parseColor(R.current[self.key])
+			callback(color, 1 - (alpha or 1), self.Gradient)
+		end)
+	end
 	watch(self.key, function(value)
 		if rawget(self, "isColor") then
 			local color, alpha = parseColor(value)
-			callback(color, 1 - (alpha or 1))
+			callback(color, 1 - (alpha or 1), self.Gradient)
+		elseif rawget(self, "isKeyPicker") then
+			callback(type(value) == "table" and value.key or "None")
 		else
 			callback(value)
 		end
 	end)
+	return self
+end
+
+function Element:GetState()
+	local entry = rawget(self, "entry")
+	return entry ~= nil and entry.get() == true
+end
+
+function Element:SetText(content)
+	local label = rawget(self, "label") or rawget(self, "title")
+	if label then
+		label.Text = tostring(content)
+	end
+	return self
+end
+
+function Element:SetValues(values)
+	if rawget(self, "setOptions") then
+		self.setOptions(values or {})
+		self.commit(R.current[self.key])
+	end
+	return self
+end
+
+function Element:SetVisible(visible)
+	self.userHidden = not visible
+	Rows.refreshVisible(self)
 	return self
 end
 
@@ -3878,71 +4887,57 @@ local function register(control, key)
 	return control
 end
 
-local function reserveInset(control, step)
-	local inset = rawget(control, "nextInset") or 14
-	control.nextInset = inset + step
-	return inset
-end
-
 function Element:AddKeyPicker(idx, info)
 	info = info or {}
-	self.bindEntry = CreateBindIcon(self.row, self.section, {
-		key = idx,
-		name = info.Text or self.item.name,
-		default = info.Default,
-		mode = info.Mode,
-	}, reserveInset(self, 15), self.commit)
-	self.bindEntry.active = self.Value == true
-	Hotkeys.refresh()
-	register({ entry = self.bindEntry, commit = self.bindEntry.setKey }, idx)
-	return self
-end
+	if not rawget(self, "main") then
+		return self
+	end
+	local control = self
+	local own = { active = false }
+	local setter, getter
+	if self.kind == "check" then
+		setter = function(state)
+			control.commit(state == true)
+		end
+		getter = function()
+			return R.current[control.key] == true
+		end
+	else
 
-function Element:GetState()
-	local entry = rawget(self, "entry")
-	return entry ~= nil and entry.active
+		setter = function(state)
+			if own.active == state then
+				return
+			end
+			own.active = state
+			if info.Callback then
+				local ok, message = xpcall(info.Callback, debug.traceback, state)
+				if not ok then
+					warn(string.format("[Neurothycal UI] keypicker %s failed:\n%s", tostring(idx), tostring(message)))
+				end
+			end
+		end
+		getter = function()
+			return own.active
+		end
+	end
+	local entry = Adorn.keybind(self, idx, info, setter, getter)
+	register(setmetatable({ entry = entry, commit = entry.commit, isKeyPicker = true }, Element), idx)
+	return self
 end
 
 function Element:AddColorPicker(idx, info)
 	info = info or {}
-	self.swatchCount = (rawget(self, "swatchCount") or 0) + 1
-	local position = self.swatchCount
-	local commit = CreateSwatch(self.row, self.section, {
-		key = idx,
-		default = hexOf(info.Default),
-		callback = info.Callback and function(value)
-			local color, alpha = parseColor(value)
-			info.Callback(color, 1 - alpha)
-		end,
-		title = function()
-			if info.Title then
-				return info.Title
-			end
-			local name = self.item.name
-			if string.find(name, "color", 1, true) then
-				return name
-			end
-
-			return string.format("%s color %d", (string.gsub(name, " esp$", "")), self.swatchCount - position + 1)
-		end,
-	}, reserveInset(self, 14))
-	register({
+	if not rawget(self, "main") then
+		return self
+	end
+	local commit, describe, gradientKey, commitGradient = Adorn.color(self, idx, info.Default, info.Callback, info.Gradient)
+	register(setmetatable({
+		commit = commit,
 		isColor = true,
-		commit = function(value)
-			commit(hexOf(value))
-		end,
-	}, idx)
-	return self
-end
-
-function Element:SetText(text)
-	self.text.Text = text
-	return self
-end
-
-function Element:SetValues(values)
-	self.item.options = values
-	self.commit(self.Value)
+		describe = describe,
+		gradientKey = gradientKey,
+		commitGradient = commitGradient,
+	}, Element), idx)
 	return self
 end
 
@@ -3950,44 +4945,56 @@ local Groupbox = {}
 Groupbox.__index = Groupbox
 
 local function newGroupbox(section, title)
-	return setmetatable({ section = section, title = title, order = 0 }, Groupbox)
+	return setmetatable({ section = section, title = title }, Groupbox)
 end
 
 function Element:AddGear()
-	return newGroupbox(CreateGear(self.row, self.section, reserveInset(self, 15)), self.item.name)
+	local section = rawget(self, "main") and Adorn.gear(self)
+	if not section then
+		return newGroupbox({ content = Instance.new("Folder"), zbase = Z.POPUP_CONTENT, order = 0 }, "")
+	end
+	return newGroupbox(section, self.item and self.item.name or "")
 end
 
-local function addElement(group, kind, idx, item)
-	group.order += 1
-	item.type = kind
+function Element:AddTooltip(content)
+	Tooltip.attach(rawget(self, "interest") or rawget(self, "main"), content)
+	return self
+end
+
+local function stub()
+	return setmetatable({}, {
+		__index = function()
+			return function(self)
+				return self
+			end
+		end,
+	})
+end
+
+local function addElement(groupbox, kind, idx, item)
 	item.key = idx
 
-	local ok, control = xpcall(Builders[kind], debug.traceback, group.section, item, group.order)
+	local ok, control = xpcall(Builders[kind], debug.traceback, groupbox.section, item)
 	if not ok then
 		warn(string.format("[Neurothycal UI] element %s (%s) failed:\n%s", tostring(idx or item.name), kind, tostring(control)))
-		return setmetatable({}, {
-			__index = function()
-				return function(stub)
-					return stub
-				end
-			end,
-		})
+		return stub()
 	end
 	control.item = item
-	register(control, idx)
-	if group.section.relayout then
-		group.section.relayout(true)
+	if groupbox.section.controls then
+		table.insert(groupbox.section.controls, control)
 	end
-	return control
+	Rows.depends(control, item.depends)
+	return register(control, idx)
 end
 
 function Groupbox:AddToggle(idx, info)
+	info = info or {}
 	local tooltip = info.Tooltip
-	if not tooltip and info.Text == "enabled" then
+	if not tooltip and info.Text == "enabled" and self.title and self.title ~= "" then
 		tooltip = string.format("turns %s on or off. related settings appear when it is enabled", self.title)
 	end
 	local control = addElement(self, "check", idx, {
-		name = info.Text,
+		name = info.Text or idx,
 		default = info.Default == true,
 		tooltip = tooltip,
 		callback = info.Callback,
@@ -3998,11 +5005,12 @@ function Groupbox:AddToggle(idx, info)
 end
 
 function Groupbox:AddSlider(idx, info)
+	info = info or {}
 	return addElement(self, "slider", idx, {
-		name = info.Text,
+		name = info.Text or idx,
 		min = info.Min,
 		max = info.Max,
-		default = info.Default,
+		default = info.Default or info.Min,
 		decimals = info.Rounding,
 		suffix = info.Suffix,
 		tooltip = info.Tooltip,
@@ -4012,8 +5020,9 @@ function Groupbox:AddSlider(idx, info)
 end
 
 function Groupbox:AddDropdown(idx, info)
+	info = info or {}
 	return addElement(self, "dropdown", idx, {
-		name = info.Text,
+		name = info.Text or idx,
 		options = info.Values,
 		default = info.Default,
 		multi = info.Multi,
@@ -4025,8 +5034,9 @@ function Groupbox:AddDropdown(idx, info)
 end
 
 function Groupbox:AddInput(idx, info)
+	info = info or {}
 	return addElement(self, "input", idx, {
-		name = info.Text,
+		name = info.Text or idx,
 		default = info.Default or "",
 		numeric = info.Numeric,
 		finished = info.Finished,
@@ -4038,188 +5048,2780 @@ function Groupbox:AddInput(idx, info)
 	})
 end
 
-function Groupbox:AddParagraph(info)
-
-	local lines = 0
-	for line in string.gmatch(info.Content .. "\n", "(.-)\n") do
-		lines += math.max(math.ceil(#line / 36), 1)
-	end
-	return addElement(self, "paragraph", nil, {
-		name = info.Title,
-		text = info.Content,
-		height = 18 + lines * 11,
-		tooltip = info.Tooltip,
-		depends = info.DependsOn,
-	})
-end
-
 function Groupbox:AddKeybind(idx, info)
+	info = info or {}
+	local default = info.Default
+	if typeof(default) == "EnumItem" then
+		default = default.Name
+	end
 	return addElement(self, "keybind", idx, {
-		name = info.Text,
-		default = info.Default or "None",
+		name = info.Text or idx,
+		default = default or "None",
 		tooltip = info.Tooltip,
 		callback = info.Callback,
 		depends = info.DependsOn,
 	})
 end
 
-function Groupbox:AddButton(info)
+function Groupbox:AddButton(info, func)
+	if type(info) == "string" then
+		info = { Text = info, Func = func }
+	end
+	info = info or {}
 	return addElement(self, "button", nil, {
 		name = info.Text,
-		callback = info.Func,
+		callback = info.Func or info.Callback,
 		tooltip = info.Tooltip,
 		depends = info.DependsOn,
 	})
 end
 
-function Groupbox:AddLabel(text, info)
+function Groupbox:AddLabel(content, info)
 	info = info or {}
-	return addElement(self, "color", nil, {
-		name = text,
+	return addElement(self, "label", nil, {
+		name = tostring(content or ""),
 		tooltip = info.Tooltip,
 		depends = info.DependsOn,
 	})
+end
+
+function Groupbox:AddParagraph(info)
+	info = info or {}
+	return addElement(self, "paragraph", nil, {
+		name = info.Title,
+		text = info.Content,
+		tooltip = info.Tooltip,
+		depends = info.DependsOn,
+	})
+end
+
+function Groupbox:AddDivider(content)
+	return addElement(self, "divider", nil, { name = content })
+end
+
+local Win = { tabs = {}, query = "", features = { wordmark = true, rainbow = true, bubbles = true, edge = true, aurora = true, backdrop = true } }
+
+local GUI_WORDS = { "Player", "Client", "Core", "Screen", "Menu", "Hud", "Chat", "Notification", "Prompt", "Session", "Interface", "Overlay" }
+local GUI_SUFFIXES = { "Gui", "Overlay", "Layer", "Container", "Handler", "Manager", "Controller", "Frame", "Host", "Root" }
+
+local function guiName()
+	local random = Random.new()
+	local word, suffix = GUI_WORDS[random:NextInteger(1, #GUI_WORDS)], GUI_SUFFIXES[random:NextInteger(1, #GUI_SUFFIXES)]
+	return word .. (word == suffix and "Layer" or suffix)
+end
+
+function Win.mountGui(order)
+	local gui = create("ScreenGui", {
+		Name = guiName(),
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Global,
+		ResetOnSpawn = false,
+		DisplayOrder = order,
+	})
+	if Executor.protect_gui then
+		pcall(Executor.protect_gui, gui)
+	end
+	local parents = {}
+	if Executor.gethui then
+		local ok, container = pcall(Executor.gethui)
+		if ok and container then
+			table.insert(parents, container)
+		end
+	end
+	local ok, coreGui = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	if ok and coreGui then
+		table.insert(parents, coreGui)
+	end
+	table.insert(parents, player:WaitForChild("PlayerGui"))
+	for _, parent in ipairs(parents) do
+		pcall(function()
+			gui.Parent = parent
+		end)
+		if gui.Parent then
+			break
+		end
+	end
+	return gui
+end
+
+local Backdrop = {}
+
+local function backdropSprite(width, height)
+	local art = Art.backdrop
+	local pixels = buffer.create(width * height * 4)
+	local data, step = art.alpha, 255 // (art.levels - 1)
+	local position, written = 1, 0
+	while position < #data do
+		local level, run = string.byte(data, position, position + 1)
+		position += 2
+		if level > 0 then
+			local value = 0x00FFFFFF + level * step * 0x1000000
+			for _ = 1, run do
+				buffer.writeu32(pixels, written * 4, value)
+				written += 1
+			end
+		else
+			written += run
+		end
+	end
+	return pixels
+end
+
+function Backdrop.content()
+	if Backdrop.cached ~= nil then
+		return Backdrop.cached or nil
+	end
+	Backdrop.cached = false
+	local art = Art.backdrop
+	local spriteWidth, spriteHeight, tile = art.sprite[1], art.sprite[2], art.tile
+	if Raster.editable() then
+		local ok = pcall(function()
+			local sprite = Services.AssetService:CreateEditableImage({ Size = Vector2.new(spriteWidth, spriteHeight) })
+			sprite:WritePixelsBuffer(Vector2.zero, Vector2.new(spriteWidth, spriteHeight), backdropSprite(spriteWidth, spriteHeight))
+			local canvas = Services.AssetService:CreateEditableImage({ Size = Vector2.new(tile, tile) })
+			for index = 1, #art.blits, 2 do
+				canvas:DrawImage(Vector2.new(art.blits[index], art.blits[index + 1]), sprite, Enum.ImageCombineType.AlphaBlend)
+			end
+			sprite:Destroy()
+			table.insert(Raster.images, canvas)
+			Backdrop.cached = Content.fromObject(canvas)
+		end)
+		if ok then
+			return Backdrop.cached
+		end
+	end
+
+	local ok, content = pcall(function()
+		local sprite = backdropSprite(spriteWidth, spriteHeight)
+		local canvas = buffer.create(tile * tile * 4)
+		for index = 1, #art.blits, 2 do
+			local left, top = art.blits[index], art.blits[index + 1]
+			for y = 0, spriteHeight - 1 do
+				local row = top + y
+				if row >= 0 and row < tile then
+					for x = 0, spriteWidth - 1 do
+						local column = left + x
+						if column >= 0 and column < tile then
+							local alpha = buffer.readu8(sprite, (y * spriteWidth + x) * 4 + 3)
+							if alpha > 0 then
+								local offset = (row * tile + column) * 4
+								local blended = math.min(255, alpha + buffer.readu8(canvas, offset + 3) * (255 - alpha) // 255)
+								buffer.writeu32(canvas, offset, 0x00FFFFFF + blended * 0x1000000)
+							end
+						end
+					end
+				end
+			end
+		end
+		return Raster.image(canvas, tile, tile, "backdrop")
+	end)
+	Backdrop.cached = ok and content or false
+	return Backdrop.cached or nil
+end
+
+local Wordmark = { letters = {}, measured = false, laidOut = false, WAVE_HEIGHT = 2.6, WAVE_SPEED = 2.4, WAVE_SPREAD = 0.45, GLOW_WAVE = 0.6, CORE_PEAK = 0.3, HALO_PEAK = 0.78, SHEEN_PERIOD = 5, SHEEN_SWEEP = 1.1, SHEEN_WIDTH = 2.2 }
+
+local function wordLetter(parent, character, face, size, stroke, hidden)
+	local label = create("TextLabel", {
+		AutomaticSize = Enum.AutomaticSize.XY,
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundTransparency = 1,
+		Text = character,
+		TextSize = size,
+		TextColor3 = Skin.get("text"),
+		TextTransparency = hidden and 1 or 0,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		FontFace = face,
+		ZIndex = parent.ZIndex,
+		Parent = parent,
+	})
+	return label, create("UIStroke", { Thickness = stroke, Transparency = 1, Parent = label })
+end
+
+function Wordmark.attach(brand)
+	if #Wordmark.letters > 0 or not brand or brand.Text == "" then
+		return
+	end
+	Wordmark.brand = brand
+	Wordmark.text = brand.Text
+	brand.Visible = false
+	Wordmark.holder = create("Frame", {
+		Name = "Wordmark",
+		AnchorPoint = brand.AnchorPoint,
+		Position = brand.Position,
+		Size = UDim2.fromOffset(0, 0),
+		BackgroundTransparency = 1,
+		ZIndex = brand.ZIndex,
+		Parent = brand.Parent,
+	})
+	local face, size = brand.FontFace, brand.TextSize
+	for index = 1, #Wordmark.text do
+		local character = string.sub(Wordmark.text, index, index)
+		local bloom, halo = wordLetter(Wordmark.holder, character, face, size, 5, true)
+		local label, core = wordLetter(Wordmark.holder, character, face, size, 2, false)
+		Wordmark.letters[index] = { label = label, bloom = bloom, core = core, halo = halo, x = 0 }
+	end
+	task.spawn(function()
+		local ok, params = pcall(Instance.new, "GetTextBoundsParams")
+		if not ok then
+			return
+		end
+		params.Font = face
+		params.Size = size
+		params.Width = 100000
+		local previous = 0
+		for index = 1, #Wordmark.letters do
+			params.Text = string.sub(Wordmark.text, 1, index)
+			local success, bounds = pcall(Services.TextService.GetTextBoundsAsync, Services.TextService, params)
+			if not success or typeof(bounds) ~= "Vector2" then
+				return
+			end
+			Wordmark.letters[index].x = previous
+			previous = bounds.X
+		end
+		Wordmark.measured, Wordmark.laidOut = true, false
+	end)
+end
+
+function Wordmark.render()
+	if #Wordmark.letters == 0 or not Wordmark.holder or not Wordmark.holder.Parent then
+		return
+	end
+	if not Wordmark.laidOut then
+		local x = 0
+		for _, letter in ipairs(Wordmark.letters) do
+			local width = letter.label.AbsoluteSize.X
+			if width <= 0 then
+				return
+			end
+			if not Wordmark.measured then
+				letter.x = x
+			end
+			x += width
+		end
+		Wordmark.laidOut = true
+	end
+	local now, accent, base = os.clock(), Accent.get(), Skin.get("text")
+	local phase = now % Wordmark.SHEEN_PERIOD
+	local sheenAt = -Wordmark.SHEEN_WIDTH
+	if phase < Wordmark.SHEEN_SWEEP then
+		sheenAt += phase / Wordmark.SHEEN_SWEEP * (#Wordmark.letters + Wordmark.SHEEN_WIDTH * 2)
+	end
+	for index, letter in ipairs(Wordmark.letters) do
+		local wave = math.sin(now * Wordmark.WAVE_SPEED + index * Wordmark.WAVE_SPREAD)
+		local position = UDim2.fromOffset(letter.x, wave * Wordmark.WAVE_HEIGHT)
+		letter.label.Position = position
+		letter.bloom.Position = position
+		local sheen = math.max(0, 1 - math.abs(index - sheenAt) / Wordmark.SHEEN_WIDTH)
+		local glow = math.max((wave + 1) * 0.5 * Wordmark.GLOW_WAVE, sheen)
+		letter.label.TextColor3 = base:Lerp(accent, sheen)
+		letter.core.Color = accent
+		letter.halo.Color = accent
+		letter.core.Transparency = 1 - glow * (1 - Wordmark.CORE_PEAK)
+		letter.halo.Transparency = 1 - glow * (1 - Wordmark.HALO_PEAK)
+	end
+end
+
+local Rainbow = { STOPS = 12, GLOW_HEIGHTS = { 2, 5, 9 }, GLOW_BASE = { 0.74, 0.86, 0.93 }, PULSE_SPEED = 2.2, PULSE_DEPTH = 0.12, SCROLL_SPEED = 0.09, gradients = {}, glows = {} }
+
+local function rainbowSequence(offset)
+	local keypoints = table.create(Rainbow.STOPS + 1)
+	for index = 0, Rainbow.STOPS do
+		keypoints[index + 1] = ColorSequenceKeypoint.new(index / Rainbow.STOPS, Color3.fromHSV((index / Rainbow.STOPS + offset) % 1, 1, 1))
+	end
+	return ColorSequence.new(keypoints)
+end
+
+function Rainbow.attach(rule)
+	Rainbow.rule = rule
+	local sequence = rainbowSequence(0)
+	table.insert(Rainbow.gradients, create("UIGradient", { Color = sequence, Parent = rule }))
+	for index, height in ipairs(Rainbow.GLOW_HEIGHTS) do
+		local base = Rainbow.GLOW_BASE[index]
+		local glow = create("Frame", {
+			Name = "Glow" .. index,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.new(1, 0, 0, height),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = base,
+			ZIndex = rule.ZIndex - 1,
+			Parent = rule,
+		})
+		table.insert(Rainbow.gradients, create("UIGradient", { Color = sequence, Parent = glow }))
+		table.insert(Rainbow.glows, { frame = glow, base = base })
+	end
+	Rainbow.setEnabled(Win.features.rainbow)
+end
+
+function Rainbow.setEnabled(enabled)
+	Win.features.rainbow = enabled
+	if not Rainbow.rule then
+		return
+	end
+	for _, glow in ipairs(Rainbow.glows) do
+		glow.frame.Visible = enabled
+	end
+	if enabled then
+		Accent.unfollow(Rainbow.rule)
+		Rainbow.rule.BackgroundColor3 = Color3.new(1, 1, 1)
+	else
+		for _, gradient in ipairs(Rainbow.gradients) do
+			gradient.Color = ColorSequence.new(Color3.new(1, 1, 1))
+		end
+		Accent.follow(Rainbow.rule, "BackgroundColor3")
+	end
+end
+
+function Rainbow.render()
+	if not Win.features.rainbow or not Rainbow.rule then
+		return
+	end
+	local now = os.clock()
+	local sequence = rainbowSequence(now * Rainbow.SCROLL_SPEED % 1)
+	local pulse = Rainbow.PULSE_DEPTH * (0.5 + 0.5 * math.sin(now * Rainbow.PULSE_SPEED))
+	for _, gradient in ipairs(Rainbow.gradients) do
+		gradient.Color = sequence
+	end
+	for _, glow in ipairs(Rainbow.glows) do
+		local transparency = math.clamp(glow.base - pulse, 0, 1)
+		glow.frame.BackgroundTransparency = transparency + (1 - transparency) * Win.revealAmount
+	end
+end
+
+local Beam = { RISE = { 10, 18, 28 }, SPREAD = { 6, 20, 44 }, BASE = { 0.62, 0.8, 0.9 }, frames = {} }
+
+function Beam.attach(host)
+	for index, rise in ipairs(Beam.RISE) do
+		local frame = Accent.follow(create("Frame", {
+			Name = "Beam" .. index,
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0, 0, 1, 0),
+			Size = UDim2.fromOffset(0, rise),
+			BackgroundTransparency = Beam.BASE[index],
+			Visible = false,
+			ZIndex = host.ZIndex,
+			Parent = host,
+		}), "BackgroundColor3")
+		create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = frame })
+		Beam.frames[index] = frame
+	end
+end
+
+function Beam.sync()
+	local highlight = Win.highlight
+	if not highlight then
+		return
+	end
+	local width = highlight.Size.X.Offset
+	for index, frame in ipairs(Beam.frames) do
+		frame.Visible = width > 0
+		frame.Position = UDim2.new(0, highlight.Position.X.Offset + width / 2, 1, 0)
+		frame.Size = UDim2.fromOffset(width + Beam.SPREAD[index], Beam.RISE[index])
+	end
+end
+
+local Aurora = { RISE = { 70, 150, 260 }, BASE = { 0.9, 0.945, 0.975 }, PERIOD = 7, DEPTH = 0.03, frames = {} }
+
+function Aurora.attach(window, bottom)
+	for index, rise in ipairs(Aurora.RISE) do
+		local frame = Accent.follow(create("Frame", {
+			Name = "Aurora" .. index,
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, 0, 1, -bottom),
+			Size = UDim2.new(1, 0, 0, rise),
+			BackgroundTransparency = Aurora.BASE[index],
+			Visible = Win.features.aurora,
+			ZIndex = Z.WINDOW,
+			Parent = window,
+		}), "BackgroundColor3")
+		create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = frame })
+		Aurora.frames[index] = { frame = frame, base = Aurora.BASE[index] }
+	end
+end
+
+function Aurora.render()
+	if not Win.features.aurora then
+		return
+	end
+	local pulse = Aurora.DEPTH * (0.5 + 0.5 * math.sin(os.clock() * (6.283 / Aurora.PERIOD)))
+	for _, entry in ipairs(Aurora.frames) do
+		local transparency = math.clamp(entry.base - pulse, 0, 1)
+		entry.frame.BackgroundTransparency = transparency + (1 - transparency) * Win.revealAmount
+	end
+end
+
+local Bubbles = { COUNT = 128, SIZE_MIN = 3, SIZE_MAX = 17, RISE_MIN = 70, RISE_MAX = 195, LIFE_MIN = 1.6, LIFE_MAX = 6, FADE = 0.55, HOLLOW = 0.35, WOBBLE = 7, SPAWN_DEPTH = 6, FADE_IN = 10, list = {} }
+
+local function bubbleOrigin()
+	return Win.main.AbsolutePosition - Bubbles.field.AbsolutePosition
+end
+
+local function resetBubble(bubble, now, origin, width)
+	local size = math.random(Bubbles.SIZE_MIN, Bubbles.SIZE_MAX)
+	local ratio = 0.7 + math.random() * 0.7
+	local color = Accent.get()
+	bubble.born = now + math.random() * 1.6
+	bubble.life = Bubbles.LIFE_MIN + math.random() * (Bubbles.LIFE_MAX - Bubbles.LIFE_MIN)
+	bubble.rise = Bubbles.RISE_MIN + math.random() * (Bubbles.RISE_MAX - Bubbles.RISE_MIN)
+	bubble.speed = 1.4 + math.random() * 2.4
+	bubble.phase = math.random() * 6.283
+	bubble.column = math.random()
+	bubble.hollow = math.random() < Bubbles.HOLLOW
+	origin, width = origin or bubbleOrigin(), width or Win.main.AbsoluteSize.X
+	bubble.originX = origin.X + bubble.column * width
+	bubble.originY = origin.Y + Bubbles.SPAWN_DEPTH
+	bubble.frame.Size = UDim2.fromOffset(size, math.max(2, math.floor(size * ratio)))
+	bubble.half = size / 2
+	bubble.corner.CornerRadius = UDim.new(0.35 + math.random() * 0.15, 0)
+	bubble.frame.Rotation = math.random(0, 179)
+	bubble.frame.BackgroundColor3 = color
+	bubble.stroke.Color = color
+	bubble.stroke.Enabled = bubble.hollow
+	bubble.frame.BackgroundTransparency = 1
+	bubble.frame.Visible = false
+	bubble.lit = false
+end
+
+function Bubbles.attach(gui)
+	Bubbles.field = create("Frame", {
+		Name = "BubbleField",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = Z.BUBBLE,
+		Parent = gui,
+	})
+	local now = os.clock()
+	for _ = 1, Bubbles.COUNT do
+		local frame = create("Frame", { Name = "Bubble", BackgroundTransparency = 1, Visible = false, ZIndex = Z.BUBBLE, Parent = Bubbles.field })
+		local bubble = {
+			frame = frame,
+			corner = create("UICorner", { Parent = frame }),
+			stroke = create("UIStroke", { Thickness = 1, Enabled = false, Parent = frame }),
+		}
+		resetBubble(bubble, now, Vector2.zero, 0)
+		table.insert(Bubbles.list, bubble)
+	end
+end
+
+function Bubbles.render(visible)
+	if not Bubbles.field then
+		return
+	end
+	visible = visible and Win.features.bubbles
+	local wasShown = Bubbles.shown
+	if Bubbles.shown ~= visible then
+		Bubbles.shown = visible
+		Bubbles.field.Visible = visible
+	end
+	if not visible or not wasShown then
+		return
+	end
+	local now, origin, width, amount = os.clock(), bubbleOrigin(), Win.main.AbsoluteSize.X, Win.revealAmount
+	for _, bubble in ipairs(Bubbles.list) do
+		local progress = (now - bubble.born) / bubble.life
+		if progress >= 1 then
+			resetBubble(bubble, now, origin, width)
+			progress = 0
+		end
+		if progress <= 0 then
+			bubble.originX = origin.X + bubble.column * width
+			bubble.originY = origin.Y + Bubbles.SPAWN_DEPTH
+			if bubble.lit then
+				bubble.lit = false
+				bubble.frame.Visible = false
+			end
+		else
+			if not bubble.lit then
+				bubble.lit = true
+				bubble.frame.Visible = true
+			end
+			local risen = bubble.rise * progress
+			local presence = math.min(risen / Bubbles.FADE_IN, (1 - progress) / 0.45, 1)
+			local wobble = math.sin(now * bubble.speed + bubble.phase) * Bubbles.WOBBLE
+			bubble.frame.Position = UDim2.fromOffset(bubble.originX + wobble - bubble.half, bubble.originY - risen)
+			local transparency = 1 - presence * (1 - Bubbles.FADE)
+			transparency += (1 - transparency) * amount
+			if bubble.hollow then
+				bubble.stroke.Transparency = transparency
+			else
+				bubble.frame.BackgroundTransparency = transparency
+			end
+		end
+	end
+end
+
+local Edge = { LIT = 0, DARK = 0.85, DEAD_ZONE = 24 }
+
+function Edge.attach(stroke)
+	Edge.gradient = create("UIGradient", {
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, Edge.LIT), NumberSequenceKeypoint.new(1, Edge.DARK) }),
+		Parent = stroke,
+	})
+end
+
+function Edge.render(visible)
+	if not Win.features.edge or not Edge.gradient or not visible then
+		return
+	end
+	local size = Win.main.AbsoluteSize
+	if size.X <= 0 then
+		return
+	end
+	local delta = mouse() - (Win.main.AbsolutePosition + size / 2)
+	if delta.Magnitude < Edge.DEAD_ZONE then
+		return
+	end
+	Edge.gradient.Rotation = math.deg(math.atan2(delta.Y, delta.X)) + 180
+end
+
+local Reveal = { RISE = 16, SINK = 12, OPEN_TIME = 0.2, SHUT_TIME = 0.12, extra = {} }
+Win.revealAmount = 0
+
+function Reveal.include(object, property)
+	table.insert(Reveal.extra, { object = object, property = property })
+end
+
+local function revealApply(shot, amount)
+	Win.revealAmount = amount
+	Fade.apply(shot, amount)
+end
+
+function Reveal.stop()
+	local active = Reveal.active
+	if not active then
+		return
+	end
+	Reveal.active = nil
+	revealApply(active.shot, 0)
+	active.window.Position = active.home
+	active.window.Visible = active.opening
+	if Reveal.onSettle then
+		Reveal.onSettle()
+	end
+end
+
+function Reveal.play(window, opening)
+	Reveal.stop()
+	local home = window.Position
+	local from = home + UDim2.fromOffset(0, opening and Reveal.RISE or 0)
+	local to = home + UDim2.fromOffset(0, opening and 0 or Reveal.SINK)
+	window.Visible = true
+	local shot = Fade.snapshot(window)
+	for _, extra in ipairs(Reveal.extra) do
+		if extra.object.Parent then
+			Fade.record(shot, extra.object, extra.property)
+		end
+	end
+	window.Position = from
+	revealApply(shot, opening and 1 or 0)
+	Reveal.active = {
+		window = window,
+		shot = shot,
+		home = home,
+		from = from,
+		to = to,
+		opening = opening,
+		started = os.clock(),
+		duration = opening and Reveal.OPEN_TIME or Reveal.SHUT_TIME,
+		style = opening and Enum.EasingStyle.Quint or Enum.EasingStyle.Quad,
+		direction = opening and Enum.EasingDirection.Out or Enum.EasingDirection.In,
+	}
+end
+
+function Reveal.render()
+	local active = Reveal.active
+	if not active then
+		return
+	end
+	local progress = math.clamp((os.clock() - active.started) / active.duration, 0, 1)
+	local eased = Services.TweenService:GetValue(progress, active.style, active.direction)
+	active.window.Position = active.from:Lerp(active.to, eased)
+	revealApply(active.shot, active.opening and 1 - eased or eased)
+	if progress >= 1 then
+		Reveal.active = nil
+		revealApply(active.shot, 0)
+		active.window.Position = active.home
+		active.window.Visible = active.opening
+		if Reveal.onSettle then
+			Reveal.onSettle()
+		end
+	end
+end
+
+local Switch = { INFO = TweenInfo.new(0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), RISE = 14, STAGGER = 0.07, slots = {}, homes = setmetatable({}, { __mode = "k" }) }
+
+local function switchSlot(index)
+	local slot = Switch.slots[index]
+	if slot then
+		return slot
+	end
+	slot = { value = create("NumberValue", { Name = "SwitchFade" .. index, Value = 0 }) }
+	connect(slot.value.Changed, function(amount)
+		if slot.shot then
+			Fade.apply(slot.shot, amount)
+		end
+	end)
+	Switch.slots[index] = slot
+	return slot
+end
+
+function Switch.play(objects, rise)
+	if #objects == 0 then
+		return
+	end
+	for _, slot in pairs(Switch.slots) do
+		Motion.cancel(slot.tween)
+		if slot.shot and slot.value.Value > 0 then
+			Fade.apply(slot.shot, 0)
+		end
+		slot.shot = nil
+	end
+	for index, object in ipairs(objects) do
+		if object and object.Parent then
+			local slot = switchSlot(index)
+			local info = TweenInfo.new(Switch.INFO.Time, Switch.INFO.EasingStyle, Switch.INFO.EasingDirection, 0, false, (index - 1) * Switch.STAGGER)
+			slot.shot = Fade.snapshot(object)
+			Fade.apply(slot.shot, 1)
+			slot.value.Value = 1
+			slot.tween = Motion.to(slot.value, info, { Value = 0 })
+			if rise then
+				local home = Switch.homes[object]
+				if not home then
+					home = object.Position
+					Switch.homes[object] = home
+				end
+				object.Position = home + UDim2.fromOffset(0, Switch.RISE)
+				Motion.to(object, info, { Position = home })
+			end
+		end
+	end
+end
+
+function Win.columnWidth()
+	local holderWidth = Win.main.Size.X.Offset - 2 * Geometry.holderX
+	return math.floor((holderWidth - 2 * Geometry.inset - Geometry.columnGap) / 2)
+end
+
+function Win.layoutColumns()
+	local width = Win.columnWidth()
+	for _, tab in ipairs(Win.tabs) do
+		for index, column in ipairs(tab.columns) do
+			local position = UDim2.new(0, Geometry.inset + (index - 1) * (width + Geometry.columnGap), 0, Geometry.columnTop)
+			column.frame.Size = UDim2.new(0, width, 1, -(4 + Geometry.footer))
+			Switch.homes[column.frame] = position
+			column.frame.Position = position
+		end
+	end
+end
+
+local function createColumn(tab, index)
+	local frame = create("ScrollingFrame", {
+		Name = "Column",
+		ZIndex = Z.WINDOW,
+		BackgroundTransparency = 1,
+		skin = { ScrollBarImageColor3 = "hard" },
+		ScrollBarThickness = 4,
+		VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		CanvasSize = UDim2.new(),
+		Visible = false,
+		Parent = Win.columnHolder,
+	})
+	local layout = create("UIListLayout", {
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, Geometry.cardGap),
+		Parent = frame,
+	})
+	create("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2), Parent = frame })
+	connect(layout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+		frame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 14)
+	end)
+	connect(frame:GetPropertyChangedSignal("CanvasPosition"), function()
+		if Popup.current then
+			Popup.closeAll()
+		end
+	end)
+	return { frame = frame, order = 0, tab = tab, index = index }
+end
+
+function Win.paintTab(tab, info)
+	if not tab.label then
+		return
+	end
+	local accent = Accent.get()
+	local color
+	if Win.currentTab == tab or tab.pressed then
+		color = accent
+		info = info or (tab.pressed and Motion.PRESS or Motion.STATE)
+	elseif tab.hovered then
+		color = Skin.get("text"):Lerp(accent, 0.55)
+		info = info or Motion.HOVER_IN
+	else
+		color = Skin.get("text")
+		info = info or Motion.HOVER_OUT
+	end
+	Live.set(tab.label, info, { TextColor3 = color })
+	if tab.glyph then
+		Live.set(tab.glyph, info, { ImageColor3 = color })
+	end
+end
+
+function Win.placeHighlight(tab, instant)
+	if not Win.highlight or not tab or not tab.button then
+		return
+	end
+	local width = tab.button.AbsoluteSize.X
+	if width <= 0 then
+		return
+	end
+	local x = tab.button.AbsolutePosition.X - Win.beamHost.AbsolutePosition.X
+	local position, size = UDim2.new(0, x, 1, 0), UDim2.fromOffset(width, 1)
+	Motion.cancel(Win.highlightTween)
+	if instant then
+		Win.highlight.Position = position
+		Win.highlight.Size = size
+		return
+	end
+	Win.highlightTween = Motion.to(Win.highlight, Motion.SLIDE, { Position = position, Size = size })
+end
+
+function Win.sectionVisible(tab, section)
+	return Win.currentTab == tab and (section.sub == nil or section.sub == tab.currentSub) and not section.filtered
+end
+
+function Win.refreshSections(tab)
+	for _, section in ipairs(tab.sections) do
+		section.main.Visible = Win.sectionVisible(tab, section)
+	end
+end
+
+function Win.paintSubs(tab, info)
+	for _, sub in ipairs(tab.subs) do
+		if sub.label then
+			local accent = Accent.get()
+			local color
+			if sub == tab.currentSub then
+				color = accent
+			elseif sub == tab.hoveredSub then
+				color = Skin.get("text"):Lerp(accent, 0.55)
+			else
+				color = Skin.get("text")
+			end
+			Live.set(sub.label, info or Motion.HOVER_IN, { TextColor3 = color })
+			if sub.glyph then
+				Live.set(sub.glyph, info or Motion.HOVER_IN, { ImageColor3 = color })
+			end
+		end
+	end
+end
+
+function Win.slideSub(tab, instant)
+	local sub = tab.currentSub
+	if not sub or not sub.slot or not tab.slider then
+		return
+	end
+	local width = sub.slot.AbsoluteSize.X
+	if width <= 0 then
+		return
+	end
+	local x = sub.slot.AbsolutePosition.X - tab.bar.AbsolutePosition.X
+	local goal = { Position = UDim2.new(0, x, 1, -1), Size = UDim2.fromOffset(width, 1) }
+	if instant then
+		writeProperties(tab.slider, goal)
+	else
+		Motion.to(tab.slider, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal)
+	end
+end
+
+function Win.selectSub(tab, sub, instant)
+	if not sub then
+		return
+	end
+	local appeared = {}
+	tab.currentSub = sub
+	for _, section in ipairs(tab.sections) do
+		local visible = Win.sectionVisible(tab, section)
+		if visible and not section.main.Visible then
+			table.insert(appeared, section.main)
+		end
+		section.main.Visible = visible
+	end
+	Win.paintSubs(tab)
+	Win.slideSub(tab, instant)
+	if not instant and Win.currentTab == tab then
+		Switch.play(appeared, false)
+	end
+end
+
+function Win.selectTab(tab, instant)
+	if not tab then
+		return
+	end
+	local previous = Win.currentTab
+	Win.currentTab = tab
+	for _, other in ipairs(Win.tabs) do
+		Win.paintTab(other)
+		local selected = other == tab
+		for _, column in ipairs(other.columns) do
+			column.frame.Visible = selected
+		end
+		if other.bar then
+			other.bar.Visible = selected
+		end
+		Win.refreshSections(other)
+	end
+	if not instant and previous ~= tab then
+		local frames = {}
+		for _, column in ipairs(tab.columns) do
+			table.insert(frames, column.frame)
+		end
+		Switch.play(frames, true)
+	end
+	Win.placeHighlight(tab, instant)
+	task.defer(function()
+		Win.slideSub(tab, true)
+	end)
+	if R.onTab then
+		R.onTab(tab)
+	end
+end
+
+function Win.buildTab(tab)
+	tab.button = create("Frame", {
+		Name = "Tab",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundTransparency = 1,
+		LayoutOrder = #Win.tabs,
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.tabRow,
+	})
+	local content = create("Frame", {
+		Name = "Content",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundTransparency = 1,
+		ZIndex = Z.WINDOW + 1,
+		Parent = tab.button,
+	})
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, Geometry.tabIconGap),
+		Parent = content,
+	})
+	create("UIPadding", { PaddingLeft = UDim.new(0, Geometry.tabPad), PaddingRight = UDim.new(0, Geometry.tabPad), Parent = content })
+	if tab.icon and Icons.get(tab.icon) then
+		tab.glyph = iconLabel(tab.icon, {
+			Name = "Glyph",
+			LayoutOrder = 0,
+			Size = UDim2.fromOffset(Geometry.tabIconSize, Geometry.tabIconSize),
+			ImageColor3 = Skin.get("text"),
+			ZIndex = Z.WINDOW + 1,
+			Parent = content,
+		})
+	end
+	tab.label = create("TextLabel", {
+		Name = "Label",
+		LayoutOrder = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundTransparency = 1,
+		Text = tab.name,
+		TextSize = Geometry.tabSize,
+		FontFace = Typeface.face(),
+		TextColor3 = Skin.get("text"),
+		ZIndex = Z.WINDOW + 1,
+		Parent = content,
+	})
+	Live.add(tab.label, function(info)
+		Win.paintTab(tab, info)
+	end)
+	connect(content:GetPropertyChangedSignal("AbsoluteSize"), function()
+		if Win.currentTab == tab then
+			Win.placeHighlight(tab, true)
+		end
+	end)
+	connect(tab.button.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			tab.pressed = true
+			Win.paintTab(tab)
+			Win.selectTab(tab)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement and not Popup.blocks(tab.button) then
+			tab.hovered = true
+			Win.paintTab(tab)
+		end
+	end)
+	connect(tab.button.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			tab.pressed = false
+			Win.paintTab(tab)
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			tab.hovered = false
+			tab.pressed = false
+			Win.paintTab(tab)
+		end
+	end)
+	tab.columns = { createColumn(tab, 1), createColumn(tab, 2) }
+
+	tab.bar = create("Frame", {
+		Name = "SubTabs",
+		Size = UDim2.new(1, -260, 1, 0),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.footer,
+	})
+	tab.row = create("Frame", {
+		Name = "Row",
+		Position = UDim2.new(0, 0, 1, -20),
+		Size = UDim2.new(1, 0, 0, 20),
+		BackgroundTransparency = 1,
+		ZIndex = Z.WINDOW + 1,
+		Parent = tab.bar,
+	})
+	create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 16), Parent = tab.row })
+	tab.slider = Accent.follow(create("Frame", {
+		Name = "Slider",
+		Position = UDim2.new(0, 0, 1, -1),
+		Size = UDim2.fromOffset(0, 1),
+		ZIndex = Z.WINDOW + 2,
+		Parent = tab.bar,
+	}), "BackgroundColor3")
+	Win.layoutColumns()
+end
+
+function Win.buildSub(tab, sub)
+	sub.slot = create("TextButton", {
+		Name = "Slot",
+		LayoutOrder = #tab.subs,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 20),
+		BackgroundTransparency = 1,
+		Text = "",
+		AutoButtonColor = false,
+		ZIndex = Z.WINDOW + 2,
+		Parent = tab.row,
+	})
+	local hasIcon = sub.icon and Icons.get(sub.icon)
+	if hasIcon then
+		sub.glyph = iconLabel(sub.icon, {
+			Name = "Glyph",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 0, 0.5, 0),
+			Size = UDim2.fromOffset(12, 12),
+			ImageColor3 = Skin.get("text"),
+			ZIndex = Z.WINDOW + 3,
+			Parent = sub.slot,
+		})
+	end
+	sub.label = create("TextLabel", {
+		Name = "Label",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, hasIcon and 17 or 0, 0.5, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 20),
+		BackgroundTransparency = 1,
+		Text = sub.name,
+		TextSize = 13,
+		TextColor3 = Skin.get("text"),
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.WINDOW + 3,
+		Parent = sub.slot,
+	})
+	Live.add(sub.label, function(info)
+		Win.paintSubs(tab, info)
+	end)
+	connect(sub.slot.MouseEnter, function()
+		tab.hoveredSub = sub
+		Win.paintSubs(tab)
+	end)
+	connect(sub.slot.MouseLeave, function()
+		if tab.hoveredSub == sub then
+			tab.hoveredSub = nil
+			Win.paintSubs(tab)
+		end
+	end)
+	connect(sub.slot.MouseButton1Click, function()
+		Win.selectSub(tab, sub)
+	end)
+end
+
+function Win.search(query)
+	query = string.lower(trim(tostring(query or "")))
+	Win.query = query
+	local active = query ~= ""
+	local counts, first = {}, nil
+	for _, tab in ipairs(Win.tabs) do
+		local total = 0
+		for _, section in ipairs(tab.sections) do
+			local titleMatch = active and string.find(string.lower(section.title), query, 1, true) ~= nil
+			local shown = 0
+			for _, control in ipairs(section.controls) do
+				local matches = not active or titleMatch or (control.kind ~= "divider" and string.find(control.name or "", query, 1, true) ~= nil)
+				control.filtered = not matches
+				Rows.refreshVisible(control)
+				if matches then
+					shown += 1
+				end
+			end
+			section.filtered = active and shown == 0
+			if active then
+				total += shown
+			end
+		end
+		counts[tab] = total
+		if active and total > 0 and not first then
+			first = tab
+		end
+		Win.refreshSections(tab)
+		local dim = active and total == 0 and 0.65 or 0
+		Motion.to(tab.label, Motion.STATE, { TextTransparency = dim })
+		if tab.glyph then
+			Motion.to(tab.glyph, Motion.STATE, { ImageTransparency = dim })
+		end
+	end
+	if active and first and (counts[Win.currentTab] or 0) == 0 then
+		Win.selectTab(first)
+	end
+end
+
+function Win.buildSearch()
+	local frame = create("Frame", {
+		Name = "Search",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -Geometry.headerPad, 0, Geometry.titleY),
+		Size = UDim2.fromOffset(170, 24),
+		skin = "field",
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.main,
+	})
+	corner(frame)
+	local stroke = create("UIStroke", { Thickness = Metrics.stroke, Parent = frame })
+	local state = { hovered = false, focused = false }
+	local paintStroke = fieldPainter(stroke, state)
+	local icon = iconLabel("search", {
+		ClassName = "ImageButton",
+		Name = "Glyph",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 7, 0.5, 0),
+		Size = UDim2.fromOffset(Metrics.icon, Metrics.icon),
+		ZIndex = Z.WINDOW + 2,
+		Parent = frame,
+	})
+	icon.AutoButtonColor = false
+	local field = create("TextBox", {
+		Name = "Field",
+		Position = UDim2.fromOffset(28, 0),
+		Size = UDim2.new(1, -36, 1, 0),
+		BackgroundTransparency = 1,
+		Text = "",
+		PlaceholderText = "search",
+		TextSize = Metrics.textSize - 1,
+		skin = { TextColor3 = "body", PlaceholderColor3 = "hint" },
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		ClipsDescendants = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = Z.WINDOW + 2,
+		Parent = frame,
+	})
+	Win.searchField = field
+	local paintIcon = Live.add(icon, function(info)
+		Live.set(icon, info, { ImageColor3 = (state.focused or field.Text ~= "") and Accent.get() or Skin.get("hint") })
+	end)
+	connect(field:GetPropertyChangedSignal("Text"), function()
+		paintIcon(Motion.HOVER_IN)
+		Win.search(field.Text)
+	end)
+	connect(field.Focused, function()
+		state.focused = true
+		paintStroke(Motion.HOVER_IN)
+		paintIcon(Motion.HOVER_IN)
+	end)
+	connect(field.FocusLost, function()
+		state.focused = false
+		paintStroke(Motion.HOVER_OUT)
+		paintIcon(Motion.HOVER_IN)
+	end)
+	connect(frame.MouseEnter, function()
+		state.hovered = true
+		paintStroke(Motion.HOVER_IN)
+	end)
+	connect(frame.MouseLeave, function()
+		state.hovered = false
+		paintStroke(Motion.HOVER_OUT)
+	end)
+
+	connect(icon.MouseButton1Click, function()
+		if field.Text ~= "" then
+			field.Text = ""
+		end
+	end)
+end
+
+function Win.buildAccount()
+	local account = create("Frame", {
+		Name = "Account",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.fromScale(1, 1),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 20),
+		BackgroundTransparency = 1,
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.footer,
+	})
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 6),
+		Parent = account,
+	})
+	local face = Accent.follow(create("ImageLabel", {
+		Name = "Face",
+		LayoutOrder = 1,
+		Size = UDim2.fromOffset(20, 20),
+		Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=48&h=48", player.UserId),
+		ZIndex = Z.WINDOW + 1,
+		Parent = account,
+	}), "BackgroundColor3")
+	corner(face, UDim.new(0.5, 0))
+	local function line(order, role, content)
+		return create("TextLabel", {
+			Name = "Line" .. order,
+			LayoutOrder = order,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 20),
+			BackgroundTransparency = 1,
+			Text = content,
+			TextSize = 13,
+			skin = role,
+			FontFace = Typeface.face(),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = Z.WINDOW + 1,
+			Parent = account,
+		})
+	end
+	line(2, "text", player.Name)
+	line(3, "hint", "\194\183")
+	Win.subscription = line(4, nil, Config.Subscription)
+	Accent.follow(Win.subscription, "TextColor3")
+	local switch = iconLabel(Skin.mode == "dark" and "sun" or "moon", {
+		ClassName = "ImageButton",
+		Name = "Theme",
+		LayoutOrder = 5,
+		Size = UDim2.fromOffset(14, 14),
+		ImageColor3 = Skin.get("dim"),
+		ZIndex = Z.WINDOW + 1,
+		Parent = account,
+	})
+	switch.AutoButtonColor = false
+	local state = { hovered = false }
+	Live.add(switch, function(info)
+		Live.set(switch, info, { ImageColor3 = state.hovered and Accent.get() or Skin.get("dim") })
+	end)
+	connect(switch.Activated, function()
+		Library:SetTheme(Skin.mode == "dark" and "light" or "dark")
+	end)
+	Skin.onChange(function(mode)
+		Icons.apply(switch, mode == "dark" and "sun" or "moon")
+	end)
+	connect(switch.MouseEnter, function()
+		state.hovered = true
+		Live.set(switch, Motion.HOVER_IN, { ImageColor3 = Accent.get() })
+	end)
+	connect(switch.MouseLeave, function()
+		state.hovered = false
+		Live.set(switch, Motion.HOVER_OUT, { ImageColor3 = Skin.get("dim") })
+	end)
+end
+
+function Win.build()
+	R.base = Win.mountGui(0)
+	R.chrome = Win.mountGui(2)
+	R.menu = Win.mountGui(3)
+
+	local screen = viewport()
+	local saved = type(Store.Global.menuSize) == "table" and Store.Global.menuSize or {}
+	local width = math.clamp(tonumber(saved.x) or Geometry.windowWidth, Geometry.minSize.X, math.max(Geometry.minSize.X, screen.X - 20))
+	local height = math.clamp(tonumber(saved.y) or Geometry.windowHeight, Geometry.minSize.Y, math.max(Geometry.minSize.Y, screen.Y - 20))
+	local position = type(Store.Global.menuPosition) == "table" and Store.Global.menuPosition or {}
+
+	Win.main = create("ImageButton", {
+		Name = "Window",
+		AutoButtonColor = false,
+		Position = UDim2.fromOffset(
+			math.clamp(tonumber(position.x) or math.floor((screen.X - width) / 2), 0, math.max(0, screen.X - 60)),
+			math.clamp(tonumber(position.y) or math.floor((screen.Y - height) / 2), 0, math.max(0, screen.Y - 60))
+		),
+		Size = UDim2.fromOffset(width, height),
+		skin = { BackgroundColor3 = "window" },
+		ScaleType = Enum.ScaleType.Tile,
+		ImageTransparency = 1,
+		Modal = false,
+		Visible = false,
+		ZIndex = Z.WINDOW,
+		Parent = R.menu,
+	})
+	corner(Win.main, Geometry.windowCorner)
+	local edgeStroke = Accent.follow(create("UIStroke", { Thickness = Metrics.stroke, Transparency = 0.6, Parent = Win.main }), "Color")
+	Edge.attach(edgeStroke)
+	Win.shadow = Shadow.attach(Win.main, Z.WINDOW)
+	if Win.shadow then
+		Reveal.include(Win.shadow, "ImageTransparency")
+	end
+	Popup.host = Win.main
+
+	task.spawn(function()
+		local content = Backdrop.content()
+		if content and Win.main and Win.features.backdrop then
+			pcall(function()
+				Win.main.ImageContent = content
+				Win.main.TileSize = UDim2.fromOffset(Art.backdrop.tile, Art.backdrop.tile)
+				Win.main.ImageTransparency = Geometry.backdropFade
+			end)
+			Accent.follow(Win.main, "ImageColor3")
+		end
+	end)
+
+	local top = create("Frame", {
+		Name = "Top",
+		Size = UDim2.new(1, 0, 0, Geometry.topHeight),
+		skin = { BackgroundColor3 = "surface" },
+		ZIndex = Z.WINDOW,
+		Parent = Win.main,
+	})
+	corner(top, Geometry.windowCorner)
+	create("Frame", {
+		Name = "TopSquare",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.new(1, 0, 0, Geometry.windowCorner),
+		skin = "surface",
+		ZIndex = Z.WINDOW,
+		Parent = top,
+	})
+	Aurora.attach(Win.main, Geometry.holderBottom + Geometry.footer + 2)
+
+	connect(top.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local startMouse, startPosition = mouse(), Win.main.Position
+		R.drag = {
+			move = function(position)
+				local delta = position - startMouse
+				Win.main.Position = UDim2.fromOffset(startPosition.X.Offset + delta.X, startPosition.Y.Offset + delta.Y)
+			end,
+			finish = function()
+				Store.Global.menuPosition = { x = Win.main.Position.X.Offset, y = Win.main.Position.Y.Offset }
+				saveGlobal()
+			end,
+		}
+	end)
+
+	Win.headerShadow = create("Frame", {
+		Name = "HeaderShadow",
+		Position = UDim2.fromOffset(0, Geometry.topHeight),
+		Size = UDim2.new(1, 0, 0, Geometry.headerShadow),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		ZIndex = Z.WIDGET + 5,
+		Parent = Win.main,
+	})
+	create("UIGradient", {
+		Rotation = 90,
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, Geometry.headerShadowFade), NumberSequenceKeypoint.new(1, 1) }),
+		Parent = Win.headerShadow,
+	})
+
+	Win.brand = create("TextLabel", {
+		Name = "Brand",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(Geometry.headerPad, Geometry.titleY),
+		Size = UDim2.fromOffset(0, Geometry.brandSize + 6),
+		AutomaticSize = Enum.AutomaticSize.X,
+		BackgroundTransparency = 1,
+		Text = Config.Title,
+		FontFace = Typeface.face(),
+		TextSize = Geometry.brandSize,
+		skin = "text",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.main,
+	})
+
+	Win.rule = Accent.follow(create("Frame", {
+		Name = "Rule",
+		Position = UDim2.fromOffset(0, Geometry.ruleY),
+		Size = UDim2.new(1, 0, 0, 1),
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.main,
+	}), "BackgroundColor3")
+	Rainbow.attach(Win.rule)
+	Win.buildSearch()
+
+	Win.beamHost = create("Frame", {
+		Name = "Beam",
+		Position = UDim2.fromOffset(Geometry.headerPad, Geometry.tabY),
+		Size = UDim2.new(1, -2 * Geometry.headerPad, 0, Geometry.tabBand),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		ZIndex = Z.WINDOW,
+		Parent = Win.main,
+	})
+	Beam.attach(Win.beamHost)
+	Win.highlight = Accent.follow(create("Frame", {
+		Name = "Highlight",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.fromOffset(0, 1),
+		ZIndex = Z.WINDOW + 2,
+		Parent = Win.beamHost,
+	}), "BackgroundColor3")
+	connect(Win.highlight:GetPropertyChangedSignal("Position"), Beam.sync)
+	connect(Win.highlight:GetPropertyChangedSignal("Size"), Beam.sync)
+
+	Win.tabRow = create("ScrollingFrame", {
+		Name = "Tabs",
+		Position = UDim2.fromOffset(Geometry.headerPad, Geometry.tabY),
+		Size = UDim2.new(1, -2 * Geometry.headerPad, 0, Geometry.tabBand),
+		BackgroundTransparency = 1,
+		ScrollBarThickness = 0,
+		ScrollingDirection = Enum.ScrollingDirection.X,
+		AutomaticCanvasSize = Enum.AutomaticSize.X,
+		CanvasSize = UDim2.new(),
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.main,
+	})
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		VerticalAlignment = Enum.VerticalAlignment.Bottom,
+		Padding = UDim.new(0, Geometry.tabSpacing),
+		Parent = Win.tabRow,
+	})
+	connect(Win.tabRow:GetPropertyChangedSignal("CanvasPosition"), function()
+		if Win.currentTab then
+			Win.placeHighlight(Win.currentTab, true)
+		end
+	end)
+
+	Win.columnHolder = create("Frame", {
+		Name = "Columns",
+		Position = UDim2.fromOffset(Geometry.holderX, Geometry.holderY),
+		Size = UDim2.new(1, -2 * Geometry.holderX, 1, -(Geometry.holderY + Geometry.holderBottom)),
+		BackgroundTransparency = 1,
+		ZIndex = Z.WINDOW,
+		Parent = Win.main,
+	})
+	Win.footer = create("Frame", {
+		Name = "Footer",
+		Position = UDim2.new(0, Geometry.inset, 1, -(Geometry.footer + 2)),
+		Size = UDim2.new(1, -2 * Geometry.inset, 0, Geometry.footer),
+		skin = "footer",
+		BackgroundTransparency = 0.25,
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.columnHolder,
+	})
+	Accent.follow(create("Frame", {
+		Name = "Rule",
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundTransparency = 0.7,
+		ZIndex = Z.WINDOW + 1,
+		Parent = Win.footer,
+	}), "BackgroundColor3")
+	Win.buildAccount()
+
+	local grip = iconLabel("grip", {
+		Name = "Grip",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -2, 1, -2),
+		Size = UDim2.fromOffset(12, 12),
+		ImageColor3 = Skin.get("dim"),
+		ImageTransparency = 0.4,
+		ZIndex = Z.WINDOW + 3,
+		Parent = Win.main,
+	})
+	local gripState = { hovered = false }
+	local paintGrip = Live.add(grip, function(info)
+		Live.set(grip, info, { ImageColor3 = gripState.hovered and Accent.get() or Skin.get("dim") })
+	end)
+	onHover(grip, function(hovered)
+		gripState.hovered = hovered
+		paintGrip(hovered and Motion.HOVER_IN or Motion.HOVER_OUT)
+	end)
+	connect(grip.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		Popup.closeAll()
+		local startMouse, startSize = mouse(), Win.main.Size
+		R.drag = {
+			move = function(position)
+				local delta = position - startMouse
+				local limit = viewport()
+				Win.main.Size = UDim2.fromOffset(
+					math.clamp(startSize.X.Offset + delta.X, Geometry.minSize.X, math.max(Geometry.minSize.X, limit.X)),
+					math.clamp(startSize.Y.Offset + delta.Y, Geometry.minSize.Y, math.max(Geometry.minSize.Y, limit.Y))
+				)
+			end,
+			finish = function()
+				Store.Global.menuSize = { x = Win.main.Size.X.Offset, y = Win.main.Size.Y.Offset }
+				saveGlobal()
+			end,
+		}
+	end)
+	connect(Win.main:GetPropertyChangedSignal("Size"), function()
+		Win.layoutColumns()
+		if Win.currentTab then
+			Win.placeHighlight(Win.currentTab, true)
+			Win.slideSub(Win.currentTab, true)
+		end
+	end)
+
+	Bubbles.attach(R.base)
+	Reveal.onSettle = function()
+		Live.refresh(nil)
+	end
+end
+
+function Win.setOpen(open)
+	R.menuOpen = open
+	if not Win.main then
+		return
+	end
+	Win.main.Modal = open
+	Reveal.play(Win.main, open)
+	if not open then
+		pcall(Popup.closeAll)
+		Tooltip.dismiss()
+		Binds.cancelCapture()
+		if Win.searchField and Win.searchField:IsFocused() then
+			Win.searchField:ReleaseFocus()
+		end
+	end
+	if R.onOpen then
+		R.onOpen(open)
+	end
+end
+
+local Keybinds = { WIDTH = 230, PAD_X = 11, PAD_TOP = 8, PAD_BOTTOM = 8, TITLE = 19, TITLE_LINE = 23, TITLE_ICON = 18, TITLE_GAP = 6, RULE_GAP = 6, BODY_GAP = 7, ROW_H = 18, ROW_GAP = 3, KEY_W = 46, GAP = 8, MODE_W = 44, rows = {}, clock = 0 }
+Keybinds.BODY_Y = Keybinds.PAD_TOP + Keybinds.TITLE_LINE + Keybinds.RULE_GAP + 1 + Keybinds.BODY_GAP
+
+local function keybindsHeight(count)
+	count = math.max(1, count)
+	return Keybinds.BODY_Y + count * Keybinds.ROW_H + (count - 1) * Keybinds.ROW_GAP + Keybinds.PAD_BOTTOM
+end
+
+function Keybinds.build()
+	local saved = type(Store.Global.hotkeyPosition) == "table" and Store.Global.hotkeyPosition or {}
+	local frame = create("Frame", {
+		Name = "Keybinds",
+		Position = UDim2.fromOffset(tonumber(saved.x) or 12, tonumber(saved.y) or 260),
+		Size = UDim2.fromOffset(Keybinds.WIDTH, keybindsHeight(1)),
+		BackgroundTransparency = 0.12,
+		skin = "window",
+		Visible = false,
+		ZIndex = Z.TOP,
+		Parent = R.chrome,
+	})
+	Keybinds.frame = frame
+	corner(frame, 6)
+	create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1, Transparency = 0.4, Parent = frame })
+	Shadow.attach(frame, Z.TOP)
+	local iconWidth = 0
+	if Icons.get("keyboard") then
+		iconWidth = Keybinds.TITLE_ICON + Keybinds.TITLE_GAP
+		Accent.follow(iconLabel("keyboard", {
+			Name = "Glyph",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.fromOffset(Keybinds.PAD_X, Keybinds.PAD_TOP + Keybinds.TITLE_LINE // 2),
+			Size = UDim2.fromOffset(Keybinds.TITLE_ICON, Keybinds.TITLE_ICON),
+			ZIndex = Z.TOP + 1,
+			Parent = frame,
+		}), "ImageColor3")
+	end
+	Accent.follow(create("TextLabel", {
+		Name = "Title",
+		Position = UDim2.fromOffset(Keybinds.PAD_X + iconWidth, Keybinds.PAD_TOP),
+		Size = UDim2.new(1, -(Keybinds.PAD_X * 2 + iconWidth), 0, Keybinds.TITLE_LINE),
+		BackgroundTransparency = 1,
+		Text = "hotkeys",
+		TextSize = Keybinds.TITLE,
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.TOP + 1,
+		Parent = frame,
+	}), "TextColor3")
+	Accent.follow(create("Frame", {
+		Name = "Rule",
+		Position = UDim2.fromOffset(Keybinds.PAD_X, Keybinds.PAD_TOP + Keybinds.TITLE_LINE + Keybinds.RULE_GAP),
+		Size = UDim2.new(1, -Keybinds.PAD_X * 2, 0, 1),
+		ZIndex = Z.TOP + 1,
+		Parent = frame,
+	}), function(rule, color)
+		rule.BackgroundColor3 = color:Lerp(Color3.new(0, 0, 0), 0.5)
+	end)
+	Keybinds.empty = create("TextLabel", {
+		Name = "Empty",
+		Position = UDim2.fromOffset(Keybinds.PAD_X, Keybinds.BODY_Y),
+		Size = UDim2.new(1, -Keybinds.PAD_X * 2, 0, Keybinds.ROW_H),
+		BackgroundTransparency = 1,
+		Text = "no keybinds",
+		TextSize = 14,
+		FontFace = Typeface.face(),
+		skin = "dim",
+		Visible = false,
+		ZIndex = Z.TOP + 1,
+		Parent = frame,
+	})
+	connect(frame.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local startMouse, startPosition = mouse(), frame.Position
+		R.drag = {
+			move = function(position)
+				local delta = position - startMouse
+				frame.Position = UDim2.fromOffset(startPosition.X.Offset + delta.X, startPosition.Y.Offset + delta.Y)
+			end,
+			finish = function()
+				Store.Global.hotkeyPosition = { x = frame.Position.X.Offset, y = frame.Position.Y.Offset }
+				saveGlobal()
+			end,
+		}
+	end)
+end
+
+local function keybindRow(index)
+	local y = Keybinds.BODY_Y + (index - 1) * (Keybinds.ROW_H + Keybinds.ROW_GAP)
+	local row = create("Frame", {
+		Name = "Bind",
+		Position = UDim2.fromOffset(Keybinds.PAD_X, y),
+		Size = UDim2.new(1, -Keybinds.PAD_X * 2, 0, Keybinds.ROW_H),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = Z.TOP + 1,
+		Parent = Keybinds.frame,
+	})
+	local function text(name, props)
+		props.Name = name
+		props.BackgroundTransparency = 1
+		props.Text = ""
+		props.FontFace = Typeface.face()
+		props.ZIndex = Z.TOP + 1
+		props.Parent = row
+		return create("TextLabel", props)
+	end
+	return {
+		frame = row,
+		key = text("Key", { Size = UDim2.new(0, Keybinds.KEY_W, 1, 0), TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }),
+		name = text("Name", {
+			Position = UDim2.fromOffset(Keybinds.KEY_W + Keybinds.GAP, 0),
+			Size = UDim2.new(1, -(Keybinds.KEY_W + Keybinds.GAP + Keybinds.MODE_W), 1, 0),
+			TextSize = 14,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		}),
+		mode = text("Mode", {
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, 0, 0.5, 0),
+			Size = UDim2.fromOffset(Keybinds.MODE_W, Keybinds.ROW_H),
+			TextSize = 11,
+			TextXAlignment = Enum.TextXAlignment.Right,
+		}),
+	}
+end
+
+local function bindName(entry)
+	local text, group = tostring(entry.label or ""), entry.group
+	if not group or group == "" then
+		return text
+	end
+	if text == "" or text == "enabled" or text == group then
+		return group
+	end
+	return group .. " " .. text
+end
+
+function Keybinds.refresh()
+	local frame = Keybinds.frame
+	if not frame then
+		return
+	end
+	frame.Visible = R.hotkeyListEnabled and not Library.Unloaded
+	if not frame.Visible then
+		return
+	end
+	local list = {}
+	for _, entry in ipairs(Binds.list) do
+		if entry.key ~= "None" or entry.mode == "always" then
+			table.insert(list, {
+				key = Binds.label(entry.key),
+				name = bindName(entry),
+				mode = entry.mode,
+				active = entry.mode == "always" or entry.get() == true,
+			})
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.name < b.name
+	end)
+	local accent, text, dim = Accent.get(), Skin.get("text"), Skin.get("dim")
+	for index, data in ipairs(list) do
+		local row = Keybinds.rows[index] or keybindRow(index)
+		Keybinds.rows[index] = row
+		row.key.Text = data.key
+		row.name.Text = data.name
+		row.mode.Text = data.mode
+		local color = data.active and accent or text
+		row.key.TextColor3 = color
+		row.name.TextColor3 = color
+		row.mode.TextColor3 = dim
+		row.frame.Visible = true
+	end
+	for index = #list + 1, #Keybinds.rows do
+		Keybinds.rows[index].frame.Visible = false
+	end
+	Keybinds.empty.Visible = #list == 0
+	local height = keybindsHeight(#list)
+	if frame.Size.Y.Offset ~= height then
+		frame.Size = UDim2.fromOffset(Keybinds.WIDTH, height)
+	end
+end
+
+local Watermark = { HEIGHT = 36, PAD_X = 15, GAP = 12, MARGIN = 12, STAT_TEXT = 11, STAT_ICON = 11, STAT_GAP = 5, FACE = 16, BARS = 24, BAR_W = 2, BAR_GAP = 1, BAR_H = 13, BAR_MIN = 2, ALARM = 45, SAMPLE = 6, stats = {}, bars = {}, samples = {}, head = 0, frames = 0, elapsed = 0, sampleClock = 0, slowClock = 0 }
+
+local function executorName()
+	if Watermark.executor then
+		return Watermark.executor
+	end
+	Watermark.executor = "--"
+	if Executor.identifyexecutor then
+		local ok, name, version = pcall(Executor.identifyexecutor)
+		if ok and type(name) == "string" and name ~= "" then
+			Watermark.executor = type(version) == "string" and version ~= "" and name .. " " .. version or name
+		end
+	end
+	return Watermark.executor
+end
+
+local function formatSession(seconds)
+	seconds = math.max(0, math.floor(seconds))
+	local hours, minutes = seconds // 3600, seconds % 3600 // 60
+	if hours > 0 then
+		return string.format("%dh%02dm", hours, minutes)
+	end
+	if minutes > 0 then
+		return string.format("%dm%02ds", minutes, seconds % 60)
+	end
+	return string.format("%ds", seconds)
+end
+
+local function watermarkStat(order, iconName, width)
+	local fixed = width ~= nil
+	local holder = create("Frame", {
+		Name = "Stat",
+		LayoutOrder = order,
+		AutomaticSize = fixed and Enum.AutomaticSize.None or Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(fixed and Watermark.STAT_ICON + Watermark.STAT_GAP + width or 0, Watermark.HEIGHT),
+		BackgroundTransparency = 1,
+		ZIndex = Z.TOP + 1,
+		Parent = Watermark.frame,
+	})
+	if Icons.get(iconName) then
+		iconLabel(iconName, {
+			Name = "Glyph",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 0, 0.5, 0),
+			Size = UDim2.fromOffset(Watermark.STAT_ICON, Watermark.STAT_ICON),
+			skin = "dim",
+			ZIndex = Z.TOP + 1,
+			Parent = holder,
+		})
+	end
+	return create("TextLabel", {
+		Name = "Value",
+		Position = UDim2.fromOffset(Watermark.STAT_ICON + Watermark.STAT_GAP, 0),
+		AutomaticSize = fixed and Enum.AutomaticSize.None or Enum.AutomaticSize.X,
+		Size = UDim2.new(0, width or 0, 1, 0),
+		BackgroundTransparency = 1,
+		Text = "",
+		TextSize = Watermark.STAT_TEXT,
+		FontFace = Typeface.face(),
+		skin = "muted",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.TOP + 1,
+		Parent = holder,
+	})
+end
+
+function Watermark.build()
+	local frame = create("Frame", {
+		Name = "Watermark",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -Watermark.MARGIN, 0, Watermark.MARGIN),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, Watermark.HEIGHT),
+		BackgroundTransparency = 0.12,
+		skin = "window",
+		Visible = R.watermarkEnabled,
+		ZIndex = Z.TOP,
+		Parent = R.chrome,
+	})
+	Watermark.frame = frame
+	corner(frame, 6)
+	create("UIStroke", { Thickness = 1, Transparency = 0.4, skin = { Color = "border" }, Parent = frame })
+	Shadow.attach(frame, Z.TOP)
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, Watermark.GAP),
+		Parent = frame,
+	})
+	create("UIPadding", { PaddingLeft = UDim.new(0, Watermark.PAD_X), PaddingRight = UDim.new(0, Watermark.PAD_X), Parent = frame })
+	Watermark.brand = Accent.follow(create("TextLabel", {
+		Name = "Brand",
+		LayoutOrder = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundTransparency = 1,
+		Text = Config.Title,
+		TextSize = 13,
+		FontFace = Typeface.face(),
+		ZIndex = Z.TOP + 1,
+		Parent = frame,
+	}), "TextColor3")
+
+	local user = create("Frame", { Name = "User", LayoutOrder = 2, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, Watermark.HEIGHT), BackgroundTransparency = 1, ZIndex = Z.TOP + 1, Parent = frame })
+	local face = Accent.follow(create("ImageLabel", {
+		Name = "Face",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 0, 0.5, 0),
+		Size = UDim2.fromOffset(Watermark.FACE, Watermark.FACE),
+		Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=48&h=48", player.UserId),
+		ZIndex = Z.TOP + 1,
+		Parent = user,
+	}), "BackgroundColor3")
+	corner(face, UDim.new(0.5, 0))
+	create("TextLabel", {
+		Name = "Value",
+		Position = UDim2.fromOffset(Watermark.FACE + Watermark.STAT_GAP, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundTransparency = 1,
+		Text = player.Name,
+		TextSize = Watermark.STAT_TEXT,
+		FontFace = Typeface.face(),
+		skin = "muted",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.TOP + 1,
+		Parent = user,
+	})
+	watermarkStat(3, "code", nil).Text = executorName()
+	Watermark.stats.speed = watermarkStat(4, "gauge", 22)
+	Watermark.stats.hours = watermarkStat(5, "timer", 40)
+	local graph = create("Frame", {
+		Name = "Spark",
+		LayoutOrder = 6,
+		Size = UDim2.fromOffset(Watermark.BARS * (Watermark.BAR_W + Watermark.BAR_GAP) - Watermark.BAR_GAP, Watermark.HEIGHT),
+		BackgroundTransparency = 1,
+		ZIndex = Z.TOP + 1,
+		Parent = frame,
+	})
+	for index = 1, Watermark.BARS do
+		Watermark.bars[index] = create("Frame", {
+			Name = "Bar" .. index,
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, (index - 1) * (Watermark.BAR_W + Watermark.BAR_GAP), 0.5, Watermark.BAR_H // 2),
+			Size = UDim2.fromOffset(Watermark.BAR_W, Watermark.BAR_MIN),
+			BackgroundColor3 = Accent.get(),
+			BackgroundTransparency = 0.35,
+			ZIndex = Z.TOP + 1,
+			Parent = graph,
+		})
+	end
+	Watermark.stats.fps = watermarkStat(7, "pulse", 24)
+	Watermark.stats.ping = watermarkStat(8, "signal", 32)
+	Watermark.stats.config = watermarkStat(9, "gear", nil)
+	Watermark.stats.clock = watermarkStat(10, "clock", 32)
+	Watermark.sessionStart = os.clock()
+end
+
+local function setText(label, content)
+	if label and label.Text ~= content then
+		label.Text = content
+	end
+end
+
+function Watermark.render(delta)
+	if not Watermark.frame or not Watermark.frame.Visible then
+		return
+	end
+	Watermark.frames += 1
+	Watermark.elapsed += delta
+	Watermark.sampleClock += delta
+	Watermark.slowClock += delta
+	if Watermark.sampleClock < 1 / Watermark.SAMPLE then
+		return
+	end
+	Watermark.sampleClock = 0
+	local fps = Watermark.elapsed > 0 and Watermark.frames / Watermark.elapsed or 0
+	Watermark.frames, Watermark.elapsed = 0, 0
+	Watermark.head = Watermark.head % Watermark.BARS + 1
+	Watermark.samples[Watermark.head] = fps
+	local alarm = fps < Watermark.ALARM
+	setText(Watermark.stats.fps, tostring(math.floor(fps + 0.5)))
+	Watermark.stats.fps.TextColor3 = Skin.get(alarm and "danger" or "muted")
+	local peak, count = 1, #Watermark.samples
+	for _, sample in ipairs(Watermark.samples) do
+		peak = math.max(peak, sample)
+	end
+	local color = alarm and Skin.get("danger") or Accent.get()
+	for index, bar in ipairs(Watermark.bars) do
+		local slot = index - (Watermark.BARS - count)
+		local sample = slot >= 1 and Watermark.samples[(Watermark.head + slot - 1) % count + 1] or nil
+		local height = sample and math.max(Watermark.BAR_MIN, math.floor(Watermark.BAR_H * (sample / peak) + 0.5)) or Watermark.BAR_MIN
+		if bar.Size.Y.Offset ~= height then
+			bar.Size = UDim2.fromOffset(Watermark.BAR_W, height)
+		end
+		if bar.BackgroundColor3 ~= color then
+			bar.BackgroundColor3 = color
+		end
+	end
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if root then
+		local velocity = root.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+		setText(Watermark.stats.speed, string.format("%d", velocity.Magnitude + 0.5))
+	else
+		setText(Watermark.stats.speed, "--")
+	end
+	if Watermark.slowClock >= 1 then
+		Watermark.slowClock = 0
+		local ok, ping = pcall(player.GetNetworkPing, player)
+		setText(Watermark.stats.ping, string.format("%d ms", ok and math.floor(ping * 1000 + 0.5) or 0))
+		setText(Watermark.stats.hours, formatSession(os.clock() - Watermark.sessionStart))
+		setText(Watermark.stats.clock, os.date("%H:%M"))
+		setText(Watermark.stats.config, R.configName or "--")
+	end
+end
+
+local Notices = { TEXT = 16, ROW = 25, GAP = 4, PAD = 13, MAX_W = 664, LIMIT = 6, FADE_IN = 0.12, HOLD = 4, FADE_OUT = 0.45, SLIDE = 18, FOLLOW = 16, list = {}, pool = {} }
+
+function Notices.build()
+	local saved = type(Store.Global.notifyPosition) == "table" and Store.Global.notifyPosition or {}
+	Notices.frame = create("Frame", {
+		Name = "Notices",
+		Position = UDim2.fromOffset(tonumber(saved.x) or 12, tonumber(saved.y) or (Watermark.MARGIN + Watermark.HEIGHT + 10)),
+		Size = UDim2.fromOffset(0, Notices.ROW),
+		BackgroundTransparency = 1,
+		ZIndex = Z.HUD,
+		Parent = R.base,
+	})
+
+	Notices.handle = create("TextButton", {
+		Name = "Handle",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromOffset(0, -6),
+		Size = UDim2.fromOffset(140, 20),
+		AutoButtonColor = false,
+		Text = "",
+		skin = "window",
+		BackgroundTransparency = 0.12,
+		Visible = false,
+		ZIndex = Z.HUD + 2,
+		Parent = Notices.frame,
+	})
+	corner(Notices.handle)
+	Accent.follow(create("UIStroke", { Thickness = 1, Transparency = 0.4, Parent = Notices.handle }), "Color")
+	Accent.follow(iconLabel("grip", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 6, 0.5, 0),
+		Size = UDim2.fromOffset(12, 12),
+		ZIndex = Z.HUD + 3,
+		Parent = Notices.handle,
+	}), "ImageColor3")
+	create("TextLabel", {
+		Position = UDim2.fromOffset(24, 0),
+		Size = UDim2.new(1, -28, 1, 0),
+		BackgroundTransparency = 1,
+		Text = "notifications",
+		TextSize = 12,
+		FontFace = Typeface.face(),
+		skin = "muted",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.HUD + 3,
+		Parent = Notices.handle,
+	})
+	connect(Notices.handle.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local startMouse, startPosition = mouse(), Notices.frame.Position
+		R.drag = {
+			move = function(position)
+				local delta = position - startMouse
+				Notices.frame.Position = UDim2.fromOffset(startPosition.X.Offset + delta.X, startPosition.Y.Offset + delta.Y)
+			end,
+			finish = function()
+				Store.Global.notifyPosition = { x = Notices.frame.Position.X.Offset, y = Notices.frame.Position.Y.Offset }
+				saveGlobal()
+			end,
+		}
+	end)
+end
+
+local function noticePiece()
+	local piece = table.remove(Notices.pool)
+	if piece then
+		piece.root.Visible = true
+		return piece
+	end
+	local root = create("Frame", {
+		Name = "Notice",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Notices.MAX_W + Notices.PAD * 2, Notices.ROW),
+		ZIndex = Z.HUD,
+		Parent = Notices.frame,
+	})
+	local pill = create("Frame", {
+		Name = "Pill",
+		BackgroundColor3 = Color3.fromRGB(12, 12, 14),
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(0, Notices.ROW),
+		ZIndex = Z.HUD,
+		Parent = root,
+	})
+	corner(pill, 5)
+	create("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.22, 0.25),
+			NumberSequenceKeypoint.new(0.78, 0.25),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = pill,
+	})
+	local text = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Notices.MAX_W, Notices.ROW),
+		Position = UDim2.fromOffset(Notices.PAD, 0),
+		FontFace = Typeface.mono(),
+		TextSize = Notices.TEXT,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		RichText = true,
+		TextColor3 = Color3.new(1, 1, 1),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = Z.HUD + 1,
+		Parent = root,
+	})
+	return { root = root, pill = pill, text = text }
+end
+
+local function releasePiece(notice)
+	if notice.piece then
+		notice.piece.root.Visible = false
+		table.insert(Notices.pool, notice.piece)
+		notice.piece = nil
+	end
+end
+
+function Notices.push(content, duration)
+	if not R.notificationsEnabled or not Notices.frame or Library.Unloaded then
+		return
+	end
+	content = tostring(content or "")
+	if content == "" then
+		return
+	end
+	table.insert(Notices.list, { text = content, born = os.clock(), alpha = 0, hold = tonumber(duration) or Notices.HOLD })
+	while #Notices.list > Notices.LIMIT + 2 do
+		releasePiece(table.remove(Notices.list, 1))
+	end
+	local cutoff = os.clock() - Notices.FADE_IN - Notices.HOLD
+	for index = 1, #Notices.list - Notices.LIMIT do
+		Notices.list[index].born = math.min(Notices.list[index].born, cutoff)
+	end
+end
+
+local function noticeAlpha(notice, age)
+	if age < Notices.FADE_IN then
+		return age / Notices.FADE_IN
+	end
+	local held = age - Notices.FADE_IN
+	if held < notice.hold then
+		return 1
+	end
+	local progress = (held - notice.hold) / Notices.FADE_OUT
+	if progress >= 1 then
+		return nil
+	end
+	return 1 - progress
+end
+
+function Notices.render(delta)
+	if not Notices.frame then
+		return
+	end
+	Notices.handle.Visible = R.menuOpen
+	if #Notices.list == 0 then
+		return
+	end
+	local now = os.clock()
+	local follow = math.clamp(delta * Notices.FOLLOW, 0, 1)
+	for index = #Notices.list, 1, -1 do
+		local notice = Notices.list[index]
+		local alpha = noticeAlpha(notice, now - notice.born)
+		if not alpha then
+			releasePiece(notice)
+			table.remove(Notices.list, index)
+		else
+			notice.alpha = alpha
+		end
+	end
+	for index, notice in ipairs(Notices.list) do
+		local fresh = false
+		if not notice.piece then
+			notice.piece = noticePiece()
+			notice.piece.text.Text = notice.text
+			notice.width = nil
+			fresh = true
+		end
+		local piece = notice.piece
+		local target = (index - 1) * (Notices.ROW + Notices.GAP)
+		if notice.y then
+			notice.y += (target - notice.y) * follow
+		else
+			local previous = Notices.list[index - 1]
+			notice.y = previous and previous.y and previous.y + Notices.ROW + Notices.GAP or target
+		end
+		local hidden = 1 - notice.alpha
+		piece.root.Position = UDim2.fromOffset(-Notices.SLIDE * hidden, notice.y)
+		if not notice.width and not fresh then
+			local bounds = piece.text.TextBounds.X
+			if bounds > 0 then
+				notice.width = math.min(bounds, Notices.MAX_W) + Notices.PAD * 2
+				piece.pill.Size = UDim2.fromOffset(notice.width, Notices.ROW)
+			end
+		end
+		piece.text.TextTransparency = hidden
+		piece.pill.BackgroundTransparency = notice.width and hidden or 1
+	end
+end
+
+local Preview = { tab = "enemies", built = false, shown = false, builtin = true }
+
+local PREVIEW_FLAGS = {
+	{ "SHOOT", "shoot" },
+	{ "SCOPED", "target" },
+	{ "AIR", "airborne" },
+	{ "CROUCH", "crouch" },
+	{ "WALK", "steps" },
+	{ "BURNING", "burning" },
+	{ "SMOKED", "smoked" },
+	{ "FLASHED", "flashed" },
+	{ "LOW HP", "lowhp" },
+	{ "IMMUNE", "immune" },
+	{ "HELMET", "helmet" },
+	{ "KEVLAR", "kevlar" },
+	{ "DEFUSER", "defuser" },
+	{ "C4", "c4" },
+	{ "$1000", "money" },
+	{ "42ms", "signal" },
+}
+
+local SKELETON_R15 = {
+	{ "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" },
+	{ "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
+	{ "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" },
+	{ "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" }, { "LeftLowerLeg", "LeftFoot" },
+	{ "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" },
+}
+local SKELETON_R6 = {
+	{ "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" },
+}
+
+function Preview.value(field)
+	if Preview.tab == "local" then
+		return nil
+	end
+	return R.current[Preview.tab .. "_" .. field]
+end
+
+function Preview.project(position)
+	local camera, frame = Preview.camera, Preview.viewport
+	if not camera or not frame then
+		return Vector2.zero, false
+	end
+	local size = frame.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		return Vector2.zero, false
+	end
+	local relative = camera.CFrame:PointToObjectSpace(position)
+	if relative.Z >= 0 then
+		return Vector2.zero, false
+	end
+	local tangent = math.tan(math.rad(camera.FieldOfView) / 2)
+	local depth = -relative.Z
+	local x = relative.X / (depth * tangent * (size.X / size.Y))
+	local y = relative.Y / (depth * tangent)
+	local origin = frame.AbsolutePosition
+	return Vector2.new(origin.X + (x + 1) / 2 * size.X, origin.Y + (1 - y) / 2 * size.Y), math.abs(x) <= 1 and math.abs(y) <= 1
+end
+
+local function blockDummy()
+	local model = Instance.new("Model")
+	model.Name = "Dummy"
+	local function part(name, size, position)
+		local piece = Instance.new("Part")
+		piece.Name = name
+		piece.Anchored = true
+		piece.Size = size
+		piece.CFrame = CFrame.new(position)
+		piece.Material = Enum.Material.SmoothPlastic
+		piece.Color = Color3.fromRGB(230, 230, 230)
+		piece.Parent = model
+		return piece
+	end
+	part("Head", Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 1.6, 0))
+	part("Torso", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0))
+	part("Left Arm", Vector3.new(1, 2, 1), Vector3.new(-1.5, 0, 0))
+	part("Right Arm", Vector3.new(1, 2, 1), Vector3.new(1.5, 0, 0))
+	part("Left Leg", Vector3.new(1, 2, 1), Vector3.new(-0.5, -2, 0))
+	part("Right Leg", Vector3.new(1, 2, 1), Vector3.new(0.5, -2, 0))
+	local root = part("HumanoidRootPart", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0))
+	root.Transparency = 1
+	model.PrimaryPart = root
+	Instance.new("Humanoid").Parent = model
+	return model
+end
+
+local function cloneCharacter()
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return blockDummy()
+	end
+	local archivable = character.Archivable
+	character.Archivable = true
+	local ok, clone = pcall(character.Clone, character)
+	character.Archivable = archivable
+	if not ok or not clone then
+		return blockDummy()
+	end
+	for _, object in ipairs(clone:GetDescendants()) do
+		if object:IsA("LuaSourceContainer") or object:IsA("Sound") or object:IsA("ForceField") or object:IsA("BillboardGui") then
+			object:Destroy()
+		elseif object:IsA("BasePart") then
+			object.Anchored = true
+			object.CanCollide = false
+		elseif object:IsA("Humanoid") then
+			object.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		end
+	end
+	local root = clone:FindFirstChild("HumanoidRootPart")
+	if root then
+		root.Transparency = 1
+		clone.PrimaryPart = root
+		clone:PivotTo(CFrame.new())
+	end
+	return clone
+end
+
+function Preview.makeSubject()
+	local subject = {
+		Name = player.Name,
+		DisplayName = player.DisplayName,
+		UserId = player.UserId,
+		IsPreview = true,
+		Parent = game,
+		Team = nil,
+	}
+	function subject.FindFirstChild()
+		return nil
+	end
+	function subject.GetAttribute()
+		return nil
+	end
+	function subject.IsA()
+		return false
+	end
+
+	function subject.Project(_, position)
+		local point, onScreen = Preview.project(position)
+		return point + guiInset(), onScreen
+	end
+
+	function subject.IsVisible()
+		return Preview.shown and Preview.fader ~= nil and Preview.fader.Value < 0.5
+	end
+
+	function subject.Side()
+		return Preview.tab
+	end
+	function subject.CameraPosition()
+		return Preview.camera and Preview.camera.CFrame.Position or Vector3.zero
+	end
+
+	function subject.Origin()
+		local frame = Preview.viewport
+		if not frame then
+			return Vector2.zero
+		end
+		return frame.AbsolutePosition + guiInset() + Vector2.new(frame.AbsoluteSize.X / 2, frame.AbsoluteSize.Y)
+	end
+	setmetatable(subject, {
+		__index = function(_, key)
+			if key == "Character" then
+				return Preview.model
+			end
+			return nil
+		end,
+	})
+	return subject
+end
+
+function Preview.setModel(model)
+	if Preview.model then
+		Preview.model:Destroy()
+	end
+	Preview.model = model
+	Preview.originals = {}
+	for _, object in ipairs(model:GetDescendants()) do
+		if object:IsA("BasePart") then
+			Preview.originals[object] = { Color = object.Color, Material = object.Material, Transparency = object.Transparency }
+		elseif object:IsA("Decal") or object:IsA("Texture") then
+			Preview.originals[object] = { Transparency = object.Transparency }
+		end
+	end
+	Preview.bones = {}
+	local pairsList = model:FindFirstChild("UpperTorso") and SKELETON_R15 or SKELETON_R6
+	for _, pair in ipairs(pairsList) do
+		local from, to = model:FindFirstChild(pair[1]), model:FindFirstChild(pair[2])
+		if from and to then
+			table.insert(Preview.bones, { from = from, to = to })
+		end
+	end
+	model.Parent = Preview.world
+	Preview.refresh()
+end
+
+local function overlayText(props)
+	props.BackgroundTransparency = 1
+	props.FontFace = props.FontFace or Typeface.face()
+	props.ZIndex = Z.WINDOW + 3
+	props.Parent = Preview.overlay
+	return create("TextLabel", props)
+end
+
+function Preview.build()
+	if Preview.built then
+		return
+	end
+	Preview.built = true
+	local root = create("Frame", {
+		Name = "EspPreview",
+		Size = UDim2.fromOffset(Geometry.previewWidth, Win.main.Size.Y.Offset),
+		skin = "window",
+		Visible = false,
+		ZIndex = Z.WINDOW,
+		Parent = R.menu,
+	})
+	Preview.root = root
+	corner(root, Geometry.windowCorner)
+	Accent.follow(create("UIStroke", { Thickness = 1, Transparency = 0.6, Parent = root }), "Color")
+	Preview.shadow = Shadow.attach(root, Z.WINDOW)
+	Preview.fader = create("NumberValue", { Value = 1, Parent = root })
+	connect(Preview.fader.Changed, function(amount)
+		if Preview.shot then
+			Fade.apply(Preview.shot, amount)
+		end
+	end)
+	local top = create("Frame", { Name = "Top", Size = UDim2.new(1, 0, 0, 30), skin = "surface", ZIndex = Z.WINDOW, Parent = root })
+	corner(top, Geometry.windowCorner)
+	create("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, Geometry.windowCorner), skin = "surface", ZIndex = Z.WINDOW, Parent = top })
+	Accent.follow(create("TextLabel", {
+		Position = UDim2.fromOffset(12, 0),
+		Size = UDim2.new(1, -24, 0, 30),
+		BackgroundTransparency = 1,
+		Text = "esp preview",
+		TextSize = Metrics.textSize,
+		FontFace = Typeface.face(),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.WINDOW + 1,
+		Parent = root,
+	}), "TextColor3")
+	Accent.follow(create("Frame", { Position = UDim2.fromOffset(0, 30), Size = UDim2.new(1, 0, 0, 1), ZIndex = Z.WINDOW + 1, Parent = root }), "BackgroundColor3")
+
+	Preview.viewport = create("ViewportFrame", {
+		Name = "Scene",
+		Position = UDim2.fromOffset(0, 31),
+		Size = UDim2.new(1, 0, 1, -71),
+		BackgroundTransparency = 1,
+		Ambient = Color3.fromRGB(200, 200, 200),
+		LightColor = Color3.new(1, 1, 1),
+		LightDirection = Vector3.new(-1, -1, -1),
+		ZIndex = Z.WINDOW + 1,
+		Parent = root,
+	})
+	Preview.world = Instance.new("WorldModel")
+	Preview.world.Parent = Preview.viewport
+	Preview.camera = Instance.new("Camera")
+	Preview.camera.FieldOfView = 30
+	Preview.camera.Parent = Preview.viewport
+	Preview.viewport.CurrentCamera = Preview.camera
+
+	Preview.overlay = create("Frame", { Name = "Overlay", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = Z.WINDOW + 2, Parent = root })
+	Preview.box = create("Frame", { Name = "Box", BackgroundTransparency = 1, ZIndex = Z.WINDOW + 2, Parent = Preview.overlay })
+	Preview.stroke = create("UIStroke", { Color = Accent.get(), Thickness = 1, Parent = Preview.box })
+	Preview.name = overlayText({ Text = string.lower(player.DisplayName), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Center, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(160, 14) })
+	Preview.health = create("Frame", { Name = "Health", BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, ZIndex = Z.WINDOW + 2, Parent = Preview.overlay })
+	create("Frame", {
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 1, 1, -1),
+		Size = UDim2.new(1, -2, 0.78, -2),
+		BackgroundColor3 = Color3.fromRGB(95, 208, 138),
+		ZIndex = Z.WINDOW + 3,
+		Parent = Preview.health,
+	})
+	Preview.weapon = overlayText({ Text = "knife", TextSize = 11, TextXAlignment = Enum.TextXAlignment.Center, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(160, 12) })
+	Preview.flags = create("Frame", { Name = "Flags", Size = UDim2.fromOffset(74, 220), BackgroundTransparency = 1, ZIndex = Z.WINDOW + 2, Parent = Preview.overlay })
+	create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 1), Parent = Preview.flags })
+	for index, flag in ipairs(PREVIEW_FLAGS) do
+		local row = create("Frame", { Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, LayoutOrder = index, ZIndex = Z.WINDOW + 2, Parent = Preview.flags })
+		if Icons.get(flag[2]) then
+			Accent.follow(iconLabel(flag[2], {
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 0, 0.5, 0),
+				Size = UDim2.fromOffset(10, 10),
+				ZIndex = Z.WINDOW + 3,
+				Parent = row,
+			}), "ImageColor3")
+		end
+		Accent.follow(create("TextLabel", {
+			Text = flag[1],
+			FontFace = Typeface.face(true),
+			TextSize = 9,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(13, 0),
+			Size = UDim2.new(1, -13, 1, 0),
+			ZIndex = Z.WINDOW + 3,
+			Parent = row,
+		}), "TextColor3")
+	end
+	Preview.skeletonLines = {}
+
+	local chips = create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -10),
+		Size = UDim2.fromOffset(0, 22),
+		AutomaticSize = Enum.AutomaticSize.X,
+		BackgroundTransparency = 1,
+		ZIndex = Z.WINDOW + 1,
+		Parent = root,
+	})
+	create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6), Parent = chips })
+	Preview.chips = {}
+	for index, info in ipairs({ { "enemy", "enemies", "person" }, { "allies", "allies", "users" }, { "local", "local", "eye" } }) do
+		local chip = { tab = info[2], hovered = false }
+		chip.button = create("TextButton", {
+			LayoutOrder = index,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 22),
+			AutoButtonColor = false,
+			Text = "",
+			ZIndex = Z.WINDOW + 2,
+			Parent = chips,
+		})
+		corner(chip.button)
+		chip.stroke = create("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Thickness = 1, Parent = chip.button })
+		create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = chip.button })
+		create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5), Parent = chip.button })
+		chip.glyph = iconLabel(info[3], { LayoutOrder = 1, Size = UDim2.fromOffset(12, 12), ZIndex = Z.WINDOW + 3, Parent = chip.button })
+		chip.label = create("TextLabel", {
+			LayoutOrder = 2,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 22),
+			BackgroundTransparency = 1,
+			Text = info[1],
+			TextSize = 13,
+			FontFace = Typeface.face(),
+			ZIndex = Z.WINDOW + 3,
+			Parent = chip.button,
+		})
+		chip.paint = Live.add(chip.button, function(paintInfo)
+			local selected = Preview.tab == chip.tab
+			local color = selected and Accent.get() or (chip.hovered and Skin.get("text") or Skin.get("faint"))
+			Live.set(chip.button, paintInfo, { BackgroundColor3 = Skin.get(chip.hovered and "hover" or "control") })
+			Live.set(chip.stroke, paintInfo, { Color = selected and Accent.get() or Skin.get("stroke") })
+			Live.set(chip.label, paintInfo, { TextColor3 = color })
+			Live.set(chip.glyph, paintInfo, { ImageColor3 = color })
+		end)
+		connect(chip.button.MouseEnter, function()
+			chip.hovered = true
+			chip.paint(Motion.HOVER_IN)
+		end)
+		connect(chip.button.MouseLeave, function()
+			chip.hovered = false
+			chip.paint(Motion.HOVER_OUT)
+		end)
+		connect(chip.button.MouseButton1Click, function()
+			Preview.tab = chip.tab
+			for _, other in ipairs(Preview.chips) do
+				other.paint(Motion.STATE)
+			end
+			Preview.refresh()
+			if Preview.onSide then
+				pcall(Preview.onSide, Preview.tab)
+			end
+		end)
+		table.insert(Preview.chips, chip)
+	end
+
+	for _, side in ipairs({ "enemies", "allies" }) do
+		for _, field in ipairs({ "box", "box_color", "name", "name_color", "weapon", "health", "flags", "chams", "chams_color", "skeleton", "skeleton_color" }) do
+			watch(side .. "_" .. field, function()
+				Preview.refresh()
+			end)
+		end
+	end
+	Skin.onChange(function()
+		task.delay(Motion.THEME.Time, Preview.refresh)
+	end)
+	Accent.onChange(Preview.refresh)
+	local function follow()
+		local position, size = Win.main.Position, Win.main.Size
+		root.Position = UDim2.fromOffset(position.X.Offset + size.X.Offset + Geometry.previewGap, position.Y.Offset)
+		root.Size = UDim2.fromOffset(Geometry.previewWidth, size.Y.Offset)
+	end
+	connect(Win.main:GetPropertyChangedSignal("Position"), follow)
+	connect(Win.main:GetPropertyChangedSignal("Size"), follow)
+	follow()
+	Preview.subject = Preview.makeSubject()
+	Preview.setModel(cloneCharacter())
+
+	connect(player.CharacterAdded, function(character)
+		character:WaitForChild("HumanoidRootPart", 10)
+		task.wait(1)
+		if not Library.Unloaded then
+			Preview.setModel(cloneCharacter())
+		end
+	end)
+end
+
+local function setChams(enabled, color)
+	if not Preview.model then
+		return
+	end
+	for object, original in pairs(Preview.originals) do
+		if object.Parent then
+			if object:IsA("BasePart") then
+				if enabled and object.Name ~= "HumanoidRootPart" then
+					object.Color = color
+					object.Material = Enum.Material.SmoothPlastic
+				else
+					object.Color = original.Color
+					object.Material = original.Material
+				end
+			else
+				object.Transparency = enabled and 1 or original.Transparency
+			end
+		end
+	end
+	for _, object in ipairs(Preview.model:GetDescendants()) do
+		if object:IsA("Clothing") or object:IsA("ShirtGraphic") or object:IsA("SurfaceAppearance") then
+			if enabled and object.Parent ~= nil then
+				Preview.hiddenClothing = Preview.hiddenClothing or {}
+				table.insert(Preview.hiddenClothing, { object = object, parent = object.Parent })
+				object.Parent = nil
+			end
+		end
+	end
+	if not enabled and Preview.hiddenClothing then
+		for _, entry in ipairs(Preview.hiddenClothing) do
+			pcall(function()
+				entry.object.Parent = entry.parent
+			end)
+		end
+		Preview.hiddenClothing = nil
+	end
+end
+
+function Preview.refresh()
+	if not Preview.built then
+		return
+	end
+	local builtin = Preview.builtin
+	local boxColor = parseColor(Preview.value("box_color"))
+	local nameColor = parseColor(Preview.value("name_color"))
+	local chamsColor = parseColor(Preview.value("chams_color"))
+	Preview.box.Visible = builtin and Preview.value("box") == true
+	Preview.stroke.Color = boxColor or Accent.get()
+	Preview.name.Visible = builtin and Preview.value("name") == true
+	Preview.name.TextColor3 = nameColor or Skin.get("text")
+	Preview.weapon.Visible = builtin and Preview.value("weapon") == true
+	Preview.health.Visible = builtin and Preview.value("health") == true
+	Preview.flags.Visible = builtin and Preview.value("flags") == true
+	setChams(builtin and Preview.value("chams") == true, chamsColor or Accent.get())
+	Preview.skeletonOn = builtin and Preview.value("skeleton") == true
+	Preview.skeletonColor = parseColor(Preview.value("skeleton_color")) or Color3.new(1, 1, 1)
+	for _, line in ipairs(Preview.skeletonLines) do
+		line.Visible = false
+		line.BackgroundColor3 = Preview.skeletonColor
+	end
+end
+
+function Preview.render()
+	if not Preview.shown or not Preview.model then
+		return
+	end
+	local angle = math.sin(os.clock() * 0.5) * math.rad(35)
+	Preview.camera.CFrame = CFrame.new(Vector3.new(math.sin(angle) * 12, 0.8, math.cos(angle) * 12), Vector3.new(0, -0.2, 0))
+	if not Preview.builtin then
+		return
+	end
+	local model = Preview.model
+	local head, rootPart = model:FindFirstChild("Head"), model:FindFirstChild("HumanoidRootPart")
+	if not head or not rootPart then
+		return
+	end
+	local origin = Preview.root.AbsolutePosition
+	local top = Preview.project(head.Position + Vector3.new(0, 0.5, 0))
+	local bottom = Preview.project(rootPart.Position - Vector3.new(0, 3, 0))
+	local center = Preview.project(rootPart.Position)
+	local height = math.abs(bottom.Y - top.Y)
+	local width = height / 2
+	local x, y = math.floor(center.X - width / 2 - origin.X), math.floor(top.Y - origin.Y)
+	Preview.box.Position = UDim2.fromOffset(x, y)
+	Preview.box.Size = UDim2.fromOffset(math.floor(width), math.floor(height))
+	Preview.name.Position = UDim2.fromOffset(x + width / 2, y - 2)
+	Preview.health.Position = UDim2.fromOffset(x - 7, y - 1)
+	Preview.health.Size = UDim2.fromOffset(4, math.floor(height) + 2)
+	Preview.weapon.Position = UDim2.fromOffset(x + width / 2, y + height + 3)
+	Preview.flags.Position = UDim2.fromOffset(x + width + 5, y)
+	if Preview.skeletonOn then
+		for index, bone in ipairs(Preview.bones) do
+			local line = Preview.skeletonLines[index]
+			if not line then
+				line = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Preview.skeletonColor, ZIndex = Z.WINDOW + 2, Parent = Preview.overlay })
+				Preview.skeletonLines[index] = line
+			end
+			local from = Preview.project(bone.from.Position) - origin
+			local to = Preview.project(bone.to.Position) - origin
+			local delta = to - from
+			line.Position = UDim2.fromOffset((from.X + to.X) / 2, (from.Y + to.Y) / 2)
+			line.Size = UDim2.fromOffset(delta.Magnitude, 1)
+			line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+			line.Visible = true
+		end
+	end
+end
+
+function Preview.setShown(shown)
+	if not Preview.built or shown == Preview.shown then
+		return
+	end
+	Preview.shown = shown
+	local root = Preview.root
+	Motion.cancel(Preview.fadeTween)
+	if Preview.shot and Preview.fader.Value > 0 then
+		Fade.apply(Preview.shot, 0)
+	end
+	root.Visible = true
+	Preview.shot = Fade.snapshot(root)
+	if Preview.shadow then
+		Fade.record(Preview.shot, Preview.shadow, "ImageTransparency")
+	end
+	Preview.fader.Value = shown and 1 or 0
+	Fade.apply(Preview.shot, Preview.fader.Value)
+	Preview.fadeTween = Motion.to(Preview.fader, shown and Motion.HOVER_IN or Motion.HOVER_OUT, { Value = shown and 0 or 1 })
+	if Preview.fadeTween then
+		Preview.fadeTween.Completed:Once(function()
+			if not Preview.shown then
+				root.Visible = false
+				Fade.apply(Preview.shot, 0)
+			end
+			if Preview.shadow then
+				Preview.shadow.Visible = root.Visible
+			end
+		end)
+	end
+end
+
+function Preview.update()
+	Preview.setShown(R.menuOpen and Win.currentTab ~= nil and Win.currentTab.preview == true)
 end
 
 local SubTab = {}
 SubTab.__index = SubTab
 
-local function addGroupbox(subTab, column, title)
-	local page = subTab.page
-	local order = #page.columns[column]:GetChildren()
-	return newGroupbox(CreateSection(page.columns[column], page, title or "", order), title or "")
+local function addGroupbox(tab, sub, column, title)
+	local section = createSection(tab.columns[column], title, sub)
+	table.insert(tab.sections, section)
+	section.main.Visible = Win.sectionVisible(tab, section)
+	return newGroupbox(section, title or "")
 end
 
 function SubTab:AddLeftGroupbox(title)
-	return addGroupbox(self, 1, title)
+	return addGroupbox(self.tab, self, 1, title)
 end
 
 function SubTab:AddRightGroupbox(title)
-	return addGroupbox(self, 2, title)
+	return addGroupbox(self.tab, self, 2, title)
 end
 
 local Tab = {}
 Tab.__index = Tab
 
-function Tab:AddSubTab(name, icon)
-	local tab = self
-	local sub = setmetatable({ page = createPage(tab.name .. "/" .. name) }, SubTab)
-	sub.nav = createNavButton(tab.subBar, name, icon or tab.icon, #tab.subs + 1, Layout.BOTTOM, function()
-		selectSub(tab, sub)
-	end)
-	table.insert(tab.subs, sub)
-
-	if Runtime.currentTab == tab then
-		tab.subBar.Visible = #tab.subs > 1
-		if not tab.currentSub then
-			selectSub(tab, sub)
-		end
+function Tab:AddSubTab(name, iconName)
+	local sub = setmetatable({ tab = self, name = tostring(name or "subtab"), icon = iconName or self.icon }, SubTab)
+	table.insert(self.subs, sub)
+	Win.buildSub(self, sub)
+	if not self.currentSub then
+		self.currentSub = sub
 	end
+	Win.paintSubs(self, nil)
+	task.defer(function()
+		Win.slideSub(self, true)
+	end)
 	return sub
 end
 
-local function defaultSub(tab)
-	tab.defaultSub = tab.defaultSub or tab:AddSubTab("main", tab.icon)
-	return tab.defaultSub
-end
-
 function Tab:AddLeftGroupbox(title)
-	return defaultSub(self):AddLeftGroupbox(title)
+	return addGroupbox(self, nil, 1, title)
 end
 
 function Tab:AddRightGroupbox(title)
-	return defaultSub(self):AddRightGroupbox(title)
+	return addGroupbox(self, nil, 2, title)
 end
 
-function Tab:AddEspPreview()
+function Tab:AddEspPreview(options)
+	options = options or {}
 	self.preview = true
-	Preview.bind()
-	if Runtime.currentTab == self then
-		UI.setPreviewShown(Runtime.menuOpen)
+	if options.Builtin ~= nil then
+		Preview.builtin = options.Builtin ~= false
 	end
+	Preview.build()
+	Preview.refresh()
+	Preview.update()
 	return self
 end
 
 local Window = {}
 Window.__index = Window
 
-function Window:AddTab(name, icon)
-	local tab = setmetatable({ name = name, icon = icon or "misc", subs = {} }, Tab)
-	self.tabCount += 1
-	Runtime.tabs = Runtime.tabs or {}
-	Runtime.tabs[name] = tab
-	tab.subBar = create("Frame", {
-		Size = UDim2.new(1, -150, 1, 0),
-		BackgroundTransparency = 1,
-		Visible = false,
-		Parent = UI.bottomBar,
-	}, { list(1, Enum.FillDirection.Horizontal), padding(0, 0, 0, 4) })
-	tab.nav = createNavButton(UI.tabScroll, name, tab.icon, self.tabCount, Layout.TABS_HEIGHT, function()
-		selectTab(tab)
-	end)
-	if not Runtime.currentTab then
-		selectTab(tab)
+function Window:AddTab(name, iconName)
+	local tab = setmetatable({ name = tostring(name or "tab"), icon = iconName or "misc", subs = {}, sections = {} }, Tab)
+	table.insert(Win.tabs, tab)
+	R.tabs[tab.name] = tab
+	Win.buildTab(tab)
+	if not Win.currentTab then
+		Win.selectTab(tab, true)
+	else
+		Win.refreshSections(tab)
+		for _, column in ipairs(tab.columns) do
+			column.frame.Visible = false
+		end
 	end
 	return tab
 end
 
+local function setMenuOpen(open)
+	if Library.Unloaded and open then
+		return
+	end
+	Win.setOpen(open)
+	Preview.update()
+end
+
 function Window:AddSettingsTab(name)
 	local tab = self:AddTab(name or "settings", "gear")
-	Runtime.settingsTab = tab
-
+	R.settingsTab = tab
 	local menu = tab:AddLeftGroupbox("menu")
 	menu:AddKeybind("menu_key", {
 		Text = "menu key",
-		Default = Runtime.menuKey.Name,
+		Default = R.menuKey.Name,
 		Callback = function(value)
 			local ok, key = pcall(function()
 				return Enum.KeyCode[value]
 			end)
-			Runtime.menuKey = ok and key or Enum.KeyCode.RightShift
+			R.menuKey = ok and key or Enum.KeyCode.Insert
 		end,
 	})
 	menu:AddLabel("accent color"):AddColorPicker("menu_accent", {
-		Default = formatColor(Theme.Accent, 1),
+		Default = formatColor(Accent.get(), 1),
 		Callback = function(color)
-			setAccent(formatColor(color, 1))
+			Accent.set(color)
 		end,
 	})
-	menu:AddSlider("menu_scale", {
-		Text = "menu scale",
-		Min = 70,
-		Max = 150,
-		Default = 100,
-		Suffix = "%",
-		Callback = function(value)
-			Runtime.scaleMultiplier = value / 100
-			if UI.updateScale then
-				UI.updateScale()
-			end
-		end,
-	})
-	menu:AddToggle("menu_background_text", {
-		Text = "background text",
+	menu:AddToggle("menu_watermark", {
+		Text = "watermark",
 		Default = true,
 		Callback = function(value)
-			UI.watermark.Visible = value
+			Library:SetWatermarkVisible(value)
 		end,
 	})
 	menu:AddToggle("menu_hotkey_list", {
 		Text = "hotkey list",
 		Default = true,
 		Callback = function(value)
-			Runtime.hotkeyListEnabled = value
-			Hotkeys.refresh()
+			R.hotkeyListEnabled = value
+			Keybinds.refresh()
 		end,
 	})
 	menu:AddToggle("menu_notifications", {
 		Text = "notifications",
 		Default = true,
+		Tooltip = "drag the notifications handle to move them",
 		Callback = function(value)
-			Runtime.notificationsEnabled = value
+			R.notificationsEnabled = value
 		end,
 	})
-
+	local effects = tab:AddRightGroupbox("effects")
+	effects:AddToggle("menu_rainbow", {
+		Text = "rainbow line",
+		Default = true,
+		Callback = function(value)
+			Rainbow.setEnabled(value)
+		end,
+	})
+	effects:AddToggle("menu_bubbles", {
+		Text = "bubbles",
+		Default = true,
+		Callback = function(value)
+			Win.features.bubbles = value
+		end,
+	})
+	effects:AddToggle("menu_aurora", {
+		Text = "aurora",
+		Default = true,
+		Callback = function(value)
+			Win.features.aurora = value
+			for _, entry in ipairs(Aurora.frames) do
+				entry.frame.Visible = value
+			end
+		end,
+	})
+	effects:AddToggle("menu_edge", {
+		Text = "edge light",
+		Default = true,
+		Callback = function(value)
+			Win.features.edge = value
+			if Edge.gradient then
+				Edge.gradient.Transparency = value and NumberSequence.new({ NumberSequenceKeypoint.new(0, Edge.LIT), NumberSequenceKeypoint.new(1, Edge.DARK) }) or NumberSequence.new(0)
+			end
+		end,
+	})
 	menu:AddButton({
 		Text = "unload",
 		Func = function()
@@ -4229,58 +7831,171 @@ function Window:AddSettingsTab(name)
 	return tab
 end
 
-function Library:CreateWindow(options)
-	options = options or {}
-	Config.TITLE = options.Title or Config.TITLE
-	Config.WATERMARK = options.Watermark or Config.TITLE
-	Config.SUBSCRIPTION_TEXT = options.Subscription or Config.SUBSCRIPTION_TEXT
-	Config.VERSION = options.Version or Config.VERSION
-	if options.ConfigFolder then
-		Config.CONFIG_FOLDER = options.ConfigFolder
-		loadGlobal()
+local function restoreMouse()
+	local saved = R.savedMouse
+	R.savedMouse = nil
+	if not saved then
+		return
 	end
-	if options.Accent then
-		setAccent(hexOf(options.Accent))
+	UserInputService.MouseIconEnabled = saved.icon
+	if saved.behavior == Enum.MouseBehavior.LockCenter then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	elseif UserInputService.MouseBehavior == Enum.MouseBehavior.LockCurrentPosition then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
-	if options.MenuKey then
-		Runtime.menuKey = options.MenuKey
-	end
-
-	UI.buildTitle(Config.TITLE)
-	for _, backdropLabel in ipairs(UI.backdropLabels) do
-		backdropLabel.Text = Config.WATERMARK
-	end
-	UI.subscriptionLabel.Text = Config.SUBSCRIPTION_TEXT
-	UI.watermarkTitle.Text = Config.TITLE
-	UI.watermarkVersion.Text = Config.VERSION
-	UI.watermarkBar.Visible = Runtime.watermarkEnabled ~= false
-
-	task.defer(function()
-		setMenuOpen(true)
-	end)
-	return setmetatable({ tabCount = 0 }, Window)
 end
 
-function Library:Notify(text, duration)
-	UI.notify(text, duration)
+local function startLoops()
+	connect(UserInputService.InputBegan, function(input)
+		if Binds.handleBegan(input) then
+			return
+		end
+		if input.KeyCode == R.menuKey and not Binds.typing() then
+			setMenuOpen(not R.menuOpen)
+		end
+	end)
+	connect(UserInputService.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if R.drag then
+				local finish = R.drag.finish
+				R.drag = nil
+				if finish then
+					finish()
+				end
+			end
+			if R.slider then
+				local slider = R.slider
+				R.slider = nil
+				slider.release()
+			end
+		end
+		Binds.handleEnded(input)
+	end)
+	connect(UserInputService.InputChanged, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+			return
+		end
+		if R.drag then
+			R.drag.move(mouse())
+		end
+		if R.slider then
+			R.slider.drag(mouse().X)
+		end
+	end)
+
+	local throttle, keybindClock = 0, 0
+	connect(Services.RunService.RenderStepped, function(delta)
+
+		if R.menuOpen then
+			if not R.savedMouse then
+				R.savedMouse = { icon = UserInputService.MouseIconEnabled, behavior = UserInputService.MouseBehavior }
+			end
+			UserInputService.MouseIconEnabled = true
+			if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			end
+		elseif R.savedMouse then
+			restoreMouse()
+		end
+		Reveal.render()
+		local visible = Win.main ~= nil and Win.main.Visible
+		if visible then
+			throttle += delta
+			if throttle >= 1 / 30 then
+				throttle = 0
+				Rainbow.render()
+				Aurora.render()
+				if Win.features.wordmark then
+					Wordmark.render()
+				end
+			end
+		end
+		Bubbles.render(visible)
+		Edge.render(visible)
+		Binds.poll()
+		keybindClock += delta
+		if keybindClock >= 0.25 then
+			keybindClock = 0
+			Keybinds.refresh()
+		end
+		Watermark.render(delta)
+		Notices.render(delta)
+		Preview.render()
+	end)
+end
+
+function Library:CreateWindow(options)
+	options = options or {}
+	Config.Title = options.Title or Config.Title
+	Config.Subscription = options.Subscription or Config.Subscription
+	Config.Version = options.Version or Config.Version
+	Config.Folder = options.ConfigFolder or Config.Folder
+	if options.MenuKey then
+		R.menuKey = typeof(options.MenuKey) == "EnumItem" and options.MenuKey or Enum.KeyCode[options.MenuKey]
+	end
+	if shared.NeurothycalUnload then
+		pcall(shared.NeurothycalUnload)
+	end
+	loadGlobal()
+	Skin.mode = Skin.PALETTES[Store.Global.theme] and Store.Global.theme or (Skin.PALETTES[options.Theme] and options.Theme or "light")
+	if options.Accent then
+		Accent.color = (parseColor(options.Accent)) or Accent.color
+	end
+	Typeface.load()
+	Win.build()
+	Keybinds.build()
+	Watermark.build()
+	Notices.build()
+	R.onTab = function()
+		Preview.update()
+	end
+	startLoops()
+	shared.NeurothycalUnload = function()
+		Library:Unload()
+	end
+
+	task.defer(function()
+		if Win.features.wordmark then
+			Wordmark.attach(Win.brand)
+		end
+		if Win.currentTab then
+			Win.placeHighlight(Win.currentTab, true)
+		end
+		setMenuOpen(true)
+	end)
+	return setmetatable({}, Window)
+end
+
+function Library:Notify(content, duration)
+	Notices.push(content, duration)
 end
 
 function Library:SetTheme(name)
-	setTheme(name)
+	if not Skin.PALETTES[name] then
+		return
+	end
+	Skin.set(name)
+	Store.Global.theme = name
+	saveGlobal()
 end
 
 function Library:SetAccent(color)
-	setAccent(hexOf(color))
+	local parsed = parseColor(color)
+	if parsed then
+		Accent.set(parsed)
+	end
 end
 
 function Library:SetWatermarkVisible(visible)
-	Runtime.watermarkEnabled = visible
-	UI.watermarkBar.Visible = visible
+	R.watermarkEnabled = visible and true or false
+	if Watermark.frame then
+		Watermark.frame.Visible = R.watermarkEnabled
+	end
 end
 
 function Library:Toggle(open)
 	if open == nil then
-		open = not Runtime.menuOpen
+		open = not R.menuOpen
 	end
 	setMenuOpen(open)
 end
@@ -4294,17 +8009,16 @@ function Library:LoadConfig(name)
 end
 
 function Library:SetupConfigs(target)
-	local tab = type(target) == "string" and Runtime.tabs[target] or target
-	assert(tab, "SetupConfigs: вкладка не найдена: " .. tostring(target))
-
-	local box = tab:AddRightGroupbox("configs")
-	local nameInput = box:AddInput("config_name", {
+	local tab = type(target) == "string" and R.tabs[target] or target
+	assert(tab, "SetupConfigs: tab not found: " .. tostring(target))
+	local configs = tab:AddRightGroupbox("configs")
+	local nameInput = configs:AddInput("config_name", {
 		Text = "config name",
 		Placeholder = "new config",
 		MaxLength = 32,
 		Tooltip = "name for a new config, or the new name when renaming",
 	})
-	local configList = box:AddDropdown("config_list", { Text = "configs", Values = {} })
+	local configList = configs:AddDropdown("config_list", { Text = "configs", Values = {} })
 	local autoLabel
 
 	local function refresh(selected)
@@ -4335,7 +8049,7 @@ function Library:SetupConfigs(target)
 		end
 	end
 
-	box:AddButton({
+	configs:AddButton({
 		Text = "create",
 		Func = function()
 			local name = newName()
@@ -4351,19 +8065,19 @@ function Library:SetupConfigs(target)
 			refresh(name)
 		end,
 	})
-	box:AddButton({
+	configs:AddButton({
 		Text = "load",
 		Func = withSelected(function(name)
 			Library:Notify(loadConfig(name) and string.format('loaded "%s"', name) or "failed to load config")
 		end),
 	})
-	box:AddButton({
+	configs:AddButton({
 		Text = "overwrite",
 		Func = withSelected(function(name)
 			Library:Notify(saveConfig(name) and string.format('overwrote "%s"', name) or "failed to save config")
 		end),
 	})
-	box:AddButton({
+	configs:AddButton({
 		Text = "rename",
 		Func = withSelected(function(name)
 			local renamed = newName()
@@ -4389,7 +8103,7 @@ function Library:SetupConfigs(target)
 			refresh(renamed)
 		end),
 	})
-	box:AddButton({
+	configs:AddButton({
 		Text = "delete",
 		Func = withSelected(function(name)
 			Files.delete(name)
@@ -4401,7 +8115,7 @@ function Library:SetupConfigs(target)
 			refresh()
 		end),
 	})
-	box:AddButton({
+	configs:AddButton({
 		Text = "set auto load",
 		Tooltip = "loads this config every time the menu starts. press again to turn it off",
 		Func = withSelected(function(name)
@@ -4410,7 +8124,7 @@ function Library:SetupConfigs(target)
 			refresh(name)
 		end),
 	})
-	autoLabel = box:AddLabel("auto load: none")
+	autoLabel = configs:AddLabel("auto load: none")
 
 	refresh()
 	local autoLoad = Store.Global.autoLoad
@@ -4422,13 +8136,53 @@ function Library:SetupConfigs(target)
 			Library:Notify(string.format('auto load failed: "%s" not found', autoLoad))
 		end
 	end
-	return box
+	return configs
+end
+
+function Library:GetEspPreview()
+	if not Preview.built then
+		return nil
+	end
+	return Preview.subject
+end
+
+function Library:OnPreviewSide(callback)
+	Preview.onSide = callback
+end
+
+function Library:OnUnload(callback)
+	R.unloadCallbacks = R.unloadCallbacks or {}
+	table.insert(R.unloadCallbacks, callback)
 end
 
 function Library:Unload()
+	if Library.Unloaded then
+		return
+	end
 	setMenuOpen(false)
-	task.delay(0.35, function()
-		UI.screenGui:Destroy()
+	Library.Unloaded = true
+	if shared.NeurothycalUnload then
+		shared.NeurothycalUnload = nil
+	end
+	for _, callback in ipairs(R.unloadCallbacks or {}) do
+		task.spawn(callback)
+	end
+
+	task.delay(0.2, function()
+		for _, connection in ipairs(R.connections) do
+			pcall(connection.Disconnect, connection)
+		end
+		R.connections = {}
+		restoreMouse()
+		if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCurrentPosition then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		end
+		for _, gui in ipairs({ R.base, R.chrome, R.menu }) do
+			pcall(gui.Destroy, gui)
+		end
+		for _, image in ipairs(Raster.images) do
+			pcall(image.Destroy, image)
+		end
 	end)
 end
 
