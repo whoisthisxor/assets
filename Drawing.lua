@@ -223,6 +223,10 @@ local function CreateDynamicESP(library, target, drawingType, properties)
             if not properties.Visible then obj.Visible = false continue end
             if SubjectHidden(player) then obj.Visible = false continue end
 
+            if properties.TeammatesOnly
+                and not (player.Team ~= nil and player.Team == LocalPlayer.Team)
+            then obj.Visible = false continue end
+
             if properties.IgnoreTeammates
                 and player.Team == LocalPlayer.Team
                 and player.Team ~= nil
@@ -325,6 +329,13 @@ local function CreateDynamicESP(library, target, drawingType, properties)
         end,
         UpdateText = function(self, newText)
             properties.Text = newText
+        end,
+        UpdateFont = function(self, font)
+            properties.Font = font
+            for _, obj in pairs(self.Objects) do obj.Font = font end
+        end,
+        UpdateTeammatesOnly = function(self, state)
+            properties.TeammatesOnly = state
         end,
         UpdateSize = function(self, newSize)
             properties.Size = newSize
@@ -451,6 +462,10 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             if not properties.Visible then hideAll() continue end
             if SubjectHidden(player) then hideAll() continue end
 
+            if properties.TeammatesOnly
+                and not (player.Team ~= nil and player.Team == LocalPlayer.Team)
+            then hideAll() continue end
+
             if properties.IgnoreTeammates
                 and player.Team == LocalPlayer.Team
                 and player.Team ~= nil
@@ -558,6 +573,10 @@ function DrawingLibrary:MakeBox(targetOrProperties, properties)
             properties.GradientSpeed = speed
         end,
 
+        UpdateTeammatesOnly = function(self, state)
+            properties.TeammatesOnly = state
+        end,
+
         UpdateGradientSpin = function(self, state)
             properties.GradientSpin = state
         end,
@@ -609,6 +628,7 @@ function DrawingLibrary:MakeText(targetOrProperties, properties)
             Object          = textObj,
             UpdateText      = function(self, v) self.Object.Text     = tostring(v) end,
             UpdateSize      = function(self, v) self.Object.Size     = v end,
+            UpdateFont      = function(self, v) self.Object.Font     = v end,
             UpdatePosition  = function(self, v) self.Object.Position = v end,
             UpdateColor     = function(self, v) self.Object.Color    = v end,
             UpdateVisible   = function(self, v) self.Object.Visible  = v end,
