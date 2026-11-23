@@ -1085,6 +1085,10 @@ function DrawingLibrary:MakeHealthBar(target, properties)
             if not properties.Visible then hideAll() continue end
             if SubjectHidden(player) then hideAll() continue end
 
+            if properties.TeammatesOnly
+                and not (player.Team ~= nil and player.Team == LocalPlayer.Team)
+            then hideAll() continue end
+
             if properties.IgnoreTeammates
                 and player.Team == LocalPlayer.Team
                 and player.Team ~= nil
@@ -1219,6 +1223,10 @@ function DrawingLibrary:MakeHealthBar(target, properties)
 
         UpdateBarWidth = function(self, w)
             properties.BarWidth = w
+        end,
+
+        UpdateTeammatesOnly = function(self, state)
+            properties.TeammatesOnly = state
         end,
 
         UpdateTeamCheck = function(self, state)
